@@ -467,6 +467,15 @@ class PartyView(View):
         disband_btn.callback = self._handle_disband
         self.add_item(disband_btn)
 
+        clear_btn = Button(
+            label="클리어", emoji="🏆",
+            style=discord.ButtonStyle.success,
+            custom_id="party:clear",
+            row=0,
+        )
+        clear_btn.callback = self._handle_clear
+        self.add_item(clear_btn)
+
     # ── 참여하기 ────────────────────────────────────
 
     async def _handle_join(self, interaction: discord.Interaction) -> None:
@@ -623,6 +632,37 @@ class PartyView(View):
         from bot.ui.embeds import party_embed
         embed = party_embed(party, slots)
         await interaction.response.edit_message(embed=embed, view=None)
+
+    # ── 클리어 ─────────────────────────────────────
+
+    async def _handle_clear(self, interaction: discord.Interaction) -> None:
+        message_id = str(interaction.message.id)
+        party      = await db.get_party(message_id)
+        if not party:
+            await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
+            return
+        if party["leader_id"] != str(interaction.user.id):
+            await interaction.response.send_message("파티장만 클리어 처리할 수 있습니다.", ephemeral=True)
+            return
+        if party["status"] == "disbanded":
+            await interaction.response.send_message("이미 종료된 파티입니다.", ephemeral=True)
+            return
+
+        count = await db.complete_raid_for_party(message_id)
+        await db.disband_party(message_id)
+        party["status"] = "disbanded"
+        slots = await db.get_party_slots(message_id)
+
+        from bot.ui.embeds import party_embed
+        await interaction.response.edit_message(embed=party_embed(party, slots), view=None)
+
+        raid_title = f"{party['raid_name']} {party['difficulty']}"
+        mentions   = " ".join(f"<@{s['discord_id']}>" for s in slots)
+        await interaction.channel.send(
+            f"🏆 **{raid_title}** 클리어!\n"
+            f"{mentions}\n"
+            f"파티원 **{count}명**의 레이드 체크가 자동 완료되었습니다."
+        )
 
     # ── 공통 갱신 ───────────────────────────────────
 

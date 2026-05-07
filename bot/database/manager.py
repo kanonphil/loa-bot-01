@@ -423,6 +423,31 @@ async def transfer_leader(message_id: str, new_leader_id: str) -> None:
         await db.commit()
 
 
+async def complete_raid_for_party(message_id: str) -> int:
+    """파티원 전체 레이드 완료 처리 (INSERT OR IGNORE — 중복 토글 없음).
+    반환: 처리된 인원 수
+    """
+    party = await get_party(message_id)
+    if not party:
+        return 0
+    slots    = await get_party_slots(message_id)
+    week     = get_week_key()
+    raid_name  = party["raid_name"]
+    difficulty = party["difficulty"]
+    count = 0
+    async with aiosqlite.connect(DB_PATH) as db:
+        for slot in slots:
+            await db.execute(
+                "INSERT OR IGNORE INTO raid_completions "
+                "(discord_id, character_name, raid_name, difficulty, week_key) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (slot["discord_id"], slot["character_name"], raid_name, difficulty, week),
+            )
+            count += 1
+        await db.commit()
+    return count
+
+
 async def disband_party(message_id: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
