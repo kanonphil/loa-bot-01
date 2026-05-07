@@ -269,12 +269,21 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
     slot_map = {s["slot_number"]: s for s in slots}
     filled   = len(slots)
 
+    # Discord 타임스탬프 (사용자 로컬 시간 자동 변환)
+    ts_display = sched_time
+    if party.get("scheduled_datetime"):
+        try:
+            dt = datetime.fromisoformat(party["scheduled_datetime"])
+            ts_display = f"<t:{int(dt.timestamp())}:F>"
+        except Exception:
+            pass
+
     embed = discord.Embed(
         title=f"{icon} {short_name} {difficulty} {proficiency} 공격대 모집",
         color=color,
     )
     embed.description = (
-        f"📅 {sched_time}\n"
+        f"📅 {ts_display}\n"
         f"👑 <@{party['leader_id']}>\n"
         f"{status_text} ({filled}/{total_slots}) | 최소 {min_level}"
     )

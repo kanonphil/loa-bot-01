@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timezone, timedelta
@@ -54,8 +56,8 @@ class LoABot(commands.Bot):
             channel = self.get_channel(int(party["channel_id"]))
             if channel is None:
                 continue
-            slots   = await db.get_party_slots(party["message_id"])
-            mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
+            slots      = await db.get_party_slots(party["message_id"])
+            mentions   = " ".join(f"<@{s['discord_id']}>" for s in slots)
             raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
             leader_mention = f"<@{party['leader_id']}>"
             await channel.send(
@@ -76,13 +78,15 @@ class LoABot(commands.Bot):
                 msg   = await channel.fetch_message(int(party["message_id"]))
                 party["status"] = "disbanded"
                 slots = await db.get_party_slots(party["message_id"])
-                from bot.ui.embeds import party_embed
-                from bot.ui.views import PartyView
                 await msg.edit(embed=party_embed(party, slots), view=None)
             except (discord.NotFound, discord.Forbidden):
                 pass
             raid_title = f"{party['raid_name']} {party['difficulty']}"
             await channel.send(f"🔒 **{raid_title}** 공대 모집이 자동 종료되었습니다.")
+
+    @party_notification_task.before_loop
+    async def before_party_notification(self) -> None:
+        await self.wait_until_ready()
 
     async def _restore_party_views(self) -> None:
         """봇 재시작 후 활성 파티 메시지에 View 재연결"""

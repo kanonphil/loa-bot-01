@@ -456,6 +456,21 @@ async def disband_party(message_id: str) -> None:
         await db.commit()
 
 
+async def get_user_parties(discord_id: str) -> list[dict]:
+    """특정 유저가 참여 중인 활성 파티 목록."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT DISTINCT p.* FROM parties p "
+            "JOIN party_slots ps ON p.message_id = ps.party_message_id "
+            "WHERE ps.discord_id=? AND p.status IN ('recruiting', 'full') "
+            "ORDER BY p.created_at DESC",
+            (discord_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def get_guild_parties(guild_id: str) -> list[dict]:
     """서버의 모집 중/완성된 파티 목록 (최신순)."""
     async with aiosqlite.connect(DB_PATH) as db:

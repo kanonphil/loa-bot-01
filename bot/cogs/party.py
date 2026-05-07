@@ -43,6 +43,21 @@ class Party(commands.Cog):
         pairs = [(p, await db.get_party_slots(p["message_id"])) for p in parties]
         await interaction.response.send_message(embed=party_list_embed(pairs), ephemeral=True)
 
+    @app_commands.command(
+        name="내공대",
+        description="내가 참여 중인 공대 목록을 확인합니다.",
+    )
+    async def my_parties(self, interaction: discord.Interaction) -> None:
+        discord_id = str(interaction.user.id)
+        parties    = await db.get_user_parties(discord_id)
+        if not parties:
+            await interaction.response.send_message(
+                "현재 참여 중인 공대가 없습니다.", ephemeral=True
+            )
+            return
+        pairs = [(p, await db.get_party_slots(p["message_id"])) for p in parties]
+        await interaction.response.send_message(embed=party_list_embed(pairs), ephemeral=True)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Party(bot))

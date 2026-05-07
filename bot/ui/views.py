@@ -648,6 +648,11 @@ class PartyView(View):
             await interaction.response.send_message("이미 종료된 파티입니다.", ephemeral=True)
             return
 
+        slots = await db.get_party_slots(message_id)
+        if not slots:
+            await interaction.response.send_message("파티원이 없어 클리어 처리할 수 없습니다.", ephemeral=True)
+            return
+
         count = await db.complete_raid_for_party(message_id)
         await db.disband_party(message_id)
         party["status"] = "disbanded"
