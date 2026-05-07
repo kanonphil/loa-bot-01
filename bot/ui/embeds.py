@@ -60,36 +60,37 @@ def _combat_power(profile: dict) -> str:
     return None
 
 
+def _gem_skill_from_tooltip(tooltip_str: str) -> str:
+    """Tooltip JSON에서 #FFD200 색상(스킬명) 추출."""
+    try:
+        import json as _json
+        tooltip = _json.loads(tooltip_str)
+        for elem in tooltip.values():
+            if not isinstance(elem, dict):
+                continue
+            if elem.get("type") == "ItemPartBox":
+                text = (elem.get("value") or {}).get("Element_001", "")
+                m = re.search(r"<FONT COLOR='#FFD200'>([^<]+)</FONT>", text)
+                if m:
+                    return m.group(1).strip()
+    except Exception:
+        pass
+    return ""
+
+
 def _format_gems(armory_gem: dict) -> str | None:
     """보석 목록을 '레벨 타입 (스킬명)' 형식으로 포맷"""
-    gems    = armory_gem.get("Gems") or []
-    effects = armory_gem.get("Effects") or []
+    gems = armory_gem.get("Gems") or []
     if not gems:
         return None
-
-    # GemSlot → 스킬명 매핑 (int 캐스팅으로 타입 불일치 방지)
-    slot_to_skill: dict[int, str] = {}
-    for e in effects:
-        try:
-            gem_slot = int(e["GemSlot"])
-            skill_name = re.sub(r"<[^>]+>", "", e.get("Name", "")).strip()
-            if skill_name:
-                slot_to_skill[gem_slot] = skill_name
-        except (KeyError, TypeError, ValueError):
-            continue
 
     # 레벨 내림차순, 같은 레벨이면 슬롯 번호 오름차순
     sorted_gems = sorted(gems, key=lambda g: (-g.get("Level", 0), g.get("Slot", 99)))
 
     lines = []
     for gem in sorted_gems:
-        raw_name = gem.get("Name", "?")
-        gem_name = re.sub(r"<[^>]+>", "", raw_name).strip()
-        try:
-            slot = int(gem.get("Slot", -1))
-        except (TypeError, ValueError):
-            slot = -1
-        skill = slot_to_skill.get(slot, "")
+        gem_name = re.sub(r"<[^>]+>", "", gem.get("Name", "?")).strip()
+        skill    = _gem_skill_from_tooltip(gem.get("Tooltip", ""))
         lines.append(f"{gem_name} ({skill})" if skill else gem_name)
 
     return "\n".join(lines)
