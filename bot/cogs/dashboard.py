@@ -86,7 +86,7 @@ class Dashboard(commands.Cog):
             async def _on_select(self, inter: discord.Interaction) -> None:
                 selected = inter.data["values"][0]
                 await inter.response.defer()
-                await _send_dashboard(inter, api_key, selected)
+                await _send_dashboard(inter, api_key, selected, followup=True)
 
         await interaction.response.send_message(
             "조회할 캐릭터를 선택하세요:", view=CharSelect(), ephemeral=True
