@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import discord
 from datetime import datetime, timezone, timedelta
 
@@ -66,19 +67,29 @@ def _format_gems(armory_gem: dict) -> str | None:
     if not gems:
         return None
 
-    # GemSlot → 스킬명 매핑
-    slot_to_skill: dict[int, str] = {
-        e["GemSlot"]: e["Name"] for e in effects if "GemSlot" in e and "Name" in e
-    }
+    # GemSlot → 스킬명 매핑 (int 캐스팅으로 타입 불일치 방지)
+    slot_to_skill: dict[int, str] = {}
+    for e in effects:
+        try:
+            gem_slot = int(e["GemSlot"])
+            skill_name = re.sub(r"<[^>]+>", "", e.get("Name", "")).strip()
+            if skill_name:
+                slot_to_skill[gem_slot] = skill_name
+        except (KeyError, TypeError, ValueError):
+            continue
 
     # 레벨 내림차순, 같은 레벨이면 슬롯 번호 오름차순
     sorted_gems = sorted(gems, key=lambda g: (-g.get("Level", 0), g.get("Slot", 99)))
 
     lines = []
     for gem in sorted_gems:
-        gem_name = gem.get("Name", "?")   # e.g. "9레벨 멸화의 보석"
-        slot     = gem.get("Slot", -1)
-        skill    = slot_to_skill.get(slot, "")
+        raw_name = gem.get("Name", "?")
+        gem_name = re.sub(r"<[^>]+>", "", raw_name).strip()
+        try:
+            slot = int(gem.get("Slot", -1))
+        except (TypeError, ValueError):
+            slot = -1
+        skill = slot_to_skill.get(slot, "")
         lines.append(f"{gem_name} ({skill})" if skill else gem_name)
 
     return "\n".join(lines)
