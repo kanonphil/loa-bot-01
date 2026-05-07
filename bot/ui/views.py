@@ -541,9 +541,20 @@ class PartyView(View):
             if lv >= min_level:
                 qualifying.append({"name": char_name, "level": lv, "class": char_class})
 
+        # 골드 완료 캐릭터 필터링
+        raid_key = f"{party['raid_name']}_{party['difficulty']}"
+        filtered = []
+        for q in qualifying:
+            completions = await db.get_completions(discord_id, q["name"])
+            if raid_key not in completions:
+                filtered.append(q)
+        qualifying = filtered
+
         if not qualifying:
             await interaction.followup.send(
-                f"아이템 레벨 **{min_level}** 이상의 등록된 캐릭터가 없습니다.", ephemeral=True
+                f"**{party['raid_name']} {party['difficulty']}** 에 참여 가능한 캐릭터가 없습니다.\n"
+                "(골드 획득 완료 또는 아이템 레벨 미달)",
+                ephemeral=True,
             )
             return
 
