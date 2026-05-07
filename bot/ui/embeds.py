@@ -147,7 +147,7 @@ def expedition_embed(user: discord.User | discord.Member, characters: list[dict]
     for c in sorted(characters, key=_lv, reverse=True):
         embed.add_field(
             name=c.get("CharacterName", "?"),
-            value=f"{c.get('CharacterClassName','?')}  |  {_item_level(c)}  |  {c.get('ServerName','?')}",
+            value=f"{c.get('CharacterClassName','?')}  |  {_item_level(c)}",
             inline=False,
         )
 
