@@ -318,8 +318,12 @@ async def auto_assign_slot(
     character_class: str,
     role: str,
     total_slots: int,
+    *,
+    party_group: int | None = None,
+    party_split: int | None = None,
 ) -> tuple[bool, int, str]:
-    """자동 슬롯 배정. support는 앞쪽 슬롯 우선.
+    """자동 슬롯 배정.
+    party_group/party_split 지정 시 해당 파티 슬롯 범위 내에서만 배정.
     반환: (success, slot_number, message)
     """
     async with aiosqlite.connect(DB_PATH) as db:
@@ -337,9 +341,36 @@ async def auto_assign_slot(
         )
         taken = {r[0] for r in await cur.fetchall()}
 
-        available = [s for s in range(1, total_slots + 1) if s not in taken]
-        if not available:
-            return False, 0, "빈 슬롯이 없습니다."
+        if party_group and party_split:
+            start = (party_group - 1) * party_split + 1
+            end   = start + party_split
+            available = [s for s in range(start, end) if s not in taken]
+            if not available:
+                return False, 0, f"{party_group}파티에 빈 자리가 없습니다."
+            # 서포터 중복 체크 (파티당 1명 제한)
+            if role == "support":
+                cur = await db.execute(
+                    "SELECT COUNT(*) FROM party_slots "
+                    "WHERE party_message_id=? AND slot_number >= ? AND slot_number < ? AND role='support'",
+                    (message_id, start, end),
+                )
+                support_count = (await cur.fetchone())[0]
+                if support_count >= 1:
+                    return False, 0, f"{party_group}파티에 이미 서포터가 있습니다."
+        else:
+            available = [s for s in range(1, total_slots + 1) if s not in taken]
+            if not available:
+                return False, 0, "빈 슬롯이 없습니다."
+            # 단일 파티 서포터 중복 체크
+            if role == "support":
+                cur = await db.execute(
+                    "SELECT COUNT(*) FROM party_slots "
+                    "WHERE party_message_id=? AND role='support'",
+                    (message_id,),
+                )
+                support_count = (await cur.fetchone())[0]
+                if support_count >= 1:
+                    return False, 0, "이미 파티에 서포터가 있습니다."
 
         slot_number = available[0]
 

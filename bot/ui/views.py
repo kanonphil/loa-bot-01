@@ -538,13 +538,27 @@ class PartyView(View):
             )
             return
 
+        raid_info = RAIDS.get(party["raid_name"], {})
+        p_split   = (raid_info.get("difficulties") or {}).get(party["difficulty"], {}).get("party_split")
+
         if len(qualifying) == 1:
-            q    = qualifying[0]
-            view = RoleSelectView(discord_id, q, message_id, party["total_slots"], self)
-            await interaction.followup.send(
-                f"**{q['name']}** ({q['class']}) — 역할을 선택하세요:",
-                view=view, ephemeral=True,
-            )
+            q = qualifying[0]
+            if p_split and party["total_slots"] > p_split:
+                current_slots = await db.get_party_slots(message_id)
+                view = PartyGroupSelectView(
+                    discord_id, q, message_id, party["total_slots"],
+                    p_split, current_slots, self,
+                )
+                await interaction.followup.send(
+                    f"**{q['name']}** ({q['class']}) — 참여할 파티를 선택하세요:",
+                    view=view, ephemeral=True,
+                )
+            else:
+                view = RoleSelectView(discord_id, q, message_id, party["total_slots"], self)
+                await interaction.followup.send(
+                    f"**{q['name']}** ({q['class']}) — 역할을 선택하세요:",
+                    view=view, ephemeral=True,
+                )
         else:
             view = CharSelectView(discord_id, qualifying, message_id, party["total_slots"], self)
             await interaction.followup.send("참여할 캐릭터를 선택하세요:", view=view, ephemeral=True)
@@ -635,8 +649,64 @@ class PartyView(View):
 
 
 # ─────────────────────────────────────────────────────
-# 공대 모집 — 캐릭터 선택 → 역할 선택 플로우
+# 공대 모집 — 캐릭터 선택 → 파티 선택 → 역할 선택 플로우
 # ─────────────────────────────────────────────────────
+
+class PartyGroupSelectView(View):
+    """다중 파티일 때 참여할 파티(1파티/2파티)를 선택하는 뷰."""
+
+    def __init__(
+        self,
+        discord_id: str,
+        char_info: dict,
+        message_id: str,
+        total_slots: int,
+        party_split: int,
+        current_slots: list[dict],
+        party_view: PartyView,
+    ) -> None:
+        super().__init__(timeout=60)
+        self.discord_id  = discord_id
+        self.char_info   = char_info
+        self.message_id  = message_id
+        self.total_slots = total_slots
+        self.party_split = party_split
+        self.party_view  = party_view
+
+        slot_map    = {s["slot_number"]: s for s in current_slots}
+        num_parties = total_slots // party_split
+
+        for p in range(num_parties):
+            start  = p * party_split + 1
+            filled = sum(1 for sn in range(start, start + party_split) if sn in slot_map)
+            is_full = filled >= party_split
+            btn = Button(
+                label=f"{p + 1}파티  {filled}/{party_split}" + ("  (만석)" if is_full else ""),
+                style=discord.ButtonStyle.secondary if is_full else discord.ButtonStyle.primary,
+                disabled=is_full,
+            )
+            btn.callback = self._make_cb(p + 1)
+            self.add_item(btn)
+
+    def _make_cb(self, party_group: int):
+        async def cb(interaction: discord.Interaction) -> None:
+            if str(interaction.user.id) != self.discord_id:
+                await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+                return
+            view = RoleSelectView(
+                self.discord_id, self.char_info, self.message_id,
+                self.total_slots, self.party_view,
+                party_group=party_group, party_split=self.party_split,
+            )
+            await interaction.response.edit_message(
+                content=(
+                    f"**{self.char_info['name']}** ({self.char_info['class']}) "
+                    f"{party_group}파티 — 역할을 선택하세요:"
+                ),
+                view=view,
+            )
+        return cb
+
 
 class CharSelectView(View):
     def __init__(
@@ -672,11 +742,29 @@ class CharSelectView(View):
             return
         char_name = interaction.data["values"][0]
         char_info = self.char_map[char_name]
-        view = RoleSelectView(self.discord_id, char_info, self.message_id, self.total_slots, self.party_view)
-        await interaction.response.edit_message(
-            content=f"**{char_name}** ({char_info['class']}) — 역할을 선택하세요:",
-            view=view,
-        )
+
+        party   = await db.get_party(self.message_id)
+        p_split = None
+        if party:
+            raid_info = RAIDS.get(party["raid_name"], {})
+            p_split = (raid_info.get("difficulties") or {}).get(party["difficulty"], {}).get("party_split")
+
+        if p_split and self.total_slots > p_split:
+            current_slots = await db.get_party_slots(self.message_id)
+            view = PartyGroupSelectView(
+                self.discord_id, char_info, self.message_id,
+                self.total_slots, p_split, current_slots, self.party_view,
+            )
+            await interaction.response.edit_message(
+                content=f"**{char_name}** ({char_info['class']}) — 참여할 파티를 선택하세요:",
+                view=view,
+            )
+        else:
+            view = RoleSelectView(self.discord_id, char_info, self.message_id, self.total_slots, self.party_view)
+            await interaction.response.edit_message(
+                content=f"**{char_name}** ({char_info['class']}) — 역할을 선택하세요:",
+                view=view,
+            )
 
 
 class RoleSelectView(View):
@@ -687,13 +775,18 @@ class RoleSelectView(View):
         message_id: str,
         total_slots: int,
         party_view: PartyView,
+        *,
+        party_group: int | None = None,
+        party_split: int | None = None,
     ) -> None:
         super().__init__(timeout=60)
-        self.discord_id = discord_id
-        self.char_info = char_info
-        self.message_id = message_id
+        self.discord_id  = discord_id
+        self.char_info   = char_info
+        self.message_id  = message_id
         self.total_slots = total_slots
-        self.party_view = party_view
+        self.party_view  = party_view
+        self.party_group = party_group
+        self.party_split = party_split
 
         is_support = char_info["class"] in SUPPORT_CLASSES
 
@@ -718,6 +811,8 @@ class RoleSelectView(View):
             ok, slot_number, msg_text = await db.auto_assign_slot(
                 self.message_id, self.discord_id,
                 char["name"], char["class"], role, self.total_slots,
+                party_group=self.party_group,
+                party_split=self.party_split,
             )
             if not ok:
                 await interaction.response.edit_message(content=f"❌ {msg_text}", view=None)
