@@ -101,7 +101,7 @@ class LoABot(commands.Bot):
                 slots = await db.get_party_slots(msg_id)
                 if not party:
                     continue
-                view  = PartyView(total_slots=party["total_slots"])
+                view  = PartyView(total_slots=party["total_slots"], closed=(party["status"] == "closed"))
                 embed = party_embed(party, slots)
                 await msg.edit(embed=embed, view=view)
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):

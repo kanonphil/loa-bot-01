@@ -434,9 +434,9 @@ async def _post_party(
 # ─────────────────────────────────────────────────────
 
 class PartyView(View):
-    """버튼 3개(참여하기 / 나가기 / 모집 종료) 기반 공대 뷰."""
+    """버튼 4개(참여하기 / 나가기 / 모집 마감 / 클리어) 기반 공대 뷰."""
 
-    def __init__(self, total_slots: int = 8) -> None:
+    def __init__(self, total_slots: int = 8, closed: bool = False) -> None:
         super().__init__(timeout=None)
         self.total_slots = total_slots
 
@@ -444,6 +444,7 @@ class PartyView(View):
             label="참여하기", emoji="⚔️",
             style=discord.ButtonStyle.primary,
             custom_id="party:join",
+            disabled=closed,
             row=0,
         )
         join_btn.callback = self._handle_join
@@ -459,9 +460,10 @@ class PartyView(View):
         self.add_item(leave_btn)
 
         disband_btn = Button(
-            label="모집 종료", emoji="🔒",
+            label="모집 마감", emoji="🔒",
             style=discord.ButtonStyle.danger,
             custom_id="party:disband",
+            disabled=closed,
             row=0,
         )
         disband_btn.callback = self._handle_disband
@@ -483,6 +485,9 @@ class PartyView(View):
         party = await db.get_party(message_id)
         if not party or party["status"] == "disbanded":
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
+            return
+        if party["status"] == "closed":
+            await interaction.response.send_message("모집이 마감된 파티입니다.", ephemeral=True)
             return
         if party["status"] == "full":
             await interaction.response.send_message("파티가 이미 꽉 찼습니다.", ephemeral=True)
@@ -509,51 +514,48 @@ class PartyView(View):
             )
             return
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
-
         min_level: int = party["min_level"]
         cached    = await db.get_cached_characters(discord_id)
         cache_map = {c["character_name"]: c for c in cached}
 
-        # 캐시 기반 1차 필터 (API 호출 없음)
+        # 캐시 기반 필터 (API 호출 없음 → defer 불필요, 현재 메시지 위치에서 바로 응답)
         qualifying: list[dict] = []
+        level_too_low: list[str] = []
         no_cache: list[str] = []
+        raid_key = f"{party['raid_name']}_{party['difficulty']}"
+
         for char_name in registered:
             c = cache_map.get(char_name)
-            if c and c["item_level"] is not None:
-                if c["item_level"] >= min_level:
-                    qualifying.append({"name": char_name, "level": c["item_level"], "class": c["character_class"]})
-            else:
+            if not c or c["item_level"] is None:
                 no_cache.append(char_name)
-
-        # 캐시 없는 캐릭터만 API 호출
-        for char_name in no_cache:
-            try:
-                char = await loa.get_character_info(api_key, char_name)
-            except RuntimeError:
-                continue
-            if not char:
-                continue
-            lv         = loa.parse_item_level(char)
-            char_class = char.get("CharacterClassName", "?")
-            if lv > 0:
-                await db.update_character_cache(discord_id, char_name, lv, char_class)
-            if lv >= min_level:
-                qualifying.append({"name": char_name, "level": lv, "class": char_class})
+            elif c["item_level"] < min_level:
+                level_too_low.append(f"**{char_name}** ({c['item_level']:.0f})")
+            else:
+                qualifying.append({"name": char_name, "level": c["item_level"], "class": c["character_class"]})
 
         # 골드 완료 캐릭터 필터링
-        raid_key = f"{party['raid_name']}_{party['difficulty']}"
+        gold_done: list[str] = []
         filtered = []
         for q in qualifying:
             completions = await db.get_completions(discord_id, q["name"])
-            if raid_key not in completions:
+            if raid_key in completions:
+                gold_done.append(f"**{q['name']}**")
+            else:
                 filtered.append(q)
         qualifying = filtered
 
         if not qualifying:
-            await interaction.followup.send(
-                f"**{party['raid_name']} {party['difficulty']}** 에 참여 가능한 캐릭터가 없습니다.\n"
-                "(골드 획득 완료 또는 아이템 레벨 미달)",
+            lines: list[str] = []
+            if gold_done:
+                lines.append(f"🏆 이번 주 골드 완료: {', '.join(gold_done)}")
+            if level_too_low:
+                lines.append(f"📉 레벨 미달 (최소 {min_level}): {', '.join(level_too_low)}")
+            if no_cache:
+                names = ', '.join(f"**{n}**" for n in no_cache)
+                lines.append(f"❓ 레벨 미확인: {names} — `/원정대`에서 동기화 후 다시 시도해주세요.")
+            detail = "\n".join(lines) if lines else "(원인 불명)"
+            await interaction.response.send_message(
+                f"**{party['raid_name']} {party['difficulty']}** 에 참여 가능한 캐릭터가 없습니다.\n{detail}",
                 ephemeral=True,
             )
             return
@@ -569,19 +571,24 @@ class PartyView(View):
                     discord_id, q, message_id, party["total_slots"],
                     p_split, current_slots, self,
                 )
-                await interaction.followup.send(
+                await interaction.response.send_message(
                     f"**{q['name']}** ({q['class']}) — 참여할 파티를 선택하세요:",
                     view=view, ephemeral=True,
                 )
             else:
                 view = RoleSelectView(discord_id, q, message_id, party["total_slots"], self)
-                await interaction.followup.send(
+                await interaction.response.send_message(
                     f"**{q['name']}** ({q['class']}) — 역할을 선택하세요:",
                     view=view, ephemeral=True,
                 )
         else:
             view = CharSelectView(discord_id, qualifying, message_id, party["total_slots"], self)
-            await interaction.followup.send("참여할 캐릭터를 선택하세요:", view=view, ephemeral=True)
+            await interaction.response.send_message("참여할 캐릭터를 선택하세요:", view=view, ephemeral=True)
+
+        try:
+            view.message = await interaction.original_response()
+        except discord.HTTPException:
+            pass
 
     # ── 나가기 ─────────────────────────────────────
 
@@ -620,6 +627,10 @@ class PartyView(View):
                 slots = await db.get_party_slots(message_id)
                 from bot.ui.embeds import party_embed
                 await interaction.response.edit_message(embed=party_embed(party, slots), view=None)
+                raid_title = f"{party['raid_name']} {party['difficulty']}"
+                await interaction.channel.send(
+                    f"🔒 **{raid_title}** 파티원이 모두 나가 공대가 종료되었습니다."
+                )
                 return
         else:
             await interaction.response.send_message("파티에서 나갔습니다.", ephemeral=True)
@@ -635,14 +646,21 @@ class PartyView(View):
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
         if party["leader_id"] != str(interaction.user.id):
-            await interaction.response.send_message("파티장만 모집을 종료할 수 있습니다.", ephemeral=True)
+            await interaction.response.send_message("파티장만 모집을 마감할 수 있습니다.", ephemeral=True)
             return
-        await db.disband_party(message_id)
-        party["status"] = "disbanded"
+        if party["status"] == "closed":
+            await interaction.response.send_message("이미 모집이 마감된 파티입니다.", ephemeral=True)
+            return
+        if party["status"] == "disbanded":
+            await interaction.response.send_message("이미 종료된 파티입니다.", ephemeral=True)
+            return
+        await db.close_party(message_id)
+        party["status"] = "closed"
         slots = await db.get_party_slots(message_id)
         from bot.ui.embeds import party_embed
         embed = party_embed(party, slots)
-        await interaction.response.edit_message(embed=embed, view=None)
+        closed_view = PartyView(total_slots=self.total_slots, closed=True)
+        await interaction.response.edit_message(embed=embed, view=closed_view)
 
     # ── 클리어 ─────────────────────────────────────
 
@@ -658,6 +676,9 @@ class PartyView(View):
         if party["status"] == "disbanded":
             await interaction.response.send_message("이미 종료된 파티입니다.", ephemeral=True)
             return
+        if party["status"] not in ("recruiting", "full", "closed"):
+            await interaction.response.send_message("유효하지 않은 파티 상태입니다.", ephemeral=True)
+            return
 
         slots = await db.get_party_slots(message_id)
         if not slots:
@@ -667,7 +688,6 @@ class PartyView(View):
         count = await db.complete_raid_for_party(message_id)
         await db.disband_party(message_id)
         party["status"] = "disbanded"
-        slots = await db.get_party_slots(message_id)
 
         from bot.ui.embeds import party_embed
         await interaction.response.edit_message(embed=party_embed(party, slots), view=None)
@@ -685,18 +705,24 @@ class PartyView(View):
     async def _refresh(self, message: discord.Message, *, was_full: bool = False) -> None:
         message_id = str(message.id)
         party      = await db.get_party(message_id)
-        slots      = await db.get_party_slots(message_id)
+        if not party:
+            return
+        slots = await db.get_party_slots(message_id)
 
         from bot.ui.embeds import party_embed
         embed = party_embed(party, slots)
-        await message.edit(embed=embed, view=self)
+        if party["status"] == "disbanded":
+            await message.edit(embed=embed, view=None)
+            return
+        view  = PartyView(total_slots=self.total_slots, closed=(party["status"] == "closed"))
+        await message.edit(embed=embed, view=view)
 
-        if party and party["status"] == "full":
+        if party["status"] == "full":
             mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
             await message.channel.send(
                 f"🎉 **{party['raid_name']} {party['difficulty']}** 파티가 완성되었습니다!\n{mentions}"
             )
-        elif was_full and party and party["status"] == "recruiting":
+        elif was_full and party["status"] == "recruiting":
             raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
             await message.channel.send(
                 f"📢 **{raid_title}** 파티에 빈 자리가 생겼습니다! "
@@ -728,6 +754,7 @@ class PartyGroupSelectView(View):
         self.total_slots = total_slots
         self.party_split = party_split
         self.party_view  = party_view
+        self.message: discord.Message | None = None
 
         slot_map    = {s["slot_number"]: s for s in current_slots}
         num_parties = total_slots // party_split
@@ -744,10 +771,24 @@ class PartyGroupSelectView(View):
             btn.callback = self._make_cb(p + 1)
             self.add_item(btn)
 
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="⏱️ 선택 시간(60초)이 초과되었습니다.", view=None)
+            except discord.HTTPException:
+                pass
+
     def _make_cb(self, party_group: int):
         async def cb(interaction: discord.Interaction) -> None:
             if str(interaction.user.id) != self.discord_id:
                 await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+                return
+            party = await db.get_party(self.message_id)
+            if not party or party["status"] == "disbanded":
+                await interaction.response.edit_message(content="❌ 파티가 이미 종료되었습니다.", view=None)
+                return
+            if party["status"] == "closed":
+                await interaction.response.edit_message(content="❌ 모집이 마감되어 참여할 수 없습니다.", view=None)
                 return
             view = RoleSelectView(
                 self.discord_id, self.char_info, self.message_id,
@@ -761,6 +802,10 @@ class PartyGroupSelectView(View):
                 ),
                 view=view,
             )
+            try:
+                view.message = await interaction.original_response()
+            except discord.HTTPException:
+                pass
         return cb
 
 
@@ -779,6 +824,7 @@ class CharSelectView(View):
         self.message_id = message_id
         self.total_slots = total_slots
         self.party_view = party_view
+        self.message: discord.Message | None = None
 
         options = [
             discord.SelectOption(
@@ -792,6 +838,13 @@ class CharSelectView(View):
         sel.callback = self._on_select
         self.add_item(sel)
 
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="⏱️ 선택 시간(60초)이 초과되었습니다.", view=None)
+            except discord.HTTPException:
+                pass
+
     async def _on_select(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.discord_id:
             await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
@@ -799,11 +852,17 @@ class CharSelectView(View):
         char_name = interaction.data["values"][0]
         char_info = self.char_map[char_name]
 
-        party   = await db.get_party(self.message_id)
+        party = await db.get_party(self.message_id)
+        if not party or party["status"] == "disbanded":
+            await interaction.response.edit_message(content="❌ 파티가 이미 종료되었습니다.", view=None)
+            return
+        if party["status"] == "closed":
+            await interaction.response.edit_message(content="❌ 모집이 마감되어 참여할 수 없습니다.", view=None)
+            return
+
         p_split = None
-        if party:
-            raid_info = RAIDS.get(party["raid_name"], {})
-            p_split = (raid_info.get("difficulties") or {}).get(party["difficulty"], {}).get("party_split")
+        raid_info = RAIDS.get(party["raid_name"], {})
+        p_split = (raid_info.get("difficulties") or {}).get(party["difficulty"], {}).get("party_split")
 
         if p_split and self.total_slots > p_split:
             current_slots = await db.get_party_slots(self.message_id)
@@ -821,6 +880,10 @@ class CharSelectView(View):
                 content=f"**{char_name}** ({char_info['class']}) — 역할을 선택하세요:",
                 view=view,
             )
+        try:
+            view.message = await interaction.original_response()
+        except discord.HTTPException:
+            pass
 
 
 class RoleSelectView(View):
@@ -843,6 +906,7 @@ class RoleSelectView(View):
         self.party_view  = party_view
         self.party_group = party_group
         self.party_split = party_split
+        self.message: discord.Message | None = None
 
         is_support = char_info["class"] in SUPPORT_CLASSES
 
@@ -858,11 +922,28 @@ class RoleSelectView(View):
         support_btn.callback = self._make_role_cb("support")
         self.add_item(support_btn)
 
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="⏱️ 선택 시간(60초)이 초과되었습니다.", view=None)
+            except discord.HTTPException:
+                pass
+
     def _make_role_cb(self, role: str):
         async def cb(interaction: discord.Interaction) -> None:
             if str(interaction.user.id) != self.discord_id:
                 await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
                 return
+
+            # 역할 선택 시점에 party 상태 재확인
+            party = await db.get_party(self.message_id)
+            if not party or party["status"] == "disbanded":
+                await interaction.response.edit_message(content="❌ 파티가 이미 종료되었습니다.", view=None)
+                return
+            if party["status"] == "closed":
+                await interaction.response.edit_message(content="❌ 모집이 마감되어 참여할 수 없습니다.", view=None)
+                return
+
             char = self.char_info
             ok, slot_number, msg_text = await db.auto_assign_slot(
                 self.message_id, self.discord_id,
@@ -885,6 +966,6 @@ class RoleSelectView(View):
             try:
                 msg = await interaction.channel.fetch_message(int(self.message_id))
                 await self.party_view._refresh(msg)
-            except discord.NotFound:
+            except discord.HTTPException:
                 pass
         return cb

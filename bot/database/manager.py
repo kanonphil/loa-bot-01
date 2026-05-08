@@ -276,7 +276,7 @@ async def get_parties_due_notification(now_iso: str) -> list[dict]:
             "WHERE scheduled_datetime IS NOT NULL "
             "AND scheduled_datetime <= ? "
             "AND notified = 0 "
-            "AND status IN ('recruiting', 'full')",
+            "AND status IN ('recruiting', 'full', 'closed')",
             (now_iso,),
         )
         rows = await cur.fetchall()
@@ -390,7 +390,8 @@ async def auto_assign_slot(
         count, total = await cur.fetchone()
         if count >= total:
             await db.execute(
-                "UPDATE parties SET status='full' WHERE message_id=?", (message_id,)
+                "UPDATE parties SET status='full' WHERE message_id=? AND status='recruiting'",
+                (message_id,)
             )
 
         await db.commit()
@@ -437,13 +438,14 @@ async def complete_raid_for_party(message_id: str) -> int:
     count = 0
     async with aiosqlite.connect(DB_PATH) as db:
         for slot in slots:
-            await db.execute(
+            cur = await db.execute(
                 "INSERT OR IGNORE INTO raid_completions "
                 "(discord_id, character_name, raid_name, difficulty, week_key) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (slot["discord_id"], slot["character_name"], raid_name, difficulty, week),
             )
-            count += 1
+            if cur.rowcount > 0:
+                count += 1
         await db.commit()
     return count
 
@@ -456,6 +458,15 @@ async def disband_party(message_id: str) -> None:
         await db.commit()
 
 
+async def close_party(message_id: str) -> None:
+    """모집만 마감 (파티는 유지 — 클리어 가능)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE parties SET status='closed' WHERE message_id=?", (message_id,)
+        )
+        await db.commit()
+
+
 async def get_user_parties(discord_id: str) -> list[dict]:
     """특정 유저가 참여 중인 활성 파티 목록."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -463,7 +474,7 @@ async def get_user_parties(discord_id: str) -> list[dict]:
         cur = await db.execute(
             "SELECT DISTINCT p.* FROM parties p "
             "JOIN party_slots ps ON p.message_id = ps.party_message_id "
-            "WHERE ps.discord_id=? AND p.status IN ('recruiting', 'full') "
+            "WHERE ps.discord_id=? AND p.status IN ('recruiting', 'full', 'closed') "
             "ORDER BY p.created_at DESC",
             (discord_id,),
         )
@@ -476,7 +487,7 @@ async def get_guild_parties(guild_id: str) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT * FROM parties WHERE guild_id=? AND status IN ('recruiting', 'full') "
+            "SELECT * FROM parties WHERE guild_id=? AND status IN ('recruiting', 'full', 'closed') "
             "ORDER BY created_at DESC",
             (guild_id,),
         )
@@ -503,7 +514,7 @@ async def get_all_active_party_ids() -> list[tuple[str, str]]:
     """봇 재시작 시 활성 파티 복구용. (message_id, channel_id) 반환."""
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
-            "SELECT message_id, channel_id FROM parties WHERE status IN ('recruiting', 'full')"
+            "SELECT message_id, channel_id FROM parties WHERE status IN ('recruiting', 'full', 'closed')"
         )
         rows = await cur.fetchall()
     return [(r[0], r[1]) for r in rows]

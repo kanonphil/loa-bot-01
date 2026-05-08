@@ -262,6 +262,9 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
     elif status == "full":
         color      = 0x3498DB
         status_text = "🔵 파티 완성"
+    elif status == "closed":
+        color      = 0xE67E22
+        status_text = "🔴 모집 마감"
     else:
         color      = 0x95A5A6
         status_text = "⚫ 모집 종료"
@@ -319,7 +322,13 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
             lines.append(f"{CIRCLE_NUMBERS[sn - 1]} {_slot_text(slot_map.get(sn))}")
         embed.add_field(name="​", value="\n".join(lines), inline=False)
 
-    embed.set_footer(text=f"{FOOTER} • 참여하기 버튼을 눌러 참여하세요")
+    if status in ("recruiting", "full"):
+        footer_hint = "참여하기 버튼을 눌러 참여하세요"
+    elif status == "closed":
+        footer_hint = "모집이 마감되었습니다 • 클리어 버튼으로 클리어 처리하세요"
+    else:
+        footer_hint = "모집이 종료되었습니다"
+    embed.set_footer(text=f"{FOOTER} • {footer_hint}")
     embed.timestamp = _ts()
     return embed
 
@@ -343,7 +352,12 @@ def party_list_embed(pairs: list[tuple[dict, list[dict]]]) -> discord.Embed:
         slot_map  = {s["slot_number"]: s for s in slots}
         filled    = len(slots)
 
-        status_icon = "🟢" if party["status"] == "recruiting" else "🔵"
+        if party["status"] == "recruiting":
+            status_icon = "🟢"
+        elif party["status"] == "full":
+            status_icon = "🔵"
+        else:
+            status_icon = "🔴"
 
         member_lines = []
         for sn in range(1, total + 1):
