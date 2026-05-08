@@ -564,6 +564,19 @@ class PartyView(View):
             await interaction.response.send_message("이미 파티에 참여 중입니다.", ephemeral=True)
             return
 
+        # 같은 레이드의 다른 공대 중복 참여 차단
+        existing = await db.get_user_active_slots_in_raid(
+            discord_id, party["raid_name"], message_id
+        )
+        if existing:
+            char_names = ", ".join(f"**{s['character_name']}**" for s in existing)
+            await interaction.response.send_message(
+                f"이미 **{party['raid_name']}** 공대에 {char_names}(으)로 참여 중입니다.\n"
+                f"다른 공대에 참여하려면 먼저 나가주세요.",
+                ephemeral=True,
+            )
+            return
+
         api_key = await db.get_user_api_key(discord_id)
         if not api_key:
             await interaction.response.send_message(

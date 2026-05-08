@@ -327,6 +327,25 @@ async def get_party(message_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+async def get_user_active_slots_in_raid(
+    discord_id: str, raid_name: str, exclude_message_id: str
+) -> list[dict]:
+    """같은 레이드의 다른 활성 파티에 이미 참여 중인 슬롯 목록."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT ps.character_name FROM party_slots ps "
+            "JOIN parties p ON ps.party_message_id = p.message_id "
+            "WHERE ps.discord_id = ? "
+            "AND p.raid_name = ? "
+            "AND p.message_id != ? "
+            "AND p.status IN ('recruiting', 'full', 'closed')",
+            (discord_id, raid_name, exclude_message_id),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def get_party_by_channel(channel_id: str) -> Optional[dict]:
     """Forum Thread ID(channel_id)로 파티 조회."""
     async with aiosqlite.connect(DB_PATH) as db:
