@@ -533,12 +533,12 @@ class PartyView(View):
             else:
                 qualifying.append({"name": char_name, "level": c["item_level"], "class": c["character_class"]})
 
-        # 골드 완료 캐릭터 필터링
+        # 골드 완료 캐릭터 필터링 (같은 레이드 어떤 난이도든 클리어 시 제외)
         gold_done: list[str] = []
         filtered = []
         for q in qualifying:
             completions = await db.get_completions(discord_id, q["name"])
-            if raid_key in completions:
+            if any(k.startswith(f"{party['raid_name']}_") for k in completions):
                 gold_done.append(f"**{q['name']}**")
             else:
                 filtered.append(q)

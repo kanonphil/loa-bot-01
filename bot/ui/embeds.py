@@ -186,9 +186,10 @@ def no_characters_embed(user: discord.User | discord.Member) -> discord.Embed:
 def raid_checklist_embed(
     character_name: str, item_level: float, completions: set[str]
 ) -> discord.Embed:
-    applicable = get_applicable_raids(item_level)
-    total      = len(applicable)
-    done_count = sum(1 for r, d, _ in applicable if f"{r}_{d}" in completions)
+    applicable  = get_applicable_raids(item_level)
+    raid_names  = dict.fromkeys(r for r, _, _ in applicable)  # 순서 유지 unique
+    total       = len(raid_names)
+    done_count  = sum(1 for r in raid_names if any(k.startswith(f"{r}_") for k in completions))
     week_key   = get_week_key()
 
     if total:
@@ -212,9 +213,8 @@ def raid_checklist_embed(
     for cat, raids in by_cat.items():
         lines = []
         for raid_name, diff_name, diff_info in raids:
-            key  = f"{raid_name}_{diff_name}"
             icon = RAIDS[raid_name]["icon"]
-            done = key in completions
+            done = f"{raid_name}_{diff_name}" in completions
             name_text = f"**{raid_name} {diff_name}**" if done else f"{raid_name} {diff_name}"
             status    = "✅" if done else "⬜"
             lines.append(f"{status} {icon} {name_text}  _최소 {diff_info['min_level']}_")
