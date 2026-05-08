@@ -14,7 +14,7 @@ class Expedition(commands.Cog):
 
     @app_commands.command(name="원정대", description="등록된 내 캐릭터 목록을 한눈에 확인합니다.")
     async def expedition(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True, ephemeral=True)
 
         discord_id = str(interaction.user.id)
         api_key = await db.get_user_api_key(discord_id)
@@ -29,7 +29,7 @@ class Expedition(commands.Cog):
 
         if not char_names:
             await interaction.followup.send(
-                embed=no_characters_embed(interaction.user), view=view
+                embed=no_characters_embed(interaction.user), view=view, ephemeral=True
             )
             return
 
@@ -52,7 +52,7 @@ class Expedition(commands.Cog):
                 })
 
         await interaction.followup.send(
-            embed=expedition_embed(interaction.user, characters), view=view
+            embed=expedition_embed(interaction.user, characters), view=view, ephemeral=True
         )
 
     @app_commands.command(name="캐릭터등록", description="원정대에 캐릭터를 등록합니다.")
