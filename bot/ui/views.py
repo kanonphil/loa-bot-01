@@ -510,7 +510,7 @@ class PartyView(View):
     # ── 참여하기 ────────────────────────────────────
 
     async def _handle_join(self, interaction: discord.Interaction) -> None:
-        message_id = str(interaction.message.id)
+        message_id = str(interaction.channel.id)
         party = await db.get_party(message_id)
         if not party or party["status"] == "disbanded":
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
@@ -673,7 +673,7 @@ class PartyView(View):
     # ── 모집 종료 ───────────────────────────────────
 
     async def _handle_disband(self, interaction: discord.Interaction) -> None:
-        message_id = str(interaction.message.id)
+        message_id = str(interaction.channel.id)
         party = await db.get_party(message_id)
         if not party:
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
@@ -744,7 +744,7 @@ class PartyView(View):
     # ── 공통 갱신 ───────────────────────────────────
 
     async def _refresh(self, message: discord.Message, *, was_full: bool = False) -> None:
-        message_id = str(message.id)
+        message_id = str(message.channel.id)
         party      = await db.get_party(message_id)
         if not party:
             return
