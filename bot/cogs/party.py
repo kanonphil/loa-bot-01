@@ -74,8 +74,18 @@ class Party(commands.Cog):
                 "현재 참여 중인 공대가 없습니다.", ephemeral=True
             )
             return
-        pairs = [(p, await db.get_party_slots(p["message_id"])) for p in parties]
-        await interaction.response.send_message(embed=party_list_embed(pairs), ephemeral=True)
+        lines = []
+        for p in parties:
+            slots     = await db.get_party_slots(p["message_id"])
+            filled    = len(slots)
+            total     = p["total_slots"]
+            link      = f"https://discord.com/channels/{p['guild_id']}/{p['channel_id']}"
+            status    = {"recruiting": "🟢", "full": "🔵", "closed": "🔴"}.get(p["status"], "⚫")
+            lines.append(
+                f"{status} [{p['raid_name']} {p['difficulty']} {p['proficiency']}]({link}) "
+                f"`{filled}/{total}` · {p['scheduled_time']}"
+            )
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

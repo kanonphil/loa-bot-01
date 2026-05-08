@@ -456,6 +456,43 @@ async def _post_party(
     await starter_msg.edit(embed=party_embed(party, []), view=view)
 
 
+async def _auto_join_dps(
+    interaction: discord.Interaction,
+    discord_id: str,
+    char_info: dict,
+    message_id: str,
+    total_slots: int,
+    party_view: "PartyView",
+    *,
+    party_group: int | None = None,
+    party_split: int | None = None,
+    responded: bool = False,
+) -> None:
+    """딜러 클래스 자동 딜러 배정 후 참여."""
+    ok, slot_number, msg_text = await db.auto_assign_slot(
+        message_id, discord_id,
+        char_info["name"], char_info["class"], "dps", total_slots,
+        party_group=party_group,
+        party_split=party_split,
+    )
+    result = (
+        f"✅ **{char_info['name']}** ({char_info['class']}) ⚔️ 딜러로 "
+        f"**{slot_number}번** 슬롯에 참여했습니다!"
+        if ok else f"❌ {msg_text}"
+    )
+    if responded:
+        await interaction.response.edit_message(content=result, view=None)
+    else:
+        await interaction.response.send_message(result, ephemeral=True)
+
+    if ok:
+        try:
+            msg = await interaction.channel.fetch_message(int(message_id))
+            await party_view._refresh_party(msg)
+        except discord.HTTPException:
+            pass
+
+
 # ─────────────────────────────────────────────────────
 # 공대 모집 — 참여 기반 View
 # ─────────────────────────────────────────────────────
@@ -602,20 +639,31 @@ class PartyView(View):
                     f"**{q['name']}** ({q['class']}) — 참여할 파티를 선택하세요:",
                     view=view, ephemeral=True,
                 )
-            else:
+                try:
+                    view.message = await interaction.original_response()
+                except discord.HTTPException:
+                    pass
+            elif q["class"] in SUPPORT_CLASSES:
                 view = RoleSelectView(discord_id, q, message_id, party["total_slots"], self)
                 await interaction.response.send_message(
                     f"**{q['name']}** ({q['class']}) — 역할을 선택하세요:",
                     view=view, ephemeral=True,
                 )
+                try:
+                    view.message = await interaction.original_response()
+                except discord.HTTPException:
+                    pass
+            else:
+                await _auto_join_dps(
+                    interaction, discord_id, q, message_id, party["total_slots"], self,
+                )
         else:
             view = CharSelectView(discord_id, qualifying, message_id, party["total_slots"], self)
             await interaction.response.send_message("참여할 캐릭터를 선택하세요:", view=view, ephemeral=True)
-
-        try:
-            view.message = await interaction.original_response()
-        except discord.HTTPException:
-            pass
+            try:
+                view.message = await interaction.original_response()
+            except discord.HTTPException:
+                pass
 
     # ── 나가기 ─────────────────────────────────────
 
@@ -828,22 +876,30 @@ class PartyGroupSelectView(View):
             if party["status"] == "closed":
                 await interaction.response.edit_message(content="❌ 모집이 마감되어 참여할 수 없습니다.", view=None)
                 return
-            view = RoleSelectView(
-                self.discord_id, self.char_info, self.message_id,
-                self.total_slots, self.party_view,
-                party_group=party_group, party_split=self.party_split,
-            )
-            await interaction.response.edit_message(
-                content=(
-                    f"**{self.char_info['name']}** ({self.char_info['class']}) "
-                    f"{party_group}파티 — 역할을 선택하세요:"
-                ),
-                view=view,
-            )
-            try:
-                view.message = await interaction.original_response()
-            except discord.HTTPException:
-                pass
+            if self.char_info["class"] in SUPPORT_CLASSES:
+                view = RoleSelectView(
+                    self.discord_id, self.char_info, self.message_id,
+                    self.total_slots, self.party_view,
+                    party_group=party_group, party_split=self.party_split,
+                )
+                await interaction.response.edit_message(
+                    content=(
+                        f"**{self.char_info['name']}** ({self.char_info['class']}) "
+                        f"{party_group}파티 — 역할을 선택하세요:"
+                    ),
+                    view=view,
+                )
+                try:
+                    view.message = await interaction.original_response()
+                except discord.HTTPException:
+                    pass
+            else:
+                await _auto_join_dps(
+                    interaction, self.discord_id, self.char_info,
+                    self.message_id, self.total_slots, self.party_view,
+                    party_group=party_group, party_split=self.party_split,
+                    responded=True,
+                )
         return cb
 
 
@@ -912,16 +968,26 @@ class CharSelectView(View):
                 content=f"**{char_name}** ({char_info['class']}) — 참여할 파티를 선택하세요:",
                 view=view,
             )
-        else:
+            try:
+                view.message = await interaction.original_response()
+            except discord.HTTPException:
+                pass
+        elif char_info["class"] in SUPPORT_CLASSES:
             view = RoleSelectView(self.discord_id, char_info, self.message_id, self.total_slots, self.party_view)
             await interaction.response.edit_message(
                 content=f"**{char_name}** ({char_info['class']}) — 역할을 선택하세요:",
                 view=view,
             )
-        try:
-            view.message = await interaction.original_response()
-        except discord.HTTPException:
-            pass
+            try:
+                view.message = await interaction.original_response()
+            except discord.HTTPException:
+                pass
+        else:
+            await _auto_join_dps(
+                interaction, self.discord_id, char_info,
+                self.message_id, self.total_slots, self.party_view,
+                responded=True,
+            )
 
 
 class RoleSelectView(View):
