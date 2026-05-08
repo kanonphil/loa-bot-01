@@ -369,6 +369,11 @@ class ScheduleModal(Modal, title="모집 일정 설정"):
         self.proficiency = proficiency
         self.forum_channel_id = forum_channel_id
 
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        import traceback
+        traceback.print_exc()
+        await interaction.response.send_message(f"오류 발생: {error}", ephemeral=True)
+
     async def on_submit(self, interaction: discord.Interaction) -> None:
         date_str = self.date_input.value.strip()
         time_str = self.time_input.value.strip()
