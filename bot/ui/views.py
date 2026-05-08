@@ -369,11 +369,6 @@ class ScheduleModal(Modal, title="모집 일정 설정"):
         self.proficiency = proficiency
         self.forum_channel_id = forum_channel_id
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        import traceback
-        traceback.print_exc()
-        await interaction.response.send_message(f"오류 발생: {error}", ephemeral=True)
-
     async def on_submit(self, interaction: discord.Interaction) -> None:
         date_str = self.date_input.value.strip()
         time_str = self.time_input.value.strip()
@@ -446,14 +441,7 @@ async def _post_party(
 
     forum = interaction.client.get_channel(int(forum_channel_id))
     thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
-    thread = await forum.create_thread(name=thread_name, embed=embed, view=view)
-
-    # starter message 가져오기
-    starter_msg = thread.message
-    if starter_msg is None:
-        async for m in thread.history(limit=1, oldest_first=True):
-            starter_msg = m
-            break
+    thread, starter_msg = await forum.create_thread(name=thread_name, embed=embed, view=view)
 
     await db.create_party(
         message_id=str(starter_msg.id), channel_id=str(thread.id),
