@@ -443,8 +443,12 @@ async def _post_party(
     thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
     thread = await forum.create_thread(name=thread_name, embed=embed, view=view)
 
-    # Forum Thread에서 starter message ID == Thread ID
-    starter_msg = await thread.fetch_message(thread.id)
+    # starter message 가져오기
+    starter_msg = thread.message
+    if starter_msg is None:
+        async for m in thread.history(limit=1, oldest_first=True):
+            starter_msg = m
+            break
 
     await db.create_party(
         message_id=str(starter_msg.id), channel_id=str(thread.id),
