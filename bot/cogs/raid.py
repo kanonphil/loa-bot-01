@@ -106,9 +106,9 @@ class Raid(commands.Cog):
             "체크할 캐릭터를 선택하세요:", view=CharSelect(), ephemeral=True
         )
 
-    @app_commands.command(name="전체레이드체크", description="등록된 모든 캐릭터의 레이드 현황을 공개로 표시합니다.")
+    @app_commands.command(name="전체레이드체크", description="등록된 모든 캐릭터의 레이드 현황을 확인합니다.")
     async def raid_check_all(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True, ephemeral=True)
 
         discord_id = str(interaction.user.id)
         api_key = await db.get_user_api_key(discord_id)
