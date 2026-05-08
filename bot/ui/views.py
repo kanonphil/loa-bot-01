@@ -442,10 +442,10 @@ async def _post_party(
     forum = interaction.client.get_channel(int(forum_channel_id))
     thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
     thread = await forum.create_thread(name=thread_name, embed=embed, view=view)
-    msg = thread.message
 
+    # Forum Thread에서 Thread ID == starter message ID
     await db.create_party(
-        message_id=str(msg.id), channel_id=str(thread.id),
+        message_id=str(thread.id), channel_id=str(thread.id),
         guild_id=str(interaction.guild_id), leader_id=leader_id,
         raid_name=raid_name, difficulty=difficulty, proficiency=proficiency,
         scheduled_time=scheduled_time, scheduled_datetime=scheduled_datetime,
@@ -453,8 +453,9 @@ async def _post_party(
     )
 
     # 실제 message_id 기반 embed 갱신
-    party = await db.get_party(str(msg.id))
-    await msg.edit(embed=party_embed(party, []), view=view)
+    party = await db.get_party(str(thread.id))
+    starter_msg = await thread.fetch_message(thread.id)
+    await starter_msg.edit(embed=party_embed(party, []), view=view)
 
 
 # ─────────────────────────────────────────────────────
