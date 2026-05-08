@@ -443,8 +443,11 @@ async def _post_party(
     thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
     thread = await forum.create_thread(name=thread_name, embed=embed, view=view)
 
+    # Forum Thread에서 starter message ID == Thread ID
+    starter_msg = await thread.fetch_message(thread.id)
+
     await db.create_party(
-        message_id=str(thread.message.id), channel_id=str(thread.id),
+        message_id=str(starter_msg.id), channel_id=str(thread.id),
         guild_id=str(interaction.guild_id), leader_id=leader_id,
         raid_name=raid_name, difficulty=difficulty, proficiency=proficiency,
         scheduled_time=scheduled_time, scheduled_datetime=scheduled_datetime,
@@ -452,8 +455,8 @@ async def _post_party(
     )
 
     # 실제 message_id 기반 embed 갱신
-    party = await db.get_party(str(thread.message.id))
-    await thread.message.edit(embed=party_embed(party, []), view=view)
+    party = await db.get_party(str(starter_msg.id))
+    await starter_msg.edit(embed=party_embed(party, []), view=view)
 
 
 # ─────────────────────────────────────────────────────
@@ -666,7 +669,7 @@ class PartyView(View):
         else:
             await interaction.response.send_message("파티에서 나갔습니다.", ephemeral=True)
 
-        await self._refresh(interaction.message, was_full=was_full)
+        await self._refresh_party(interaction.message, was_full=was_full)
 
     # ── 모집 종료 ───────────────────────────────────
 
@@ -741,7 +744,7 @@ class PartyView(View):
 
     # ── 공통 갱신 ───────────────────────────────────
 
-    async def _refresh(self, message: discord.Message, *, was_full: bool = False) -> None:
+    async def _refresh_party(self, message: discord.Message, *, was_full: bool = False) -> None:
         party = await db.get_party_by_channel(str(message.channel.id))
         if not party:
             return
@@ -1003,7 +1006,7 @@ class RoleSelectView(View):
             )
             try:
                 msg = await interaction.channel.fetch_message(int(self.message_id))
-                await self.party_view._refresh(msg)
+                await self.party_view._refresh_party(msg)
             except discord.HTTPException:
                 pass
         return cb
