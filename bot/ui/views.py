@@ -443,9 +443,8 @@ async def _post_party(
     thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
     thread = await forum.create_thread(name=thread_name, embed=embed, view=view)
 
-    # Forum Thread에서 Thread ID == starter message ID
     await db.create_party(
-        message_id=str(thread.id), channel_id=str(thread.id),
+        message_id=str(thread.message.id), channel_id=str(thread.id),
         guild_id=str(interaction.guild_id), leader_id=leader_id,
         raid_name=raid_name, difficulty=difficulty, proficiency=proficiency,
         scheduled_time=scheduled_time, scheduled_datetime=scheduled_datetime,
@@ -453,9 +452,8 @@ async def _post_party(
     )
 
     # 실제 message_id 기반 embed 갱신
-    party = await db.get_party(str(thread.id))
-    starter_msg = await thread.fetch_message(thread.id)
-    await starter_msg.edit(embed=party_embed(party, []), view=view)
+    party = await db.get_party(str(thread.message.id))
+    await thread.message.edit(embed=party_embed(party, []), view=view)
 
 
 # ─────────────────────────────────────────────────────
@@ -510,8 +508,7 @@ class PartyView(View):
     # ── 참여하기 ────────────────────────────────────
 
     async def _handle_join(self, interaction: discord.Interaction) -> None:
-        message_id = str(interaction.channel.id)
-        party = await db.get_party(message_id)
+        party = await db.get_party_by_channel(str(interaction.channel.id))
         if not party or party["status"] == "disbanded":
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
@@ -522,6 +519,7 @@ class PartyView(View):
             await interaction.response.send_message("파티가 이미 꽉 찼습니다.", ephemeral=True)
             return
 
+        message_id = party["message_id"]
         discord_id = str(interaction.user.id)
 
         slots = await db.get_party_slots(message_id)
@@ -622,12 +620,12 @@ class PartyView(View):
     # ── 나가기 ─────────────────────────────────────
 
     async def _handle_leave(self, interaction: discord.Interaction) -> None:
-        message_id = str(interaction.message.id)
-        party      = await db.get_party(message_id)
+        party = await db.get_party_by_channel(str(interaction.channel.id))
         if not party or party["status"] == "disbanded":
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
 
+        message_id    = party["message_id"]
         discord_id    = str(interaction.user.id)
         is_leader     = party["leader_id"] == discord_id
         was_full      = party["status"] == "full"
@@ -673,8 +671,7 @@ class PartyView(View):
     # ── 모집 종료 ───────────────────────────────────
 
     async def _handle_disband(self, interaction: discord.Interaction) -> None:
-        message_id = str(interaction.channel.id)
-        party = await db.get_party(message_id)
+        party = await db.get_party_by_channel(str(interaction.channel.id))
         if not party:
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
@@ -687,6 +684,7 @@ class PartyView(View):
         if party["status"] == "disbanded":
             await interaction.response.send_message("이미 종료된 파티입니다.", ephemeral=True)
             return
+        message_id = party["message_id"]
         await db.close_party(message_id)
         party["status"] = "closed"
         slots = await db.get_party_slots(message_id)
@@ -702,8 +700,7 @@ class PartyView(View):
     # ── 클리어 ─────────────────────────────────────
 
     async def _handle_clear(self, interaction: discord.Interaction) -> None:
-        message_id = str(interaction.message.id)
-        party      = await db.get_party(message_id)
+        party = await db.get_party_by_channel(str(interaction.channel.id))
         if not party:
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
@@ -717,6 +714,7 @@ class PartyView(View):
             await interaction.response.send_message("유효하지 않은 파티 상태입니다.", ephemeral=True)
             return
 
+        message_id = party["message_id"]
         slots = await db.get_party_slots(message_id)
         if not slots:
             await interaction.response.send_message("파티원이 없어 클리어 처리할 수 없습니다.", ephemeral=True)
@@ -744,11 +742,10 @@ class PartyView(View):
     # ── 공통 갱신 ───────────────────────────────────
 
     async def _refresh(self, message: discord.Message, *, was_full: bool = False) -> None:
-        message_id = str(message.channel.id)
-        party      = await db.get_party(message_id)
+        party = await db.get_party_by_channel(str(message.channel.id))
         if not party:
             return
-        slots = await db.get_party_slots(message_id)
+        slots = await db.get_party_slots(party["message_id"])
 
         from bot.ui.embeds import party_embed
         embed = party_embed(party, slots)

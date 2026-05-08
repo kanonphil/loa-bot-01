@@ -327,6 +327,15 @@ async def get_party(message_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+async def get_party_by_channel(channel_id: str) -> Optional[dict]:
+    """Forum Thread ID(channel_id)로 파티 조회."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM parties WHERE channel_id=?", (channel_id,))
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
 async def get_party_slots(message_id: str) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
