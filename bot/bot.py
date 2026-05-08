@@ -71,18 +71,22 @@ class LoABot(commands.Bot):
         expired = await db.get_expired_parties(cutoff)
         for party in expired:
             await db.disband_party(party["message_id"])
-            channel = self.get_channel(int(party["channel_id"]))
-            if channel is None:
+            thread = self.get_channel(int(party["channel_id"]))
+            if thread is None:
                 continue
             try:
-                msg   = await channel.fetch_message(int(party["message_id"]))
+                msg   = await thread.fetch_message(int(party["message_id"]))
                 party["status"] = "disbanded"
                 slots = await db.get_party_slots(party["message_id"])
                 await msg.edit(embed=party_embed(party, slots), view=None)
             except (discord.NotFound, discord.Forbidden):
                 pass
             raid_title = f"{party['raid_name']} {party['difficulty']}"
-            await channel.send(f"🔒 **{raid_title}** 공대 모집이 자동 종료되었습니다.")
+            await thread.send(f"🔒 **{raid_title}** 공대 모집이 자동 종료되었습니다.")
+            try:
+                await thread.edit(archived=True, locked=True)
+            except discord.HTTPException:
+                pass
 
     @party_notification_task.before_loop
     async def before_party_notification(self) -> None:

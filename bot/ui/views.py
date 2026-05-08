@@ -189,15 +189,32 @@ class AddCharacterModal(Modal, title="캐릭터 등록"):
         name = self.char_name.value.strip()
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            char = await loa.get_character_info(self.api_key, name)
+            siblings = await loa.get_siblings(self.api_key, name)
         except RuntimeError as e:
             await interaction.followup.send(str(e), ephemeral=True)
             return
+        if siblings is None:
+            await interaction.followup.send(
+                f"**{name}** 캐릭터를 찾을 수 없습니다.\n이름과 API 키를 확인해주세요.", ephemeral=True
+            )
+            return
+
+        # 본인 원정대 캐릭터인지 확인
+        sibling_names = {c["CharacterName"] for c in siblings}
+        registered = await db.get_user_characters(self.discord_id)
+        if registered and not any(r in sibling_names for r in registered):
+            await interaction.followup.send(
+                "본인 원정대의 캐릭터만 등록할 수 있습니다.", ephemeral=True
+            )
+            return
+
+        char = next((c for c in siblings if c["CharacterName"] == name), None)
         if char is None:
             await interaction.followup.send(
                 f"**{name}** 캐릭터를 찾을 수 없습니다.\n이름과 API 키를 확인해주세요.", ephemeral=True
             )
             return
+
         added = await db.add_character(self.discord_id, name)
         if not added:
             await interaction.followup.send(f"**{name}**은(는) 이미 등록된 캐릭터입니다.", ephemeral=True)
@@ -241,9 +258,10 @@ class RemoveCharacterView(View):
 # ─────────────────────────────────────────────────────
 
 class RaidSelectView(View):
-    def __init__(self, leader_id: str) -> None:
+    def __init__(self, leader_id: str, forum_channel_id: str) -> None:
         super().__init__(timeout=120)
         self.leader_id = leader_id
+        self.forum_channel_id = forum_channel_id
         options = [
             discord.SelectOption(
                 label=name,
@@ -264,22 +282,23 @@ class RaidSelectView(View):
         raid_name = interaction.data["values"][0]
         diffs = list(RAIDS[raid_name]["difficulties"].keys())
         if len(diffs) == 1:
-            view = ProficiencySelectView(self.leader_id, raid_name, diffs[0])
+            view = ProficiencySelectView(self.leader_id, raid_name, diffs[0], self.forum_channel_id)
             await interaction.response.edit_message(
                 content=f"**{raid_name} {diffs[0]}** — 숙련도를 선택하세요.", view=view
             )
         else:
-            view = DifficultySelectView(self.leader_id, raid_name)
+            view = DifficultySelectView(self.leader_id, raid_name, self.forum_channel_id)
             await interaction.response.edit_message(
                 content=f"**{raid_name}** 난이도를 선택하세요.", view=view
             )
 
 
 class DifficultySelectView(View):
-    def __init__(self, leader_id: str, raid_name: str) -> None:
+    def __init__(self, leader_id: str, raid_name: str, forum_channel_id: str) -> None:
         super().__init__(timeout=120)
         self.leader_id = leader_id
         self.raid_name = raid_name
+        self.forum_channel_id = forum_channel_id
         options = [
             discord.SelectOption(
                 label=diff,
@@ -297,18 +316,19 @@ class DifficultySelectView(View):
             await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
             return
         difficulty = interaction.data["values"][0]
-        view = ProficiencySelectView(self.leader_id, self.raid_name, difficulty)
+        view = ProficiencySelectView(self.leader_id, self.raid_name, difficulty, self.forum_channel_id)
         await interaction.response.edit_message(
             content=f"**{self.raid_name} {difficulty}** — 숙련도를 선택하세요.", view=view
         )
 
 
 class ProficiencySelectView(View):
-    def __init__(self, leader_id: str, raid_name: str, difficulty: str) -> None:
+    def __init__(self, leader_id: str, raid_name: str, difficulty: str, forum_channel_id: str) -> None:
         super().__init__(timeout=120)
         self.leader_id = leader_id
         self.raid_name = raid_name
         self.difficulty = difficulty
+        self.forum_channel_id = forum_channel_id
         options = [
             discord.SelectOption(label=p, description=desc, value=p)
             for p, desc in PROFICIENCY.items()
@@ -323,7 +343,7 @@ class ProficiencySelectView(View):
             return
         proficiency = interaction.data["values"][0]
         await interaction.response.send_modal(
-            ScheduleModal(self.leader_id, self.raid_name, self.difficulty, proficiency)
+            ScheduleModal(self.leader_id, self.raid_name, self.difficulty, proficiency, self.forum_channel_id)
         )
 
 
@@ -341,12 +361,13 @@ class ScheduleModal(Modal, title="모집 일정 설정"):
         max_length=5,
     )
 
-    def __init__(self, leader_id: str, raid_name: str, difficulty: str, proficiency: str) -> None:
+    def __init__(self, leader_id: str, raid_name: str, difficulty: str, proficiency: str, forum_channel_id: str) -> None:
         super().__init__()
         self.leader_id = leader_id
         self.raid_name = raid_name
         self.difficulty = difficulty
         self.proficiency = proficiency
+        self.forum_channel_id = forum_channel_id
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         date_str = self.date_input.value.strip()
@@ -383,7 +404,7 @@ class ScheduleModal(Modal, title="모집 일정 설정"):
 
         await _post_party(
             interaction, self.raid_name, self.difficulty, self.proficiency,
-            scheduled_time, dt_kst.isoformat()
+            scheduled_time, dt_kst.isoformat(), self.forum_channel_id
         )
 
 
@@ -394,13 +415,16 @@ async def _post_party(
     proficiency: str,
     scheduled_time: str,
     scheduled_datetime: str | None = None,
+    forum_channel_id: str | None = None,
 ) -> None:
-    diff_info  = get_difficulty_info(raid_name, difficulty)
+    diff_info   = get_difficulty_info(raid_name, difficulty)
     total_slots = diff_info["total_slots"]
     min_level   = diff_info["min_level"]
     leader_id   = str(interaction.user.id)
 
-    # 임시 파티 dict로 embed 미리보기 생성
+    raid_info  = RAIDS.get(raid_name, {})
+    short_name = raid_info.get("short_name", raid_name)
+
     tmp_party = {
         "message_id": "0", "channel_id": "0", "guild_id": "0",
         "leader_id": leader_id, "raid_name": raid_name,
@@ -414,10 +438,14 @@ async def _post_party(
     view  = PartyView(total_slots=total_slots)
 
     await interaction.response.edit_message(content="✅ 공대 모집 게시물을 생성합니다.", view=None)
-    msg = await interaction.channel.send(embed=embed, view=view)
+
+    forum = interaction.client.get_channel(int(forum_channel_id))
+    thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
+    thread = await forum.create_thread(name=thread_name, embed=embed, view=view)
+    msg = thread.message
 
     await db.create_party(
-        message_id=str(msg.id), channel_id=str(msg.channel.id),
+        message_id=str(msg.id), channel_id=str(thread.id),
         guild_id=str(interaction.guild_id), leader_id=leader_id,
         raid_name=raid_name, difficulty=difficulty, proficiency=proficiency,
         scheduled_time=scheduled_time, scheduled_datetime=scheduled_datetime,
@@ -631,6 +659,10 @@ class PartyView(View):
                 await interaction.channel.send(
                     f"🔒 **{raid_title}** 파티원이 모두 나가 공대가 종료되었습니다."
                 )
+                try:
+                    await interaction.channel.edit(archived=True, locked=True)
+                except discord.HTTPException:
+                    pass
                 return
         else:
             await interaction.response.send_message("파티에서 나갔습니다.", ephemeral=True)
@@ -661,6 +693,10 @@ class PartyView(View):
         embed = party_embed(party, slots)
         closed_view = PartyView(total_slots=self.total_slots, closed=True)
         await interaction.response.edit_message(embed=embed, view=closed_view)
+        try:
+            await interaction.channel.edit(locked=True)
+        except discord.HTTPException:
+            pass
 
     # ── 클리어 ─────────────────────────────────────
 
@@ -699,6 +735,10 @@ class PartyView(View):
             f"{mentions}\n"
             f"파티원 **{count}명**의 레이드 체크가 자동 완료되었습니다."
         )
+        try:
+            await interaction.channel.edit(archived=True, locked=True)
+        except discord.HTTPException:
+            pass
 
     # ── 공통 갱신 ───────────────────────────────────
 

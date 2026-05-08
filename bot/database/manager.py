@@ -62,6 +62,11 @@ CREATE TABLE IF NOT EXISTS party_slots (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_party_user
     ON party_slots(party_message_id, discord_id);
+
+CREATE TABLE IF NOT EXISTS guild_settings (
+    guild_id         TEXT PRIMARY KEY,
+    forum_channel_id TEXT
+);
 """
 
 
@@ -103,6 +108,29 @@ async def init_db() -> None:
             except Exception:
                 pass
         await db.commit()
+
+
+# ──────────────────────────────────────────────
+# 서버 설정
+# ──────────────────────────────────────────────
+
+async def set_forum_channel(guild_id: str, forum_channel_id: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO guild_settings (guild_id, forum_channel_id) VALUES (?, ?) "
+            "ON CONFLICT(guild_id) DO UPDATE SET forum_channel_id=excluded.forum_channel_id",
+            (guild_id, forum_channel_id),
+        )
+        await db.commit()
+
+
+async def get_forum_channel_id(guild_id: str) -> Optional[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT forum_channel_id FROM guild_settings WHERE guild_id=?", (guild_id,)
+        )
+        row = await cur.fetchone()
+    return row[0] if row else None
 
 
 # ──────────────────────────────────────────────
