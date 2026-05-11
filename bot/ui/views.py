@@ -66,6 +66,19 @@ def _parse_schedule(date_str: str, time_str: str) -> datetime | None:
         return None
 
 
+def _is_extreme_expired(info: dict) -> bool:
+    """익스트림 레이드의 운영 기간이 지났으면 True."""
+    if not info.get("is_extreme"):
+        return False
+    until = info.get("available_until")
+    if not until:
+        return False
+    try:
+        return datetime.fromisoformat(until) < datetime.now(KST)
+    except ValueError:
+        return False
+
+
 def _format_schedule(dt: datetime) -> str:
     """datetime → 12시간제 한국어 표시 문자열."""
     hour = dt.hour
@@ -351,17 +364,25 @@ class RecruitView(View):
     def _build(self) -> None:
         self.clear_items()
 
-        # 레이드 Select
-        raid_options = [
-            discord.SelectOption(
-                label=name,
-                description=f"{info['category']} | 최소 {min(d['min_level'] for d in info['difficulties'].values())}",
-                emoji=info["icon"],
-                value=name,
-                default=(name == self.selected_raid),
-            )
-            for name, info in RAIDS.items()
-        ]
+        # 레이드 Select (비활성·기간만료 레이드 제외)
+        raid_options = []
+        for name, info in RAIDS.items():
+            if not info.get("is_active", True):
+                continue
+            if _is_extreme_expired(info):
+                continue
+            min_lv = min(d["min_level"] for d in info["difficulties"].values())
+            desc = f"{info['category']} | 최소 {min_lv}"
+            if info.get("is_extreme") and info.get("available_until"):
+                try:
+                    until_dt = datetime.fromisoformat(info["available_until"])
+                    desc += f" | ~{until_dt.month}/{until_dt.day} 까지"
+                except ValueError:
+                    pass
+            raid_options.append(discord.SelectOption(
+                label=name, description=desc, emoji=info["icon"],
+                value=name, default=(name == self.selected_raid),
+            ))
         u = self._uid
         raid_sel = Select(
             custom_id=f"rc:{u}:r",
@@ -483,7 +504,8 @@ class RecruitView(View):
         if str(interaction.user.id) != self.leader_id:
             await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
             return
-        await interaction.response.send_modal(ScheduleAndMemoModal(self))
+        raid_info = RAIDS.get(self.selected_raid, {}) if self.selected_raid else {}
+        await interaction.response.send_modal(ScheduleAndMemoModal(self, raid_info))
 
     async def _on_create(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.leader_id:
@@ -518,9 +540,10 @@ class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
         style=discord.TextStyle.short,
     )
 
-    def __init__(self, recruit_view: "RecruitView") -> None:
+    def __init__(self, recruit_view: "RecruitView", raid_info: dict | None = None) -> None:
         super().__init__()
         self.recruit_view = recruit_view
+        self.raid_info = raid_info or {}
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         dt = _parse_schedule(self.date_input.value, self.time_input.value)
@@ -537,6 +560,34 @@ class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
                 "❌ 과거 날짜로는 설정할 수 없습니다.", ephemeral=True
             )
             return
+
+        # 익스트림 레이드 기간 검증 — 파티 일정이 운영 기간 안에 있어야 함
+        if self.raid_info.get("is_extreme"):
+            avail_from  = self.raid_info.get("available_from")
+            avail_until = self.raid_info.get("available_until")
+            if avail_from:
+                try:
+                    from_dt = datetime.fromisoformat(avail_from)
+                    if dt < from_dt:
+                        await interaction.response.send_message(
+                            f"❌ 이 익스트림 레이드는 **{from_dt.month}/{from_dt.day}**부터 진행 가능합니다.\n"
+                            f"공대 모집은 가능하지만 일정은 그 이후로 잡아주세요.",
+                            ephemeral=True,
+                        )
+                        return
+                except ValueError:
+                    pass
+            if avail_until:
+                try:
+                    until_dt = datetime.fromisoformat(avail_until)
+                    if dt > until_dt:
+                        await interaction.response.send_message(
+                            f"❌ 이 익스트림 레이드는 **{until_dt.month}/{until_dt.day}**까지 진행 가능합니다.",
+                            ephemeral=True,
+                        )
+                        return
+                except ValueError:
+                    pass
 
         self.recruit_view.scheduled_time     = _format_schedule(dt)
         self.recruit_view.scheduled_datetime = dt.isoformat()
@@ -850,6 +901,47 @@ class PartyView(View):
                 ephemeral=True,
             )
             return
+
+        # ── 익스트림 레이드 추가 검증 ─────────────────────
+        raid_info = RAIDS.get(party["raid_name"], {})
+        if raid_info.get("is_extreme"):
+            now         = datetime.now(KST)
+            avail_from  = raid_info.get("available_from")
+            avail_until = raid_info.get("available_until")
+            sdt         = party.get("scheduled_datetime")
+
+            # 파티 일정이 운영 기간 시작 전이면 참여 불가
+            if sdt and avail_from:
+                try:
+                    if datetime.fromisoformat(sdt) < datetime.fromisoformat(avail_from):
+                        from_dt = datetime.fromisoformat(avail_from)
+                        await interaction.response.send_message(
+                            f"이 공대 일정은 운영 기간 시작({from_dt.month}/{from_dt.day}) 전입니다.",
+                            ephemeral=True,
+                        )
+                        return
+                except ValueError:
+                    pass
+
+            # 현재 시각이 운영 기간 종료 이후이면 참여 불가
+            if avail_until:
+                try:
+                    if datetime.fromisoformat(avail_until) < now:
+                        await interaction.response.send_message(
+                            "운영 기간이 종료된 레이드입니다.", ephemeral=True
+                        )
+                        return
+                except ValueError:
+                    pass
+            # 원정대 1캐릭터 제한
+            extreme_slot = await db.get_user_extreme_slot_this_week(discord_id, party_week_key)
+            if extreme_slot:
+                await interaction.response.send_message(
+                    f"이번 주 익스트림 레이드는 **{extreme_slot['character_name']}**으로 이미 참여 중입니다.\n"
+                    f"원정대당 1캐릭터만 참여할 수 있습니다.",
+                    ephemeral=True,
+                )
+                return
 
         api_key = await db.get_user_api_key(discord_id)
         if not api_key:

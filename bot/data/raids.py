@@ -52,6 +52,8 @@ def get_difficulty_info(raid_name: str, difficulty: str) -> dict | None:
 def get_applicable_raids(item_level: float) -> list[tuple[str, str, dict]]:
     result = []
     for raid_name, raid_info in RAIDS.items():
+        if not raid_info.get("is_active", True):
+            continue
         for diff_name, diff_info in raid_info["difficulties"].items():
             if item_level >= diff_info["min_level"]:
                 result.append((raid_name, diff_name, diff_info))

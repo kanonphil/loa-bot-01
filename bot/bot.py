@@ -69,6 +69,28 @@ class LoABot(commands.Bot):
             )
             await db.mark_notified(party["message_id"])
 
+        # 익스트림 레이드 운영 기간 만료 → 활성 파티 자동 종료
+        for party in await db.get_expired_extreme_parties(now_iso):
+            await db.disband_party(party["message_id"])
+            thread = self.get_channel(int(party["channel_id"]))
+            if thread is None:
+                continue
+            try:
+                msg = await thread.fetch_message(int(party["message_id"]))
+                party["status"] = "disbanded"
+                slots = await db.get_party_slots(party["message_id"])
+                await msg.edit(embed=party_embed(party, slots), view=None)
+            except (discord.NotFound, discord.Forbidden):
+                pass
+            raid_title = f"{party['raid_name']} {party['difficulty']}"
+            await thread.send(
+                f"⏰ **{raid_title}** 익스트림 레이드 운영 기간이 종료되었습니다."
+            )
+            try:
+                await thread.edit(archived=True, locked=True)
+            except discord.HTTPException:
+                pass
+
         week_start = db.get_week_start_iso()
 
         # 이전 주차 파티 자동 종료 (recruiting/full/closed → disbanded + archive)

@@ -78,14 +78,18 @@ CREATE TABLE IF NOT EXISTS guild_settings (
 
 CREATE TABLE IF NOT EXISTS raid_categories (
     name       TEXT PRIMARY KEY,
-    sort_order INTEGER NOT NULL DEFAULT 0
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_extreme INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS raids_data (
-    name       TEXT PRIMARY KEY,
-    short_name TEXT NOT NULL,
-    icon       TEXT NOT NULL DEFAULT '⚔️',
-    category   TEXT NOT NULL
+    name            TEXT PRIMARY KEY,
+    short_name      TEXT NOT NULL,
+    icon            TEXT NOT NULL DEFAULT '⚔️',
+    category        TEXT NOT NULL,
+    is_active       INTEGER NOT NULL DEFAULT 1,
+    available_from  TEXT,
+    available_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS raid_difficulties (
@@ -155,6 +159,22 @@ async def init_db() -> None:
         ]:
             try:
                 await db.execute(f"ALTER TABLE parties ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
+        for col, definition in [
+            ("is_extreme", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE raid_categories ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
+        for col, definition in [
+            ("is_active",       "INTEGER NOT NULL DEFAULT 1"),
+            ("available_from",  "TEXT"),
+            ("available_until", "TEXT"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE raids_data ADD COLUMN {col} {definition}")
             except Exception:
                 pass
         try:
@@ -815,6 +835,7 @@ async def get_raids_dict() -> dict:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT r.name, r.short_name, r.icon, r.category, "
+            "r.is_active, r.available_from, r.available_until, c.is_extreme, "
             "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates "
             "FROM raids_data r "
             "JOIN raid_categories c ON r.category = c.name "
@@ -828,17 +849,21 @@ async def get_raids_dict() -> dict:
         name = r["name"]
         if name not in result:
             result[name] = {
-                "short_name": r["short_name"],
-                "icon": r["icon"],
-                "category": r["category"],
-                "difficulties": {},
+                "short_name":     r["short_name"],
+                "icon":           r["icon"],
+                "category":       r["category"],
+                "is_extreme":     bool(r["is_extreme"]),
+                "is_active":      bool(r["is_active"]),
+                "available_from": r["available_from"],
+                "available_until":r["available_until"],
+                "difficulties":   {},
             }
         if r["difficulty"]:
             result[name]["difficulties"][r["difficulty"]] = {
-                "min_level": r["min_level"],
-                "total_slots": r["total_slots"],
-                "party_split": r["party_split"],
-                "gates": r["gates"],
+                "min_level":  r["min_level"],
+                "total_slots":r["total_slots"],
+                "party_split":r["party_split"],
+                "gates":      r["gates"],
             }
     return result
 
@@ -872,6 +897,80 @@ async def raid_exists(name: str) -> bool:
             "SELECT 1 FROM raids_data WHERE name=?", (name,)
         )
         return await cur.fetchone() is not None
+
+
+async def update_category_extreme(name: str, is_extreme: bool) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raid_categories SET is_extreme=? WHERE name=?",
+            (int(is_extreme), name),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def set_raid_active(name: str, is_active: bool) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raids_data SET is_active=? WHERE name=?",
+            (int(is_active), name),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def set_raid_period(name: str, from_iso: str | None, until_iso: str | None) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raids_data SET available_from=?, available_until=? WHERE name=?",
+            (from_iso, until_iso, name),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def get_user_extreme_slot_this_week(
+    discord_id: str, party_week_key: str
+) -> dict | None:
+    """이번 주 익스트림 파티에 참여 중인 슬롯 반환. 없으면 None."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT ps.character_name, p.raid_name, p.scheduled_datetime "
+            "FROM party_slots ps "
+            "JOIN parties p ON ps.party_message_id = p.message_id "
+            "JOIN raids_data r ON r.name = p.raid_name "
+            "JOIN raid_categories c ON c.name = r.category "
+            "WHERE ps.discord_id = ? "
+            "AND c.is_extreme = 1 "
+            "AND p.status IN ('recruiting', 'full', 'closed')",
+            (discord_id,),
+        )
+        rows = await cur.fetchall()
+    for row in rows:
+        r = dict(row)
+        sdt = r.get("scheduled_datetime")
+        if sdt and get_week_key_for_dt(sdt) == party_week_key:
+            return r
+    return None
+
+
+async def get_expired_extreme_parties(now_iso: str) -> list[dict]:
+    """available_until이 지난 익스트림 레이드의 활성 파티."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT p.* FROM parties p "
+            "JOIN raids_data r ON r.name = p.raid_name "
+            "JOIN raid_categories c ON c.name = r.category "
+            "WHERE c.is_extreme = 1 "
+            "AND r.available_until IS NOT NULL "
+            "AND r.available_until < ? "
+            "AND p.status IN ('recruiting', 'full', 'closed')",
+            (now_iso,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── 난이도 ─────────────────────────────────────

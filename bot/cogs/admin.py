@@ -7,6 +7,7 @@ from discord.ui import Modal, TextInput
 
 import bot.database.manager as db
 from bot.data import raids as raids_module
+from bot.ui.views import _parse_schedule, _format_schedule
 
 
 # ── 소유자 체크 헬퍼 ─────────────────────────────────────
@@ -62,6 +63,46 @@ async def _class_autocomplete(
         app_commands.Choice(name=c["name"], value=c["name"])
         for c in classes if current.lower() in c["name"].lower()
     ][:25]
+
+
+# ── 레이드 기간 설정 Modal ────────────────────────────────
+
+class RaidPeriodModal(Modal, title="운영 기간 설정"):
+    from_date  = TextInput(label="시작 날짜", placeholder="예) 0514  /  20260514", min_length=3, max_length=10)
+    from_time  = TextInput(label="시작 시간", placeholder="예) 0600  /  06:00",    min_length=1, max_length=5)
+    until_date = TextInput(label="종료 날짜", placeholder="예) 0613  /  20260613", min_length=3, max_length=10)
+    until_time = TextInput(label="종료 시간", placeholder="예) 0600  /  06:00",    min_length=1, max_length=5)
+
+    def __init__(self, raid_name: str) -> None:
+        super().__init__()
+        self.raid_name = raid_name
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        from_dt  = _parse_schedule(self.from_date.value,  self.from_time.value)
+        until_dt = _parse_schedule(self.until_date.value, self.until_time.value)
+
+        if from_dt is None or until_dt is None:
+            await interaction.response.send_message(
+                "❌ 날짜/시간 형식이 올바르지 않습니다.\n"
+                "날짜: `0514` `20260514` / 시간: `0600` `06:00`",
+                ephemeral=True,
+            )
+            return
+        if from_dt >= until_dt:
+            await interaction.response.send_message(
+                "❌ 시작 시각이 종료 시각보다 늦습니다.", ephemeral=True
+            )
+            return
+
+        await db.set_raid_period(self.raid_name, from_dt.isoformat(), until_dt.isoformat())
+        await raids_module.reload()
+
+        fmt = "%Y/%m/%d %H:%M"
+        await interaction.response.send_message(
+            f"✅ **{self.raid_name}** 운영 기간 설정 완료.\n"
+            f"`{from_dt.strftime(fmt)}` ~ `{until_dt.strftime(fmt)}`",
+            ephemeral=True,
+        )
 
 
 # ── 레이드 추가 Modal ────────────────────────────────────
@@ -273,6 +314,82 @@ class Admin(commands.Cog):
         await raids_module.reload()
         await interaction.response.send_message(
             f"🗑️ **{레이드명} {난이도명}** 난이도 삭제 완료.", ephemeral=True
+        )
+
+    # ── 익스트림 관리 ──────────────────────────────────────
+
+    @manage.command(name="카테고리익스트림", description="카테고리의 익스트림 여부를 설정합니다.")
+    @app_commands.describe(이름="카테고리명", 익스트림="True = 익스트림, False = 일반")
+    @app_commands.autocomplete(이름=_category_autocomplete)
+    async def set_category_extreme(
+        self, interaction: discord.Interaction, 이름: str, 익스트림: bool
+    ) -> None:
+        if not await _check_owner(interaction):
+            return
+        updated = await db.update_category_extreme(이름, 익스트림)
+        if not updated:
+            await interaction.response.send_message(
+                f"❌ **{이름}** 카테고리를 찾을 수 없습니다.", ephemeral=True
+            )
+            return
+        await raids_module.reload()
+        label = "익스트림" if 익스트림 else "일반"
+        await interaction.response.send_message(
+            f"✅ **{이름}** 카테고리 → {label} 설정 완료.", ephemeral=True
+        )
+
+    @manage.command(name="레이드활성화", description="레이드를 활성화하거나 비활성화합니다.")
+    @app_commands.describe(레이드명="대상 레이드명", 활성화="True = 활성화, False = 비활성화")
+    @app_commands.autocomplete(레이드명=_raid_autocomplete)
+    async def set_raid_active(
+        self, interaction: discord.Interaction, 레이드명: str, 활성화: bool
+    ) -> None:
+        if not await _check_owner(interaction):
+            return
+        updated = await db.set_raid_active(레이드명, 활성화)
+        if not updated:
+            await interaction.response.send_message(
+                f"❌ **{레이드명}** 레이드를 찾을 수 없습니다.", ephemeral=True
+            )
+            return
+        await raids_module.reload()
+        label = "활성화" if 활성화 else "비활성화"
+        await interaction.response.send_message(
+            f"✅ **{레이드명}** {label} 완료.", ephemeral=True
+        )
+
+    @manage.command(name="레이드기간설정", description="익스트림 레이드 운영 기간을 설정합니다.")
+    @app_commands.describe(레이드명="대상 레이드명")
+    @app_commands.autocomplete(레이드명=_raid_autocomplete)
+    async def set_raid_period(
+        self, interaction: discord.Interaction, 레이드명: str
+    ) -> None:
+        if not await _check_owner(interaction):
+            return
+        if not await db.raid_exists(레이드명):
+            await interaction.response.send_message(
+                f"❌ **{레이드명}** 레이드를 찾을 수 없습니다.", ephemeral=True
+            )
+            return
+        await interaction.response.send_modal(RaidPeriodModal(레이드명))
+
+    @manage.command(name="레이드기간삭제", description="익스트림 레이드 운영 기간을 삭제합니다.")
+    @app_commands.describe(레이드명="대상 레이드명")
+    @app_commands.autocomplete(레이드명=_raid_autocomplete)
+    async def clear_raid_period(
+        self, interaction: discord.Interaction, 레이드명: str
+    ) -> None:
+        if not await _check_owner(interaction):
+            return
+        updated = await db.set_raid_period(레이드명, None, None)
+        if not updated:
+            await interaction.response.send_message(
+                f"❌ **{레이드명}** 레이드를 찾을 수 없습니다.", ephemeral=True
+            )
+            return
+        await raids_module.reload()
+        await interaction.response.send_message(
+            f"✅ **{레이드명}** 운영 기간 삭제 완료.", ephemeral=True
         )
 
     # ── 직업 ─────────────────────────────────────────────

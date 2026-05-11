@@ -6,6 +6,9 @@ from datetime import datetime, timezone, timedelta
 
 from bot.data.raids import RAIDS, get_applicable_raids, CIRCLE_NUMBERS
 from bot.database.manager import get_week_key
+from datetime import datetime, timezone, timedelta
+
+_KST = timezone(timedelta(hours=9))
 
 KST = timezone(timedelta(hours=9))
 
@@ -281,14 +284,33 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
         except Exception:
             pass
 
+    is_extreme = raid_info.get("is_extreme", False)
+    title_prefix = "⚡ " if is_extreme else ""
     embed = discord.Embed(
-        title=f"{icon} {short_name} {difficulty} {proficiency} 공격대 모집",
+        title=f"{title_prefix}{icon} {short_name} {difficulty} {proficiency} 공격대 모집",
         color=color,
     )
+
+    period_line = ""
+    if is_extreme:
+        avail_from  = raid_info.get("available_from")
+        avail_until = raid_info.get("available_until")
+        if avail_from and avail_until:
+            try:
+                f_dt = datetime.fromisoformat(avail_from)
+                u_dt = datetime.fromisoformat(avail_until)
+                period_line = (
+                    f"\n⏰ 운영 기간: <t:{int(f_dt.timestamp())}:D>"
+                    f" ~ <t:{int(u_dt.timestamp())}:D>"
+                )
+            except ValueError:
+                pass
+
     embed.description = (
         f"📅 {ts_display}\n"
         f"👑 <@{party['leader_id']}>\n"
         f"{status_text} ({filled}/{total_slots}) | 최소 {min_level}"
+        + period_line
         + (f"\n📌 {party['memo']}" if party.get("memo") else "")
     )
 
