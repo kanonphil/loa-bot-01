@@ -333,6 +333,7 @@ class RecruitView(View):
         self.scheduled_time:      str | None = None
         self.scheduled_datetime:  str | None = None
         self.memo:                str | None = None
+        self._uid = f"{id(self):x}"  # 인스턴스마다 고유 — custom_id 일관성 유지
         self._build()
 
     # ── 뷰 재구성 ──────────────────────────────────
@@ -351,7 +352,11 @@ class RecruitView(View):
             )
             for name, info in RAIDS.items()
         ]
-        raid_sel = Select(placeholder="레이드 선택", options=raid_options, row=0)
+        u = self._uid
+        raid_sel = Select(
+            custom_id=f"rc:{u}:r",
+            placeholder="레이드 선택", options=raid_options, row=0,
+        )
         raid_sel.callback = self._on_raid
         self.add_item(raid_sel)
 
@@ -366,9 +371,13 @@ class RecruitView(View):
                 )
                 for diff, info in RAIDS[self.selected_raid]["difficulties"].items()
             ]
-            diff_sel = Select(placeholder="난이도 선택", options=diff_options, row=1)
+            diff_sel = Select(
+                custom_id=f"rc:{u}:d",
+                placeholder="난이도 선택", options=diff_options, row=1,
+            )
         else:
             diff_sel = Select(
+                custom_id=f"rc:{u}:d",
                 placeholder="레이드를 먼저 선택하세요",
                 options=[discord.SelectOption(label="-", value="-")],
                 disabled=True, row=1,
@@ -384,13 +393,17 @@ class RecruitView(View):
             )
             for p, desc in PROFICIENCY.items()
         ]
-        prof_sel = Select(placeholder="숙련도 선택", options=prof_options, row=2)
+        prof_sel = Select(
+            custom_id=f"rc:{u}:p",
+            placeholder="숙련도 선택", options=prof_options, row=2,
+        )
         prof_sel.callback = self._on_proficiency
         self.add_item(prof_sel)
 
         # 일정·메모 버튼
         schedule_label = f"📅 {self.scheduled_time}" if self.scheduled_time else "📅 날짜 · 시간 · 메모 설정"
         schedule_btn = Button(
+            custom_id=f"rc:{u}:s",
             label=schedule_label,
             style=discord.ButtonStyle.secondary if not self.scheduled_time else discord.ButtonStyle.primary,
             row=3,
@@ -402,6 +415,7 @@ class RecruitView(View):
         all_set = all([self.selected_raid, self.selected_difficulty,
                        self.selected_proficiency, self.scheduled_time])
         create_btn = Button(
+            custom_id=f"rc:{u}:c",
             label="✅ 공대 생성",
             style=discord.ButtonStyle.success,
             disabled=not all_set,
