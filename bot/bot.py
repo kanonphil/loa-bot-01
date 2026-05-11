@@ -8,6 +8,7 @@ import bot.database.manager as db
 import bot.api.lostark as loa
 from bot.ui.views import PartyView
 from bot.ui.embeds import party_embed
+from bot.data import raids as raids_module
 
 KST = timezone(timedelta(hours=9))
 
@@ -17,6 +18,7 @@ COGS = [
     "bot.cogs.expedition",
     "bot.cogs.raid",
     "bot.cogs.party",
+    "bot.cogs.admin",
 ]
 
 
@@ -28,6 +30,7 @@ class LoABot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await db.init_db()
+        await raids_module.reload()
         for cog in COGS:
             await self.load_extension(cog)
         await self.tree.sync()
@@ -66,9 +69,8 @@ class LoABot(commands.Bot):
             )
             await db.mark_notified(party["message_id"])
 
-        # 24시간 지난 파티 자동 종료
-        cutoff  = (now - timedelta(hours=24)).isoformat()
-        expired = await db.get_expired_parties(cutoff)
+        # 이전 주차 파티 자동 종료 (scheduled_datetime이 현재 주 시작 이전)
+        expired = await db.get_prev_week_active_parties(db.get_week_start_iso())
         for party in expired:
             await db.disband_party(party["message_id"])
             thread = self.get_channel(int(party["channel_id"]))

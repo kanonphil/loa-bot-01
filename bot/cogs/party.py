@@ -4,6 +4,7 @@ from discord.ext import commands
 
 import bot.database.manager as db
 from bot.ui.views import RaidSelectView
+from bot.ui.embeds import party_list_embed
 
 
 class Party(commands.Cog):
@@ -48,7 +49,7 @@ class Party(commands.Cog):
 
     @app_commands.command(
         name="공대확인",
-        description="공대 모집 포럼 채널로 이동합니다.",
+        description="현재 서버에서 모집 중인 공대 목록을 확인합니다.",
     )
     async def party_list(self, interaction: discord.Interaction) -> None:
         guild_id = str(interaction.guild_id)
@@ -58,9 +59,24 @@ class Party(commands.Cog):
                 "공대 모집 포럼 채널이 설정되지 않았습니다.", ephemeral=True
             )
             return
-        await interaction.response.send_message(
-            f"<#{forum_id}>", ephemeral=True
-        )
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        parties = await db.get_guild_parties(guild_id)
+        if not parties:
+            await interaction.followup.send(
+                f"현재 모집 중인 공대가 없습니다.\n<#{forum_id}>", ephemeral=True
+            )
+            return
+
+        pairs = []
+        for p in parties[:10]:
+            slots = await db.get_party_slots(p["message_id"])
+            pairs.append((p, slots))
+
+        embed = party_list_embed(pairs)
+        if len(parties) > 10:
+            embed.set_footer(text=f"처음 10개만 표시됩니다 (전체 {len(parties)}개) • 전체 목록: <#{forum_id}>")
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(
         name="내공대",

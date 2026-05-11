@@ -35,7 +35,7 @@ async def _send_dashboard(
         return
     embed = character_embed(armory)
     if followup:
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     else:
         await interaction.response.edit_message(content=None, embed=embed, view=None)
 
@@ -62,7 +62,7 @@ class Dashboard(commands.Cog):
             return
 
         if len(chars) == 1:
-            await interaction.response.defer(thinking=True)
+            await interaction.response.defer(thinking=True, ephemeral=True)
             await _send_dashboard(interaction, api_key, chars[0], followup=True)
             return
 

@@ -289,6 +289,7 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
         f"📅 {ts_display}\n"
         f"👑 <@{party['leader_id']}>\n"
         f"{status_text} ({filled}/{total_slots}) | 최소 {min_level}"
+        + (f"\n📌 {party['memo']}" if party.get("memo") else "")
     )
 
     party_split: int | None = (raid_info.get("difficulties") or {}).get(difficulty, {}).get("party_split")

@@ -145,6 +145,7 @@ class Raid(commands.Cog):
         await interaction.followup.send(
             content=f"⚠️ 캐릭터가 {len(embeds)}개라 처음 10개만 표시됩니다." if truncated else None,
             embeds=embeds[:10],
+            ephemeral=True,
         )
 
 
