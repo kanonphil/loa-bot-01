@@ -13,6 +13,7 @@ class Expedition(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="원정대", description="등록된 내 캐릭터 목록을 한눈에 확인합니다.")
+    @app_commands.checks.cooldown(1, 30.0)
     async def expedition(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(thinking=True, ephemeral=True)
 
@@ -75,6 +76,15 @@ class Expedition(commands.Cog):
         else:
             await interaction.response.send_message(
                 f"**{캐릭터명}**은(는) 등록된 캐릭터가 아닙니다.", ephemeral=True
+            )
+
+
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
+        if isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"⏳ {error.retry_after:.0f}초 후 다시 시도해주세요.", ephemeral=True
             )
 
 

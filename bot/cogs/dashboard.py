@@ -45,6 +45,7 @@ class Dashboard(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="대시보드", description="캐릭터의 아이템 레벨, 각인, 보석 정보를 카드로 표시합니다.")
+    @app_commands.checks.cooldown(1, 30.0)
     async def dashboard(self, interaction: discord.Interaction) -> None:
         discord_id = str(interaction.user.id)
         api_key    = await db.get_user_api_key(discord_id)
@@ -91,6 +92,15 @@ class Dashboard(commands.Cog):
         await interaction.response.send_message(
             "조회할 캐릭터를 선택하세요:", view=CharSelect(), ephemeral=True
         )
+
+
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
+        if isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"⏳ {error.retry_after:.0f}초 후 다시 시도해주세요.", ephemeral=True
+            )
 
 
 async def setup(bot: commands.Bot) -> None:

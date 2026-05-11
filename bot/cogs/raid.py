@@ -60,6 +60,7 @@ class Raid(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="레이드체크", description="이번 주 레이드 완료 여부를 버튼으로 체크합니다.")
+    @app_commands.checks.cooldown(1, 20.0)
     async def raid_check(self, interaction: discord.Interaction) -> None:
         discord_id = str(interaction.user.id)
         api_key    = await db.get_user_api_key(discord_id)
@@ -107,6 +108,7 @@ class Raid(commands.Cog):
         )
 
     @app_commands.command(name="전체레이드체크", description="등록된 모든 캐릭터의 레이드 현황을 확인합니다.")
+    @app_commands.checks.cooldown(1, 60.0)
     async def raid_check_all(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(thinking=True, ephemeral=True)
 
@@ -147,6 +149,15 @@ class Raid(commands.Cog):
             embeds=embeds[:10],
             ephemeral=True,
         )
+
+
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
+        if isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"⏳ {error.retry_after:.0f}초 후 다시 시도해주세요.", ephemeral=True
+            )
 
 
 async def setup(bot: commands.Bot) -> None:

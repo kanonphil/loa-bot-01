@@ -1,6 +1,7 @@
 import aiosqlite
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from config import encrypt_api_key, decrypt_api_key, is_plaintext_key
 
 DB_PATH = "loa_bot.db"
 KST = timezone(timedelta(hours=9))
@@ -192,6 +193,7 @@ async def init_db() -> None:
                 pass
         await db.commit()
     await seed_game_data()
+    await _migrate_encrypt_api_keys()
 
 
 # ──────────────────────────────────────────────
@@ -221,12 +223,30 @@ async def get_forum_channel_id(guild_id: str) -> Optional[str]:
 # 사용자 API 키
 # ──────────────────────────────────────────────
 
+async def _migrate_encrypt_api_keys() -> None:
+    """ENCRYPTION_KEY 설정 시 기존 평문 API 키를 암호화 (1회성 마이그레이션)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT discord_id, loa_api_key FROM users")
+        rows = await cur.fetchall()
+        migrated = 0
+        for discord_id, stored in rows:
+            if stored and is_plaintext_key(stored):
+                await db.execute(
+                    "UPDATE users SET loa_api_key=? WHERE discord_id=?",
+                    (encrypt_api_key(stored), discord_id),
+                )
+                migrated += 1
+        if migrated > 0:
+            await db.commit()
+            print(f"[DB] API 키 암호화 마이그레이션 완료: {migrated}개")
+
+
 async def set_user_api_key(discord_id: str, api_key: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO users (discord_id, loa_api_key) VALUES (?, ?) "
             "ON CONFLICT(discord_id) DO UPDATE SET loa_api_key=excluded.loa_api_key",
-            (discord_id, api_key),
+            (discord_id, encrypt_api_key(api_key)),
         )
         await db.commit()
 
@@ -237,7 +257,7 @@ async def get_user_api_key(discord_id: str) -> Optional[str]:
             "SELECT loa_api_key FROM users WHERE discord_id=?", (discord_id,)
         )
         row = await cur.fetchone()
-    return row[0] if row else None
+    return decrypt_api_key(row[0]) if row else None
 
 
 # ──────────────────────────────────────────────
