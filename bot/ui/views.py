@@ -212,11 +212,16 @@ class ExpeditionView(View):
         char_names = await db.get_user_characters(self.discord_id)
         characters: list[dict] = []
         updated = 0
+
+        # 원정대 목록 1회만 호출 (캐릭터 수만큼 반복 호출 → 단건 호출)
+        try:
+            siblings = await loa.get_siblings(api_key, char_names[0]) if char_names else None
+            siblings_map = {c["CharacterName"]: c for c in siblings} if siblings else {}
+        except Exception:
+            siblings_map = {}
+
         for name in char_names:
-            try:
-                char = await loa.get_character_info(api_key, name)
-            except RuntimeError:
-                char = None
+            char = siblings_map.get(name)
             if char:
                 lv  = loa.parse_item_level(char)
                 cls = char.get("CharacterClassName", "?")
@@ -231,9 +236,13 @@ class ExpeditionView(View):
                 })
 
         from bot.ui.embeds import expedition_embed
-        await interaction.message.edit(
-            embed=expedition_embed(interaction.user, characters), view=self
-        )
+        try:
+            await interaction.message.edit(
+                embed=expedition_embed(interaction.user, characters), view=self
+            )
+        except Exception:
+            pass
+
         await interaction.followup.send(
             f"🔄 **{updated}/{len(char_names)}**개 캐릭터 동기화 완료!", ephemeral=True
         )

@@ -711,6 +711,30 @@ async def get_guild_parties(guild_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
+    """현재 주 시작 이전에 scheduled된 disbanded 파티 (스레드 삭제용)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM parties "
+            "WHERE scheduled_datetime IS NOT NULL "
+            "AND scheduled_datetime < ? "
+            "AND status = 'disbanded'",
+            (week_start_iso,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def purge_party(message_id: str) -> None:
+    """파티·슬롯·대기열 레코드를 완전히 삭제한다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM party_slots    WHERE party_message_id=?", (message_id,))
+        await db.execute("DELETE FROM party_waitlist WHERE party_message_id=?", (message_id,))
+        await db.execute("DELETE FROM parties         WHERE message_id=?",       (message_id,))
+        await db.commit()
+
+
 async def get_prev_week_active_parties(week_start_iso: str) -> list[dict]:
     """scheduled_datetime이 현재 주 시작 이전인 미종료 파티 (주간 리셋 정리용)."""
     async with aiosqlite.connect(DB_PATH) as db:

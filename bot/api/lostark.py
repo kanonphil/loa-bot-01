@@ -31,7 +31,8 @@ async def _get(api_key: str, path: str, params: dict = None) -> Optional[dict | 
     }
     url = f"{LOA_API_BASE}{path}"
     try:
-        async with session.get(url, headers=headers, params=params) as resp:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with session.get(url, headers=headers, params=params, timeout=timeout) as resp:
             if resp.status == 200:
                 return await resp.json()
             if resp.status == 404:
@@ -47,6 +48,8 @@ async def _get(api_key: str, path: str, params: dict = None) -> Optional[dict | 
             raise RuntimeError(f"API 오류 {resp.status}: {body[:200]}")
     except aiohttp.ClientError as e:
         raise RuntimeError(f"네트워크 오류: {e}") from e
+    except TimeoutError as e:
+        raise RuntimeError("API 응답 시간 초과 (10초). 잠시 후 다시 시도해주세요.") from e
 
 
 def _enc(name: str) -> str:

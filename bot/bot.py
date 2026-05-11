@@ -69,8 +69,10 @@ class LoABot(commands.Bot):
             )
             await db.mark_notified(party["message_id"])
 
-        # 이전 주차 파티 자동 종료 (scheduled_datetime이 현재 주 시작 이전)
-        expired = await db.get_prev_week_active_parties(db.get_week_start_iso())
+        week_start = db.get_week_start_iso()
+
+        # 이전 주차 파티 자동 종료 (recruiting/full/closed → disbanded + archive)
+        expired = await db.get_prev_week_active_parties(week_start)
         for party in expired:
             await db.disband_party(party["message_id"])
             thread = self.get_channel(int(party["channel_id"]))
@@ -89,6 +91,17 @@ class LoABot(commands.Bot):
                 await thread.edit(archived=True, locked=True)
             except discord.HTTPException:
                 pass
+
+        # 이전 주차 disbanded 파티 스레드 삭제 + DB 레코드 정리
+        old_disbanded = await db.get_prev_week_disbanded_parties(week_start)
+        for party in old_disbanded:
+            thread = self.get_channel(int(party["channel_id"]))
+            if thread is not None:
+                try:
+                    await thread.delete()
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass
+            await db.purge_party(party["message_id"])
 
     @party_notification_task.before_loop
     async def before_party_notification(self) -> None:
