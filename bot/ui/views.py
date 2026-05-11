@@ -37,6 +37,47 @@ async def _notify_waitlist(client: discord.Client, party: dict) -> None:
     await db.clear_waitlist(party["message_id"])
 
 
+def _parse_schedule(date_str: str, time_str: str) -> datetime | None:
+    """날짜/시간 문자열을 유연하게 파싱. 실패 시 None 반환.
+
+    날짜: YYYYMMDD | MMDD | MDD | YYYY/MM/DD | YYYY-MM-DD
+    시간: HHMM | HH | HH:MM
+    """
+    d = date_str.strip().replace("/", "").replace("-", "").replace(".", "").replace(" ", "")
+    t = time_str.strip().replace(":", "").replace(" ", "")
+    now = datetime.now(KST)
+    try:
+        if len(d) == 8:
+            year, month, day = int(d[:4]), int(d[4:6]), int(d[6:8])
+        elif len(d) == 4:
+            year, month, day = now.year, int(d[:2]), int(d[2:4])
+        elif len(d) == 3:
+            year, month, day = now.year, int(d[:1]), int(d[1:3])
+        else:
+            return None
+        if len(t) == 4:
+            hour, minute = int(t[:2]), int(t[2:4])
+        elif len(t) in (1, 2):
+            hour, minute = int(t), 0
+        else:
+            return None
+        return datetime(year, month, day, hour, minute, tzinfo=KST)
+    except (ValueError, IndexError):
+        return None
+
+
+def _format_schedule(dt: datetime) -> str:
+    """datetime → 12시간제 한국어 표시 문자열."""
+    hour = dt.hour
+    ampm = "오전" if hour < 12 else "오후"
+    display_hour = hour if hour <= 12 else hour - 12
+    if display_hour == 0:
+        display_hour = 12
+    if dt.minute == 0:
+        return f"{dt.year}/{dt.month:02d}/{dt.day:02d} {ampm} {display_hour}시 정각"
+    return f"{dt.year}/{dt.month:02d}/{dt.day:02d} {ampm} {display_hour}시 {dt.minute:02d}분"
+
+
 async def _refresh_expedition(
     message: discord.Message,
     discord_id: str,
@@ -276,110 +317,175 @@ class RemoveCharacterView(View):
 
 
 # ─────────────────────────────────────────────────────
-# 공대 모집 — 생성 플로우
+# 공대 모집 — 통합 생성 뷰
 # ─────────────────────────────────────────────────────
 
-class RaidSelectView(View):
+class RecruitView(View):
+    """레이드·난이도·숙련도·일정을 한 화면에서 설정하는 공대 모집 뷰."""
+
     def __init__(self, leader_id: str, forum_channel_id: str) -> None:
-        super().__init__(timeout=120)
-        self.leader_id = leader_id
+        super().__init__(timeout=300)
+        self.leader_id       = leader_id
         self.forum_channel_id = forum_channel_id
-        options = [
+        self.selected_raid:       str | None = None
+        self.selected_difficulty: str | None = None
+        self.selected_proficiency:str | None = None
+        self.scheduled_time:      str | None = None
+        self.scheduled_datetime:  str | None = None
+        self.memo:                str | None = None
+        self._build()
+
+    # ── 뷰 재구성 ──────────────────────────────────
+
+    def _build(self) -> None:
+        self.clear_items()
+
+        # 레이드 Select
+        raid_options = [
             discord.SelectOption(
                 label=name,
-                description=f"{info['category']}  |  최소 {min(d['min_level'] for d in info['difficulties'].values())}",
+                description=f"{info['category']} | 최소 {min(d['min_level'] for d in info['difficulties'].values())}",
                 emoji=info["icon"],
                 value=name,
+                default=(name == self.selected_raid),
             )
             for name, info in RAIDS.items()
         ]
-        sel = Select(placeholder="모집할 레이드를 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
+        raid_sel = Select(placeholder="레이드 선택", options=raid_options, row=0)
+        raid_sel.callback = self._on_raid
+        self.add_item(raid_sel)
 
-    async def _on_select(self, interaction: discord.Interaction) -> None:
-        if str(interaction.user.id) != self.leader_id:
-            await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
-            return
-        raid_name = interaction.data["values"][0]
-        diffs = list(RAIDS[raid_name]["difficulties"].keys())
-        if len(diffs) == 1:
-            view = ProficiencySelectView(self.leader_id, raid_name, diffs[0], self.forum_channel_id)
-            await interaction.response.edit_message(
-                content=f"**{raid_name} {diffs[0]}** — 숙련도를 선택하세요.", view=view
-            )
+        # 난이도 Select — 레이드 선택 전엔 비활성
+        if self.selected_raid and self.selected_raid in RAIDS:
+            diff_options = [
+                discord.SelectOption(
+                    label=diff,
+                    description=f"최소 {info['min_level']} | {info['total_slots']}인",
+                    value=diff,
+                    default=(diff == self.selected_difficulty),
+                )
+                for diff, info in RAIDS[self.selected_raid]["difficulties"].items()
+            ]
+            diff_sel = Select(placeholder="난이도 선택", options=diff_options, row=1)
         else:
-            view = DifficultySelectView(self.leader_id, raid_name, self.forum_channel_id)
-            await interaction.response.edit_message(
-                content=f"**{raid_name}** 난이도를 선택하세요.", view=view
+            diff_sel = Select(
+                placeholder="레이드를 먼저 선택하세요",
+                options=[discord.SelectOption(label="-", value="-")],
+                disabled=True, row=1,
             )
+        diff_sel.callback = self._on_difficulty
+        self.add_item(diff_sel)
 
-
-class DifficultySelectView(View):
-    def __init__(self, leader_id: str, raid_name: str, forum_channel_id: str) -> None:
-        super().__init__(timeout=120)
-        self.leader_id = leader_id
-        self.raid_name = raid_name
-        self.forum_channel_id = forum_channel_id
-        options = [
+        # 숙련도 Select
+        prof_options = [
             discord.SelectOption(
-                label=diff,
-                description=f"최소 {info['min_level']}  |  {info['total_slots']}인",
-                value=diff,
+                label=p, description=desc, value=p,
+                default=(p == self.selected_proficiency),
             )
-            for diff, info in RAIDS[raid_name]["difficulties"].items()
-        ]
-        sel = Select(placeholder="난이도를 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
-
-    async def _on_select(self, interaction: discord.Interaction) -> None:
-        if str(interaction.user.id) != self.leader_id:
-            await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
-            return
-        difficulty = interaction.data["values"][0]
-        view = ProficiencySelectView(self.leader_id, self.raid_name, difficulty, self.forum_channel_id)
-        await interaction.response.edit_message(
-            content=f"**{self.raid_name} {difficulty}** — 숙련도를 선택하세요.", view=view
-        )
-
-
-class ProficiencySelectView(View):
-    def __init__(self, leader_id: str, raid_name: str, difficulty: str, forum_channel_id: str) -> None:
-        super().__init__(timeout=120)
-        self.leader_id = leader_id
-        self.raid_name = raid_name
-        self.difficulty = difficulty
-        self.forum_channel_id = forum_channel_id
-        options = [
-            discord.SelectOption(label=p, description=desc, value=p)
             for p, desc in PROFICIENCY.items()
         ]
-        sel = Select(placeholder="공격대 숙련도를 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
+        prof_sel = Select(placeholder="숙련도 선택", options=prof_options, row=2)
+        prof_sel.callback = self._on_proficiency
+        self.add_item(prof_sel)
 
-    async def _on_select(self, interaction: discord.Interaction) -> None:
+        # 일정·메모 버튼
+        schedule_label = f"📅 {self.scheduled_time}" if self.scheduled_time else "📅 날짜 · 시간 · 메모 설정"
+        schedule_btn = Button(
+            label=schedule_label,
+            style=discord.ButtonStyle.secondary if not self.scheduled_time else discord.ButtonStyle.primary,
+            row=3,
+        )
+        schedule_btn.callback = self._on_schedule
+        self.add_item(schedule_btn)
+
+        # 공대 생성 버튼 — 모두 선택 시 활성화
+        all_set = all([self.selected_raid, self.selected_difficulty,
+                       self.selected_proficiency, self.scheduled_time])
+        create_btn = Button(
+            label="✅ 공대 생성",
+            style=discord.ButtonStyle.success,
+            disabled=not all_set,
+            row=4,
+        )
+        create_btn.callback = self._on_create
+        self.add_item(create_btn)
+
+    def _status_text(self) -> str:
+        def v(val: str | None, label: str) -> str:
+            return f"{label}: **{val}**" if val else f"{label}: `미선택`"
+
+        lines = [
+            "**⚔️ 공대 모집 설정**\n",
+            v(self.selected_raid,        "레이드"),
+            v(self.selected_difficulty,  "난이도"),
+            v(self.selected_proficiency, "숙련도"),
+            f"일정: **{self.scheduled_time}**" if self.scheduled_time else "일정: `미설정`",
+        ]
+        if self.memo:
+            lines.append(f"메모: {self.memo}")
+        if not all([self.selected_raid, self.selected_difficulty,
+                    self.selected_proficiency, self.scheduled_time]):
+            lines.append("\n모든 항목을 설정하면 **공대 생성** 버튼이 활성화됩니다.")
+        return "\n".join(lines)
+
+    # ── 콜백 ──────────────────────────────────────
+
+    async def _on_raid(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.leader_id:
             await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
             return
-        proficiency = interaction.data["values"][0]
+        self.selected_raid = interaction.data["values"][0]
+        self.selected_difficulty = None
+        self._build()
+        await interaction.response.edit_message(content=self._status_text(), view=self)
+
+    async def _on_difficulty(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.leader_id:
+            await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
+            return
+        self.selected_difficulty = interaction.data["values"][0]
+        self._build()
+        await interaction.response.edit_message(content=self._status_text(), view=self)
+
+    async def _on_proficiency(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.leader_id:
+            await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
+            return
+        self.selected_proficiency = interaction.data["values"][0]
+        self._build()
+        await interaction.response.edit_message(content=self._status_text(), view=self)
+
+    async def _on_schedule(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.leader_id:
+            await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
+            return
         await interaction.response.send_modal(
-            ScheduleModal(self.leader_id, self.raid_name, self.difficulty, proficiency, self.forum_channel_id)
+            ScheduleAndMemoModal(self, interaction.message)
+        )
+
+    async def _on_create(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.leader_id:
+            await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
+            return
+        await _post_party(
+            interaction,
+            self.selected_raid, self.selected_difficulty, self.selected_proficiency,
+            self.scheduled_time, self.scheduled_datetime, self.forum_channel_id,
+            memo=self.memo,
         )
 
 
-class ScheduleModal(Modal, title="모집 일정 설정"):
+class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
     date_input = TextInput(
-        label="날짜 (YYYY/MM/DD)",
-        placeholder="예) 2026/05/06",
-        min_length=10,
+        label="날짜",
+        placeholder="예) 0514  /  20260514  /  2026/05/14",
+        min_length=3,
         max_length=10,
     )
     time_input = TextInput(
-        label="시간 (HH:MM, 24시간)",
-        placeholder="예) 20:00",
-        min_length=4,
+        label="시간",
+        placeholder="예) 2000  /  20  /  20:00",
+        min_length=1,
         max_length=5,
     )
     memo_input = TextInput(
@@ -390,65 +496,47 @@ class ScheduleModal(Modal, title="모집 일정 설정"):
         style=discord.TextStyle.short,
     )
 
-    def __init__(self, leader_id: str, raid_name: str, difficulty: str, proficiency: str, forum_channel_id: str) -> None:
+    def __init__(self, recruit_view: "RecruitView", message: discord.Message) -> None:
         super().__init__()
-        self.leader_id = leader_id
-        self.raid_name = raid_name
-        self.difficulty = difficulty
-        self.proficiency = proficiency
-        self.forum_channel_id = forum_channel_id
+        self.recruit_view = recruit_view
+        self.message = message
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        date_str = self.date_input.value.strip()
-        time_str = self.time_input.value.strip()
-
-        try:
-            dt_kst = datetime.strptime(
-                f"{date_str} {time_str}", "%Y/%m/%d %H:%M"
-            ).replace(tzinfo=KST)
-        except ValueError:
+        dt = _parse_schedule(self.date_input.value, self.time_input.value)
+        if dt is None:
             await interaction.response.send_message(
-                "날짜/시간 형식이 올바르지 않습니다.\n"
-                "날짜: `2026/05/06` / 시간: `20:00` 형식으로 입력해주세요.",
+                "❌ 날짜/시간 형식이 올바르지 않습니다.\n"
+                "날짜: `0514` `20260514` `2026/05/14`\n"
+                "시간: `2000` `20` `20:00`",
                 ephemeral=True,
             )
             return
-
-        if dt_kst < datetime.now(KST):
+        if dt < datetime.now(KST):
             await interaction.response.send_message(
-                "과거 날짜로는 모집할 수 없습니다. 날짜를 다시 확인해주세요.",
-                ephemeral=True,
+                "❌ 과거 날짜로는 설정할 수 없습니다.", ephemeral=True
             )
             return
 
-        # 사람이 읽기 편한 표시용 문자열 (12시간제)
-        hour = dt_kst.hour
-        ampm = "오전" if hour < 12 else "오후"
-        display_hour = hour if hour <= 12 else hour - 12
-        if display_hour == 0:
-            display_hour = 12
-        scheduled_time = f"{dt_kst.year}/{dt_kst.month:02d}/{dt_kst.day:02d} {ampm} {display_hour}시 {dt_kst.minute:02d}분"
-        if dt_kst.minute == 0:
-            scheduled_time = f"{dt_kst.year}/{dt_kst.month:02d}/{dt_kst.day:02d} {ampm} {display_hour}시 정각"
+        self.recruit_view.scheduled_time     = _format_schedule(dt)
+        self.recruit_view.scheduled_datetime = dt.isoformat()
+        self.recruit_view.memo = self.memo_input.value.strip() or None
+        self.recruit_view._build()
 
-        await _post_party(
-            interaction, self.raid_name, self.difficulty, self.proficiency,
-            scheduled_time, dt_kst.isoformat(), self.forum_channel_id,
-            memo=self.memo_input.value.strip() or None,
-        )
+        await interaction.response.defer()
+        await self.message.edit(content=self.recruit_view._status_text(), view=self.recruit_view)
 
 
 class ScheduleChangeModal(Modal, title="일정 변경"):
     date_input = TextInput(
-        label="날짜 (YYYY/MM/DD)",
-        placeholder="예) 2026/05/14",
-        min_length=10,
+        label="날짜",
+        placeholder="예) 0514  /  20260514  /  2026/05/14",
+        min_length=3,
         max_length=10,
     )
     time_input = TextInput(
-        label="시간 (HH:MM, 24시간)",
-        placeholder="예) 20:00",
-        min_length=4,
+        label="시간",
+        placeholder="예) 2000  /  20  /  20:00",
+        min_length=1,
         max_length=5,
     )
 
@@ -459,36 +547,23 @@ class ScheduleChangeModal(Modal, title="일정 변경"):
         self.message = message
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        date_str = self.date_input.value.strip()
-        time_str = self.time_input.value.strip()
-
-        try:
-            dt_kst = datetime.strptime(
-                f"{date_str} {time_str}", "%Y/%m/%d %H:%M"
-            ).replace(tzinfo=KST)
-        except ValueError:
+        dt_kst = _parse_schedule(self.date_input.value, self.time_input.value)
+        if dt_kst is None:
             await interaction.response.send_message(
-                "날짜/시간 형식이 올바르지 않습니다.\n"
-                "날짜: `2026/05/14` / 시간: `20:00` 형식으로 입력해주세요.",
+                "❌ 날짜/시간 형식이 올바르지 않습니다.\n"
+                "날짜: `0514` `20260514` `2026/05/14`\n"
+                "시간: `2000` `20` `20:00`",
                 ephemeral=True,
             )
             return
 
         if dt_kst < datetime.now(KST):
             await interaction.response.send_message(
-                "과거 날짜로는 변경할 수 없습니다. 날짜를 다시 확인해주세요.",
-                ephemeral=True,
+                "❌ 과거 날짜로는 변경할 수 없습니다.", ephemeral=True
             )
             return
 
-        hour = dt_kst.hour
-        ampm = "오전" if hour < 12 else "오후"
-        display_hour = hour if hour <= 12 else hour - 12
-        if display_hour == 0:
-            display_hour = 12
-        scheduled_time = f"{dt_kst.year}/{dt_kst.month:02d}/{dt_kst.day:02d} {ampm} {display_hour}시 {dt_kst.minute:02d}분"
-        if dt_kst.minute == 0:
-            scheduled_time = f"{dt_kst.year}/{dt_kst.month:02d}/{dt_kst.day:02d} {ampm} {display_hour}시 정각"
+        scheduled_time = _format_schedule(dt_kst)
 
         message_id = self.party["message_id"]
         await db.update_party_schedule(message_id, scheduled_time, dt_kst.isoformat())

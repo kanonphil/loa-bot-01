@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import bot.database.manager as db
-from bot.ui.views import RaidSelectView
+from bot.ui.views import RecruitView
 from bot.ui.embeds import party_list_embed
 
 
@@ -42,9 +42,9 @@ class Party(commands.Cog):
                 "먼저 `/api등록`으로 API 키를 등록해주세요.", ephemeral=True
             )
             return
-        view = RaidSelectView(leader_id=leader_id, forum_channel_id=forum_id)
+        view = RecruitView(leader_id=leader_id, forum_channel_id=forum_id)
         await interaction.response.send_message(
-            "모집할 레이드를 선택해주세요:", view=view, ephemeral=True
+            view._status_text(), view=view, ephemeral=True
         )
 
     @app_commands.command(
