@@ -46,6 +46,7 @@ class Party(commands.Cog):
         await interaction.response.send_message(
             view._status_text(), view=view, ephemeral=True
         )
+        view._original_interaction = interaction
 
     @app_commands.command(
         name="공대확인",

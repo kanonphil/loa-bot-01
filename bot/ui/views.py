@@ -334,6 +334,7 @@ class RecruitView(View):
         self.scheduled_datetime:  str | None = None
         self.memo:                str | None = None
         self._uid = f"{id(self):x}"  # 인스턴스마다 고유 — custom_id 일관성 유지
+        self._original_interaction: discord.Interaction | None = None
         self._build()
 
     # ── 뷰 재구성 ──────────────────────────────────
@@ -473,9 +474,7 @@ class RecruitView(View):
         if str(interaction.user.id) != self.leader_id:
             await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
             return
-        await interaction.response.send_modal(
-            ScheduleAndMemoModal(self, interaction.message)
-        )
+        await interaction.response.send_modal(ScheduleAndMemoModal(self))
 
     async def _on_create(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.leader_id:
@@ -510,10 +509,9 @@ class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
         style=discord.TextStyle.short,
     )
 
-    def __init__(self, recruit_view: "RecruitView", message: discord.Message) -> None:
+    def __init__(self, recruit_view: "RecruitView") -> None:
         super().__init__()
         self.recruit_view = recruit_view
-        self.message = message
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         dt = _parse_schedule(self.date_input.value, self.time_input.value)
@@ -537,7 +535,12 @@ class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
         self.recruit_view._build()
 
         await interaction.response.defer()
-        await self.message.edit(content=self.recruit_view._status_text(), view=self.recruit_view)
+        orig = self.recruit_view._original_interaction
+        if orig:
+            await orig.edit_original_response(
+                content=self.recruit_view._status_text(),
+                view=self.recruit_view,
+            )
 
 
 class ScheduleChangeModal(Modal, title="일정 변경"):
