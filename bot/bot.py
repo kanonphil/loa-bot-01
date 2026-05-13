@@ -136,10 +136,17 @@ class LoABot(commands.Bot):
             if thread is not None:
                 try:
                     await thread.delete()
-                    print(f"[스레드 정리] 삭제 성공")
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-                    print(f"[스레드 정리] 삭제 실패: {type(e).__name__}: {e}")
-            await db.purge_party(party["message_id"])
+                    print(f"[스레드 정리] 삭제 성공: {raid_title}")
+                    await db.purge_party(party["message_id"])
+                except discord.NotFound:
+                    # 이미 삭제된 스레드 → DB도 정리
+                    await db.purge_party(party["message_id"])
+                except (discord.Forbidden, discord.HTTPException) as e:
+                    # 권한 없음 → DB 유지, 다음 리셋에서 재시도
+                    print(f"[스레드 정리] 삭제 실패 (재시도 예정): {type(e).__name__}: {e}")
+            else:
+                # 스레드 자체를 찾을 수 없음 → DB만 정리
+                await db.purge_party(party["message_id"])
 
     @party_notification_task.before_loop
     async def before_party_notification(self) -> None:
