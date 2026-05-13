@@ -889,18 +889,6 @@ class PartyView(View):
             await interaction.response.send_message("이미 파티에 참여 중입니다.", ephemeral=True)
             return
 
-        # 같은 레이드·같은 주차의 다른 공대 중복 참여 차단
-        existing = await db.get_user_active_slots_in_raid(
-            discord_id, party["raid_name"], message_id, party_week_key=party_week_key
-        )
-        if existing:
-            char_names = ", ".join(f"**{s['character_name']}**" for s in existing)
-            await interaction.response.send_message(
-                f"이미 **{party['raid_name']}** 공대에 {char_names}(으)로 참여 중입니다.\n"
-                f"다른 공대에 참여하려면 먼저 나가주세요.",
-                ephemeral=True,
-            )
-            return
 
         # ── 익스트림 레이드 추가 검증 ─────────────────────
         raid_info = RAIDS.get(party["raid_name"], {})
@@ -987,10 +975,27 @@ class PartyView(View):
                 filtered.append(q)
         qualifying = filtered
 
+        # 같은 레이드·같은 주차의 다른 공대에 이미 참여 중인 캐릭터 필터링
+        # (discord_id 전체 차단 → 캐릭터 단위 차단으로 변경)
+        already_slots = await db.get_user_active_slots_in_raid(
+            discord_id, party["raid_name"], message_id, party_week_key=party_week_key
+        )
+        already_chars = {s["character_name"] for s in already_slots}
+        in_other_party: list[str] = []
+        filtered2 = []
+        for q in qualifying:
+            if q["name"] in already_chars:
+                in_other_party.append(f"**{q['name']}**")
+            else:
+                filtered2.append(q)
+        qualifying = filtered2
+
         if not qualifying:
             lines: list[str] = []
             if gold_done:
                 lines.append(f"🏆 이번 주 골드 완료: {', '.join(gold_done)}")
+            if in_other_party:
+                lines.append(f"⚔️ 다른 공대 참여 중: {', '.join(in_other_party)}")
             if level_too_low:
                 lines.append(f"📉 레벨 미달 (최소 {min_level}): {', '.join(level_too_low)}")
             if no_cache:
