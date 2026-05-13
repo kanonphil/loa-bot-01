@@ -946,7 +946,7 @@ class PartyView(View):
             return
 
         min_level: int = party["min_level"]
-        cached    = await db.get_cached_characters(discord_id)
+        cached    = await db.get_cached_characters(discord_id, max_age_hours=99999)
         cache_map = {c["character_name"]: c for c in cached}
 
         # 캐시 기반 필터 (API 호출 없음 → defer 불필요, 현재 메시지 위치에서 바로 응답)
