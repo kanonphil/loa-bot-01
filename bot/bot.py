@@ -95,8 +95,10 @@ class LoABot(commands.Bot):
 
         # 이전 주차 파티 자동 종료 (recruiting/full/closed → disbanded + archive)
         expired = await db.get_prev_week_active_parties(week_start)
+        just_disbanded: set[str] = set()
         for party in expired:
             await db.disband_party(party["message_id"])
+            just_disbanded.add(party["message_id"])
             thread = self.get_channel(int(party["channel_id"]))
             if thread is None:
                 continue
@@ -115,9 +117,18 @@ class LoABot(commands.Bot):
                 pass
 
         # 이전 주차 disbanded 파티 스레드 삭제 + DB 레코드 정리
+        # (이번 사이클에 방금 disband된 파티는 제외 — 다음 주간 리셋에서 삭제)
         old_disbanded = await db.get_prev_week_disbanded_parties(week_start)
         for party in old_disbanded:
+            if party["message_id"] in just_disbanded:
+                continue
+            # 아카이브된 스레드는 캐시에 없으므로 fetch_channel fallback 사용
             thread = self.get_channel(int(party["channel_id"]))
+            if thread is None:
+                try:
+                    thread = await self.fetch_channel(int(party["channel_id"]))
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    thread = None
             if thread is not None:
                 try:
                     await thread.delete()

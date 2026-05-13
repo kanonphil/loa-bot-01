@@ -761,6 +761,7 @@ async def _auto_join_dps(
         await interaction.response.send_message(result, ephemeral=True)
 
     if ok:
+        await db.remove_waitlist(message_id, discord_id)
         try:
             msg = await interaction.channel.fetch_message(int(message_id))
             await party_view._refresh_party(msg)
@@ -1205,19 +1206,25 @@ class PartyView(View):
             return
         message_id = party["message_id"]
         slots = await db.get_party_slots(message_id)
-        await db.disband_party(message_id)
-        party["status"] = "disbanded"
-        from bot.ui.embeds import party_embed
-        await interaction.response.edit_message(embed=party_embed(party, slots), view=None)
         raid_title = f"{party['raid_name']} {party['difficulty']}"
         mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
-        await interaction.channel.send(
-            f"❌ **{raid_title}** 공대가 취소되었습니다."
-            + (f"\n{mentions}" if mentions else "")
-        )
+
+        await db.purge_party(message_id)
+        await interaction.response.edit_message(content="❌ 공대가 취소되었습니다.", embed=None, view=None)
+
+        # 파티원에게 DM 발송 (파티장 제외)
+        leader_id = party["leader_id"]
+        link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+        for s in slots:
+            if s["discord_id"] != leader_id:
+                await _send_dm(
+                    interaction.client, s["discord_id"],
+                    f"❌ **{raid_title}** 공대가 파티장에 의해 취소되었습니다.",
+                )
+
         try:
-            await interaction.channel.edit(archived=True, locked=True)
-        except discord.HTTPException:
+            await interaction.channel.delete()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
 
     # ── 강제 퇴장 ────────────────────────────────────
@@ -1573,6 +1580,7 @@ class RoleSelectView(View):
                 ),
                 view=None,
             )
+            await db.remove_waitlist(self.message_id, self.discord_id)
             try:
                 msg = await interaction.channel.fetch_message(int(self.message_id))
                 await self.party_view._refresh_party(msg)
