@@ -5,6 +5,7 @@ from discord.ext import commands
 import bot.database.manager as db
 from bot.ui.views import RecruitView
 from bot.ui.embeds import party_list_embed
+from bot.database.manager import get_week_key, get_week_key_for_dt
 
 
 class Party(commands.Cog):
@@ -91,17 +92,34 @@ class Party(commands.Cog):
                 "현재 참여 중인 공대가 없습니다.", ephemeral=True
             )
             return
-        lines = []
+        current_wk = get_week_key()
+
+        # 주차별 그룹화
+        week_groups: dict[str, list] = {}
         for p in parties:
-            slots     = await db.get_party_slots(p["message_id"])
-            filled    = len(slots)
-            total     = p["total_slots"]
-            link      = f"https://discord.com/channels/{p['guild_id']}/{p['channel_id']}"
-            status    = {"recruiting": "🟢", "full": "🔵", "closed": "🔴"}.get(p["status"], "⚫")
-            lines.append(
-                f"{status} [{p['raid_name']} {p['difficulty']} {p['proficiency']}]({link}) "
-                f"`{filled}/{total}` · {p['scheduled_time']}"
-            )
+            wk = get_week_key_for_dt(p["scheduled_datetime"]) if p.get("scheduled_datetime") else current_wk
+            week_groups.setdefault(wk, []).append(p)
+
+        lines = []
+        for wk in sorted(week_groups.keys()):
+            if wk == current_wk:
+                lines.append("**📅 이번 주**")
+            elif wk > current_wk:
+                lines.append("**📅 다음 주 이후**")
+            else:
+                lines.append("**📅 이전 주**")
+
+            for p in week_groups[wk]:
+                slots  = await db.get_party_slots(p["message_id"])
+                filled = len(slots)
+                total  = p["total_slots"]
+                link   = f"https://discord.com/channels/{p['guild_id']}/{p['channel_id']}"
+                status = {"recruiting": "🟢", "full": "🔵", "closed": "🔴"}.get(p["status"], "⚫")
+                lines.append(
+                    f"　{status} [{p['raid_name']} {p['difficulty']} {p['proficiency']}]({link}) "
+                    f"`{filled}/{total}` · {p['scheduled_time']}"
+                )
+
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 

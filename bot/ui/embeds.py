@@ -6,7 +6,6 @@ from datetime import datetime, timezone, timedelta
 
 from bot.data.raids import RAIDS, get_applicable_raids, CIRCLE_NUMBERS
 from bot.database.manager import get_week_key
-from datetime import datetime, timezone, timedelta
 
 _KST = timezone(timedelta(hours=9))
 
@@ -216,8 +215,8 @@ def raid_checklist_embed(
     for cat, raids in by_cat.items():
         lines = []
         for raid_name, diff_name, diff_info in raids:
-            icon = RAIDS[raid_name]["icon"]
-            done = f"{raid_name}_{diff_name}" in completions
+            icon      = RAIDS[raid_name]["icon"]
+            done      = f"{raid_name}_{diff_name}" in completions
             name_text = f"**{raid_name} {diff_name}**" if done else f"{raid_name} {diff_name}"
             status    = "✅" if done else "⬜"
             lines.append(f"{status} {icon} {name_text}  _최소 {diff_info['min_level']}_")

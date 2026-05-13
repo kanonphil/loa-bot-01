@@ -241,6 +241,12 @@ async def _migrate_encrypt_api_keys() -> None:
             print(f"[DB] API 키 암호화 마이그레이션 완료: {migrated}개")
 
 
+async def delete_user(discord_id: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM users WHERE discord_id=?", (discord_id,))
+        await db.commit()
+
+
 async def set_user_api_key(discord_id: str, api_key: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -683,6 +689,14 @@ async def clear_waitlist(message_id: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "DELETE FROM party_waitlist WHERE party_message_id=?", (message_id,)
+        )
+        await db.commit()
+
+
+async def update_party_memo(message_id: str, memo: str | None) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE parties SET memo=? WHERE message_id=?", (memo, message_id)
         )
         await db.commit()
 

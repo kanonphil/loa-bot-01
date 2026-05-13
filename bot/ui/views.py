@@ -603,7 +603,7 @@ class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
             )
 
 
-class ScheduleChangeModal(Modal, title="일정 변경"):
+class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
     date_input = TextInput(
         label="날짜",
         placeholder="예) 0514  /  20260514  /  2026/05/14",
@@ -616,12 +616,20 @@ class ScheduleChangeModal(Modal, title="일정 변경"):
         min_length=1,
         max_length=5,
     )
+    memo_input = TextInput(
+        label="공지/메모 (비워두면 기존 메모 삭제)",
+        required=False,
+        max_length=150,
+        style=discord.TextStyle.short,
+    )
 
     def __init__(self, party: dict, party_view: "PartyView", message: discord.Message) -> None:
         super().__init__()
         self.party = party
         self.party_view = party_view
         self.message = message
+        if party.get("memo"):
+            self.memo_input.default = party["memo"]
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         dt_kst = _parse_schedule(self.date_input.value, self.time_input.value)
@@ -644,6 +652,7 @@ class ScheduleChangeModal(Modal, title="일정 변경"):
 
         message_id = self.party["message_id"]
         await db.update_party_schedule(message_id, scheduled_time, dt_kst.isoformat())
+        await db.update_party_memo(message_id, self.memo_input.value.strip() or None)
 
         party = await db.get_party(message_id)
         slots = await db.get_party_slots(message_id)
@@ -762,6 +771,14 @@ async def _auto_join_dps(
 
     if ok:
         await db.remove_waitlist(message_id, discord_id)
+        party_info = await db.get_party(message_id)
+        if party_info and party_info["leader_id"] != discord_id:
+            raid_title = f"{party_info['raid_name']} {party_info['difficulty']}"
+            link = f"https://discord.com/channels/{party_info['guild_id']}/{party_info['channel_id']}"
+            await _send_dm(
+                interaction.client, party_info["leader_id"],
+                f"⚔️ **{raid_title}** 공대에 **{char_info['name']}**({char_info['class']})이(가) 참여했습니다!\n{link}",
+            )
         try:
             msg = await interaction.channel.fetch_message(int(message_id))
             await party_view._refresh_party(msg)
@@ -1580,6 +1597,14 @@ class RoleSelectView(View):
                 view=None,
             )
             await db.remove_waitlist(self.message_id, self.discord_id)
+            if party and party["leader_id"] != self.discord_id:
+                raid_title = f"{party['raid_name']} {party['difficulty']}"
+                link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+                role_icon = "🛡️" if role == "support" else "⚔️"
+                await _send_dm(
+                    interaction.client, party["leader_id"],
+                    f"{role_icon} **{raid_title}** 공대에 **{char['name']}**({char['class']})이(가) 참여했습니다!\n{link}",
+                )
             try:
                 msg = await interaction.channel.fetch_message(int(self.message_id))
                 await self.party_view._refresh_party(msg)

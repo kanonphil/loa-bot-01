@@ -105,12 +105,7 @@ class Account(commands.Cog):
             await interaction.response.send_message("등록된 API 키가 없습니다.", ephemeral=True)
             return
 
-        async with __import__("aiosqlite").connect(db.DB_PATH) as conn:
-            await conn.execute(
-                "DELETE FROM users WHERE discord_id=?", (str(interaction.user.id),)
-            )
-            await conn.commit()
-
+        await db.delete_user(str(interaction.user.id))
         await interaction.response.send_message("🗑️ API 키가 삭제되었습니다.", ephemeral=True)
 
 
