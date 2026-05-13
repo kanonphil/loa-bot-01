@@ -122,18 +122,23 @@ class LoABot(commands.Bot):
         for party in old_disbanded:
             if party["message_id"] in just_disbanded:
                 continue
+            raid_title = f"{party['raid_name']} {party['difficulty']}"
+            print(f"[스레드 정리] {raid_title} / channel_id={party['channel_id']}")
             # 아카이브된 스레드는 캐시에 없으므로 fetch_channel fallback 사용
             thread = self.get_channel(int(party["channel_id"]))
             if thread is None:
                 try:
                     thread = await self.fetch_channel(int(party["channel_id"]))
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    print(f"[스레드 정리] fetch_channel 성공: {thread}")
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                    print(f"[스레드 정리] fetch_channel 실패: {type(e).__name__}: {e}")
                     thread = None
             if thread is not None:
                 try:
                     await thread.delete()
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    pass
+                    print(f"[스레드 정리] 삭제 성공")
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                    print(f"[스레드 정리] 삭제 실패: {type(e).__name__}: {e}")
             await db.purge_party(party["message_id"])
 
     @party_notification_task.before_loop

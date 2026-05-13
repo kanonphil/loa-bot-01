@@ -19,9 +19,8 @@ async def _send_dm(client: discord.Client, discord_id: str, content: str) -> Non
     try:
         user = await client.fetch_user(int(discord_id))
         await user.send(content)
-        print(f"[DM 성공] discord_id={discord_id}")
-    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-        print(f"[DM 실패] discord_id={discord_id} / {type(e).__name__}: {e}")
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
 
 
 async def _notify_waitlist(client: discord.Client, party: dict) -> None:
@@ -1215,7 +1214,6 @@ class PartyView(View):
 
         # 파티원에게 DM 발송 (파티장 제외)
         leader_id = party["leader_id"]
-        link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
         for s in slots:
             if s["discord_id"] != leader_id:
                 await _send_dm(
