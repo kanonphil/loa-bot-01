@@ -396,9 +396,17 @@ def party_list_embed(pairs: list[tuple[dict, list[dict]]]) -> discord.Embed:
         msg_id   = party["message_id"]
         link     = f"https://discord.com/channels/{guild_id}/{ch_id}/{msg_id}"
 
+        ts_display = party["scheduled_time"]
+        if party.get("scheduled_datetime"):
+            try:
+                dt = datetime.fromisoformat(party["scheduled_datetime"])
+                ts_display = f"<t:{int(dt.timestamp())}:F>"
+            except Exception:
+                pass
+
         field_name  = f"{status_icon} {icon} {short} {party['difficulty']} {party['proficiency']}  `{filled}/{total}`"
         field_value = (
-            f"📅 {party['scheduled_time']}\n"
+            f"📅 {ts_display}\n"
             f"👑 <@{party['leader_id']}>\n"
             + "\n".join(member_lines)
             + f"\n[→ 공대 게시물 바로가기]({link})"

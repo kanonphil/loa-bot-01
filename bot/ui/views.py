@@ -61,7 +61,11 @@ def _parse_schedule(date_str: str, time_str: str) -> datetime | None:
             hour, minute = int(t), 0
         else:
             return None
-        return datetime(year, month, day, hour, minute, tzinfo=KST)
+        dt = datetime(year, month, day, hour, minute, tzinfo=KST)
+        # 연도 미지정(3~4자리) 입력에서 이미 지난 날짜면 내년으로 자동 전진
+        if len(d) in (3, 4) and dt < now:
+            dt = dt.replace(year=now.year + 1)
+        return dt
     except (ValueError, IndexError):
         return None
 
@@ -454,6 +458,16 @@ class RecruitView(View):
         )
         create_btn.callback = self._on_create
         self.add_item(create_btn)
+
+    async def on_timeout(self) -> None:
+        if self._original_interaction:
+            try:
+                await self._original_interaction.edit_original_response(
+                    content="⏱️ 공대 모집 설정이 만료되었습니다. `/공대모집`으로 다시 시작해주세요.",
+                    view=None,
+                )
+            except discord.HTTPException:
+                pass
 
     def _status_text(self) -> str:
         def v(val: str | None, label: str) -> str:
@@ -1050,6 +1064,11 @@ class PartyView(View):
                 await interaction.channel.send(
                     f"👑 **파티장 변경** — <@{new_leader}>님이 새 파티장이 되었습니다."
                 )
+                link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+                await _send_dm(
+                    interaction.client, new_leader,
+                    f"👑 **{party['raid_name']} {party['difficulty']}** 공대의 파티장이 되었습니다!\n{link}",
+                )
             else:
                 # 마지막 멤버였으면 파티 자동 종료
                 await db.disband_party(message_id)
@@ -1083,6 +1102,7 @@ class PartyView(View):
             return
         view = ManageView(party, interaction.message, self.total_slots)
         await interaction.response.send_message("⚙️ **공대 관리**", view=view, ephemeral=True)
+        view._manage_interaction = interaction
 
     # ── 빈자리 알림 ──────────────────────────────────
 
@@ -1421,11 +1441,15 @@ class RoleSelectView(View):
 # ─────────────────────────────────────────────────────
 
 class KickSelectView(View):
-    def __init__(self, message_id: str, slots: list[dict], total_slots: int) -> None:
+    def __init__(
+        self, message_id: str, slots: list[dict], total_slots: int,
+        original_message: discord.Message | None = None,
+    ) -> None:
         super().__init__(timeout=60)
-        self.message_id  = message_id
-        self.total_slots = total_slots
-        self.char_map    = {s["discord_id"]: s["character_name"] for s in slots}
+        self.message_id       = message_id
+        self.total_slots      = total_slots
+        self.original_message = original_message
+        self.char_map         = {s["discord_id"]: s["character_name"] for s in slots}
 
         options = [
             discord.SelectOption(
@@ -1442,28 +1466,39 @@ class KickSelectView(View):
     async def _on_select(self, interaction: discord.Interaction) -> None:
         target_id = interaction.data["values"][0]
         char_name = self.char_map.get(target_id, "알 수 없음")
-        party = await db.get_party(self.message_id)
-        was_full = (party or {}).get("status") == "full"
-        removed = await db.leave_slot(self.message_id, target_id)
+        pre_party = await db.get_party(self.message_id)
+        was_full  = (pre_party or {}).get("status") == "full"
+        removed   = await db.leave_slot(self.message_id, target_id)
         if not removed:
             await interaction.response.edit_message(content="❌ 파티원을 찾을 수 없습니다.", view=None)
             return
-        await interaction.response.edit_message(
-            content=f"✅ **{char_name}**을(를) 강제 퇴장시켰습니다.", view=None
-        )
         # 퇴장 대상에게 DM
-        if party:
-            raid_title = f"{party['raid_name']} {party['difficulty']}"
+        if pre_party:
+            raid_title = f"{pre_party['raid_name']} {pre_party['difficulty']}"
             await _send_dm(
                 interaction.client, target_id,
                 f"⚠️ **{raid_title}** 공대에서 파티장에 의해 퇴장되었습니다.",
             )
+        # 공대 embed 갱신
         try:
             msg = await interaction.channel.fetch_message(int(self.message_id))
             tmp = PartyView(total_slots=self.total_slots)
             await tmp._refresh_party(msg, was_full=was_full, client=interaction.client)
         except discord.HTTPException:
             pass
+        # 관리 패널로 복귀
+        if self.original_message:
+            post_party = await db.get_party(self.message_id)
+            if post_party and post_party["status"] != "disbanded":
+                manage_view = ManageView(post_party, self.original_message, self.total_slots)
+                await interaction.response.edit_message(
+                    content=f"✅ **{char_name}**을(를) 강제 퇴장시켰습니다.",
+                    view=manage_view,
+                )
+                return
+        await interaction.response.edit_message(
+            content=f"✅ **{char_name}**을(를) 강제 퇴장시켰습니다.", view=None
+        )
 
 
 # ─────────────────────────────────────────────────────
@@ -1478,7 +1513,18 @@ class ManageView(View):
         self.party            = party
         self.original_message = original_message
         self.total_slots      = total_slots
+        self._manage_interaction: discord.Interaction | None = None
         self._build()
+
+    async def on_timeout(self) -> None:
+        if self._manage_interaction:
+            try:
+                await self._manage_interaction.edit_original_response(
+                    content="⏱️ 관리 패널 시간이 초과되었습니다. ⚙️ 관리 버튼을 다시 눌러주세요.",
+                    view=None,
+                )
+            except discord.HTTPException:
+                pass
 
     def _build(self) -> None:
         self.clear_items()
@@ -1630,7 +1676,7 @@ class ManageView(View):
         if not kickable:
             await interaction.response.send_message("강제 퇴장시킬 파티원이 없습니다.", ephemeral=True)
             return
-        view = KickSelectView(party["message_id"], kickable, self.total_slots)
+        view = KickSelectView(party["message_id"], kickable, self.total_slots, self.original_message)
         await interaction.response.edit_message(content="퇴장시킬 파티원을 선택하세요:", view=view)
 
     # ── 일정 변경 ─────────────────────────────────────

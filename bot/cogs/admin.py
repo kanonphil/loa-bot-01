@@ -222,7 +222,10 @@ class Admin(commands.Cog):
         if not cats:
             await interaction.response.send_message("등록된 카테고리가 없습니다.", ephemeral=True)
             return
-        lines = [f"`{c['sort_order']}` **{c['name']}**" for c in cats]
+        lines = [
+            f"`{c['sort_order']}` **{c['name']}**" + (" ⚡ 익스트림" if c.get("is_extreme") else "")
+            for c in cats
+        ]
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     # ── 레이드 ───────────────────────────────────────────

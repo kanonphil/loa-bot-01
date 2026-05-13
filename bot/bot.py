@@ -27,6 +27,7 @@ class LoABot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = False
         super().__init__(command_prefix="!", intents=intents, help_command=None)
+        self._thread_purge_failures: dict[str, int] = {}  # channel_id → 실패 횟수
 
     async def setup_hook(self) -> None:
         await db.init_db()
@@ -137,13 +138,21 @@ class LoABot(commands.Bot):
                 try:
                     await thread.delete()
                     print(f"[스레드 정리] 삭제 성공: {raid_title}")
+                    self._thread_purge_failures.pop(party["channel_id"], None)
                     await db.purge_party(party["message_id"])
                 except discord.NotFound:
                     # 이미 삭제된 스레드 → DB도 정리
                     await db.purge_party(party["message_id"])
                 except (discord.Forbidden, discord.HTTPException) as e:
-                    # 권한 없음 → DB 유지, 다음 리셋에서 재시도
-                    print(f"[스레드 정리] 삭제 실패 (재시도 예정): {type(e).__name__}: {e}")
+                    ch_key   = party["channel_id"]
+                    failures = self._thread_purge_failures.get(ch_key, 0) + 1
+                    self._thread_purge_failures[ch_key] = failures
+                    if failures >= 3:
+                        print(f"[스레드 정리] 3회 연속 실패, DB만 정리: {raid_title}")
+                        await db.purge_party(party["message_id"])
+                        self._thread_purge_failures.pop(ch_key, None)
+                    else:
+                        print(f"[스레드 정리] 삭제 실패 ({failures}/3회, 재시도 예정): {type(e).__name__}: {e}")
             else:
                 # 스레드 자체를 찾을 수 없음 → DB만 정리
                 await db.purge_party(party["message_id"])
@@ -158,7 +167,10 @@ class LoABot(commands.Bot):
         for msg_id, channel_id in active:
             channel = self.get_channel(int(channel_id))
             if channel is None:
-                continue
+                try:
+                    channel = await self.fetch_channel(int(channel_id))
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    continue
             try:
                 msg   = await channel.fetch_message(int(msg_id))
                 party = await db.get_party(msg_id)

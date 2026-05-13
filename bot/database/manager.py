@@ -615,8 +615,12 @@ async def complete_raid_for_party(message_id: str) -> int:
     party = await get_party(message_id)
     if not party:
         return 0
-    slots    = await get_party_slots(message_id)
-    week     = get_week_key()
+    slots = await get_party_slots(message_id)
+    # 파티 일정 주차 기준으로 기록 (당주 클리어가 아닌 경우에도 올바른 주차 반영)
+    if party.get("scheduled_datetime"):
+        week = get_week_key_for_dt(party["scheduled_datetime"])
+    else:
+        week = get_week_key()
     raid_name  = party["raid_name"]
     difficulty = party["difficulty"]
     count = 0
@@ -824,7 +828,7 @@ async def get_categories() -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT name, sort_order FROM raid_categories ORDER BY sort_order"
+            "SELECT name, sort_order, is_extreme FROM raid_categories ORDER BY sort_order"
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
