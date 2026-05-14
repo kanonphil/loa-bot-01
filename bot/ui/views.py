@@ -1589,9 +1589,9 @@ class ManageView(View):
             await interaction.response.edit_message(content="처리할 수 없는 상태입니다.", view=None)
             return
         await db.close_party(party["message_id"])
-        self.party["status"] = "closed"
+        self.party = await db.get_party(party["message_id"])
         self._build()
-        await interaction.response.edit_message(content="🔒 모집이 마감되었습니다.", view=None)
+        await interaction.response.edit_message(content="🔒 모집이 마감되었습니다. 추가 작업이 필요하면 아래 버튼을 이용하세요.", view=self)
         await self._refresh_original(interaction)
 
     # ── 모집 재개 ─────────────────────────────────────
@@ -1602,11 +1602,11 @@ class ManageView(View):
             await interaction.response.edit_message(content="처리할 수 없는 상태입니다.", view=None)
             return
         await db.reopen_party(party["message_id"])
-        party = await db.get_party(party["message_id"])
-        self.party = party
-        await interaction.response.edit_message(content="🔓 모집이 재개되었습니다.", view=None)
+        self.party = await db.get_party(party["message_id"])
+        self._build()
+        await interaction.response.edit_message(content="🔓 모집이 재개되었습니다. 추가 작업이 필요하면 아래 버튼을 이용하세요.", view=self)
         await self._refresh_original(interaction)
-        await _notify_waitlist(interaction.client, party)
+        await _notify_waitlist(interaction.client, self.party)
 
     # ── 클리어 ───────────────────────────────────────
 

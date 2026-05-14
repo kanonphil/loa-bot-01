@@ -7,8 +7,6 @@ from datetime import datetime, timezone, timedelta
 from bot.data.raids import RAIDS, get_applicable_raids, CIRCLE_NUMBERS
 from bot.database.manager import get_week_key
 
-_KST = timezone(timedelta(hours=9))
-
 KST = timezone(timedelta(hours=9))
 
 CLASS_COLORS: dict[str, int] = {

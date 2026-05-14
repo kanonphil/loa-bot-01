@@ -75,6 +75,11 @@ class LoABot(commands.Bot):
             await db.disband_party(party["message_id"])
             thread = self.get_channel(int(party["channel_id"]))
             if thread is None:
+                try:
+                    thread = await self.fetch_channel(int(party["channel_id"]))
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    thread = None
+            if thread is None:
                 continue
             try:
                 msg = await thread.fetch_message(int(party["message_id"]))
@@ -101,6 +106,11 @@ class LoABot(commands.Bot):
             await db.disband_party(party["message_id"])
             just_disbanded.add(party["message_id"])
             thread = self.get_channel(int(party["channel_id"]))
+            if thread is None:
+                try:
+                    thread = await self.fetch_channel(int(party["channel_id"]))
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    thread = None
             if thread is None:
                 continue
             try:
