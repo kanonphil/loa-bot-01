@@ -770,15 +770,16 @@ async def get_guild_parties(guild_id: str) -> list[dict]:
 
 
 async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
-    """현재 주 시작 이전에 scheduled된 disbanded 파티 (스레드 삭제용)."""
+    """현재 주 시작 이전에 scheduled된 disbanded 파티 (스레드 삭제용).
+    scheduled_datetime이 없는 파티는 created_at 기준으로 현재 주 이전 파티를 포함한다.
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT * FROM parties "
-            "WHERE scheduled_datetime IS NOT NULL "
-            "AND scheduled_datetime < ? "
-            "AND status = 'disbanded'",
-            (week_start_iso,),
+            "WHERE status = 'disbanded' "
+            "AND (scheduled_datetime < ? OR (scheduled_datetime IS NULL AND created_at < ?))",
+            (week_start_iso, week_start_iso),
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
@@ -794,15 +795,16 @@ async def purge_party(message_id: str) -> None:
 
 
 async def get_prev_week_active_parties(week_start_iso: str) -> list[dict]:
-    """scheduled_datetime이 현재 주 시작 이전인 미종료 파티 (주간 리셋 정리용)."""
+    """현재 주 시작 이전인 미종료 파티 (주간 리셋 정리용).
+    scheduled_datetime이 없는 파티는 created_at 기준으로 판단한다.
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT * FROM parties "
-            "WHERE scheduled_datetime IS NOT NULL "
-            "AND scheduled_datetime < ? "
-            "AND status IN ('recruiting', 'full', 'closed')",
-            (week_start_iso,),
+            "WHERE status IN ('recruiting', 'full', 'closed') "
+            "AND (scheduled_datetime < ? OR (scheduled_datetime IS NULL AND created_at < ?))",
+            (week_start_iso, week_start_iso),
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]

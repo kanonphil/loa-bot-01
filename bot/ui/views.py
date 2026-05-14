@@ -525,6 +525,7 @@ class RecruitView(View):
         if str(interaction.user.id) != self.leader_id:
             await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
             return
+        self.stop()  # 생성 완료 후 타임아웃 핸들러가 메시지를 덮지 않도록 중단
         await _post_party(
             interaction,
             self.selected_raid, self.selected_difficulty, self.selected_proficiency,
@@ -1495,6 +1496,7 @@ class KickSelectView(View):
                     content=f"✅ **{char_name}**을(를) 강제 퇴장시켰습니다.",
                     view=manage_view,
                 )
+                manage_view._manage_interaction = interaction
                 return
         await interaction.response.edit_message(
             content=f"✅ **{char_name}**을(를) 강제 퇴장시켰습니다.", view=None
