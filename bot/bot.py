@@ -10,6 +10,9 @@ from bot.ui.views import PartyView
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
 
+import asyncio
+import uvicorn
+
 KST = timezone(timedelta(hours=9))
 
 COGS = [
@@ -36,6 +39,17 @@ class LoABot(commands.Bot):
             await self.load_extension(cog)
         await self.tree.sync()
         print("[LoABot] 슬래시 커맨드 동기화 완료")
+        # FastAPI 서버 시작 ────────────────────────────────────
+        from bot.api.server import app
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=8000,
+            log_level="warning",
+        )
+        server = uvicorn.Server(config)
+        asyncio.get_event_loop().create_task(server.serve())
+        print("[LoABot] FastAPI 서버 시작 완료 (port 8000)")
 
     async def on_ready(self) -> None:
         print(f"[LoABot] {self.user} 로그인 완료")

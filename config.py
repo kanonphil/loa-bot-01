@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_TOKEN: str = os.environ["DISCORD_TOKEN"]
+ADMIN_API_KEY: str = os.environ.get("ADMIN_API_KEY", "changeme")
 
 # ── API 키 암호화 ─────────────────────────────────────────
 # .env에 ENCRYPTION_KEY가 없으면 평문 저장 (미설정 환경 호환)
