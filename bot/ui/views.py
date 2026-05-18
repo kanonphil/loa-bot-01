@@ -216,66 +216,58 @@ class InviteResponseView(View):
         self.stop()
 
 
-class InviteModal(Modal, title="파티원 초대"):
-    user_id_input = TextInput(
-        label="Discord User ID",
-        placeholder="초대할 유저의 18자리 숫자 ID",
-        min_length=17, max_length=20,
-    )
-    slot_input = TextInput(
-        label="슬롯 번호",
-        placeholder="예) 3",
-        min_length=1, max_length=2,
-    )
+class InviteSlotSelectView(View):
+    """유저 선택 후 슬롯 선택."""
 
-    def __init__(self, party: dict, original_message: discord.Message, total_slots: int) -> None:
-        super().__init__()
+    def __init__(self, party: dict, original_message: discord.Message,
+                 total_slots: int, target_id: str, target_name: str,
+                 occupied: set[int], reserved: set[int]) -> None:
+        super().__init__(timeout=60)
         self.party           = party
         self.original_message = original_message
         self.total_slots_count = total_slots
+        self.target_id       = target_id
+        self.target_name     = target_name
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        raw_id = self.user_id_input.value.strip()
-        try:
-            target_id = int(raw_id)
-            slot      = int(self.slot_input.value.strip())
-        except ValueError:
-            await interaction.response.send_message("❌ 올바른 형식으로 입력해주세요.", ephemeral=True)
+        available = [
+            sn for sn in range(1, total_slots + 1)
+            if sn not in occupied and sn not in reserved
+        ]
+        options = [
+            discord.SelectOption(label=f"{sn}번 슬롯", value=str(sn))
+            for sn in available
+        ]
+        if not options:
+            options = [discord.SelectOption(label="빈 슬롯 없음", value="none")]
+
+        sel = Select(
+            placeholder="예약할 슬롯을 선택하세요",
+            options=options,
+            disabled=not available,
+        )
+        sel.callback = self._on_select
+        self.add_item(sel)
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        val = interaction.data["values"][0]
+        if val == "none":
+            await interaction.response.edit_message(content="❌ 빈 슬롯이 없습니다.", view=None)
             return
 
-        if not (1 <= slot <= self.total_slots_count):
-            await interaction.response.send_message(f"❌ 슬롯 번호는 1 ~ {self.total_slots_count} 사이여야 합니다.", ephemeral=True)
-            return
-
-        # 슬롯 점유 확인
-        slots = await db.get_party_slots(self.party["message_id"])
-        if any(s["discord_id"] == str(target_id) for s in slots):
-            await interaction.response.send_message("❌ 해당 유저는 이미 공대에 참여 중입니다.", ephemeral=True)
-            return
-        if any(s["slot_number"] == slot for s in slots):
-            await interaction.response.send_message(f"❌ **{slot}번** 슬롯은 이미 점유되어 있습니다.", ephemeral=True)
-            return
-        reserved = await db.get_reserved_slots(self.party["message_id"])
-        if slot in reserved:
-            await interaction.response.send_message(f"❌ **{slot}번** 슬롯은 이미 예약되어 있습니다.", ephemeral=True)
-            return
-
-        # 초대 생성
-        added = await db.create_invite(self.party["message_id"], str(target_id), slot)
+        slot = int(val)
+        added = await db.create_invite(self.party["message_id"], self.target_id, slot)
         if not added:
-            await interaction.response.send_message("❌ 이미 초대된 유저입니다.", ephemeral=True)
+            await interaction.response.edit_message(content="❌ 이미 초대된 유저입니다.", view=None)
             return
 
-        # embed 갱신
         party = await db.get_party(self.party["message_id"])
         if party:
             await _refresh_party_embed_with_reserved(interaction.client, party)
 
-        # DM 발송
         raid_title = f"{self.party['raid_name']} {self.party['difficulty']} {self.party['proficiency']}"
-        view = InviteResponseView(self.party["message_id"], self.party, str(target_id))
+        view = InviteResponseView(self.party["message_id"], self.party, self.target_id)
         try:
-            target_user = await interaction.client.fetch_user(target_id)
+            target_user = await interaction.client.fetch_user(int(self.target_id))
             await target_user.send(
                 f"⚔️ **{interaction.user.display_name}**님이 "
                 f"**{raid_title}** 공대 **{slot}번** 슬롯에 초대했습니다!\n"
@@ -283,17 +275,56 @@ class InviteModal(Modal, title="파티원 초대"):
                 f"참여 의사를 알려주세요:",
                 view=view,
             )
-            await interaction.response.send_message(
-                f"✅ <@{target_id}>님에게 **{slot}번** 슬롯 초대를 발송했습니다.", ephemeral=True
+            await interaction.response.edit_message(
+                content=f"✅ **{self.target_name}**님에게 **{slot}번** 슬롯 초대를 발송했습니다.",
+                view=None,
             )
-        except discord.NotFound:
-            await db.delete_invite(self.party["message_id"], str(target_id))
-            await interaction.response.send_message("❌ 유저를 찾을 수 없습니다. ID를 확인해주세요.", ephemeral=True)
         except discord.Forbidden:
-            await db.delete_invite(self.party["message_id"], str(target_id))
+            await db.delete_invite(self.party["message_id"], self.target_id)
             if party:
                 await _refresh_party_embed_with_reserved(interaction.client, party)
-            await interaction.response.send_message("❌ 해당 유저의 DM이 비활성화되어 있습니다.", ephemeral=True)
+            await interaction.response.edit_message(content="❌ 해당 유저의 DM이 비활성화되어 있습니다.", view=None)
+        self.stop()
+
+
+class InviteUserSelectView(View):
+    """API 등록 유저 목록에서 초대할 유저 선택."""
+
+    def __init__(self, party: dict, original_message: discord.Message,
+                 total_slots: int, users: list[dict],
+                 occupied: set[int], reserved: set[int]) -> None:
+        super().__init__(timeout=60)
+        self.party            = party
+        self.original_message = original_message
+        self.total_slots_count = total_slots
+        self.occupied         = occupied
+        self.reserved         = reserved
+        self.user_map         = {u["discord_id"]: u.get("representative") or u["discord_id"] for u in users}
+
+        options = [
+            discord.SelectOption(
+                label=u.get("representative") or u["discord_id"],
+                description=u["discord_id"],
+                value=u["discord_id"],
+            )
+            for u in users[:25]
+        ]
+        sel = Select(placeholder="초대할 유저를 선택하세요", options=options)
+        sel.callback = self._on_select
+        self.add_item(sel)
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        target_id   = interaction.data["values"][0]
+        target_name = self.user_map.get(target_id, target_id)
+        view = InviteSlotSelectView(
+            self.party, self.original_message, self.total_slots_count,
+            target_id, target_name, self.occupied, self.reserved,
+        )
+        await interaction.response.edit_message(
+            content=f"**{target_name}**님을 초대할 슬롯을 선택하세요:",
+            view=view,
+        )
+        self.stop()
 
 
 # ─────────────────────────────────────────────────────
@@ -2005,9 +2036,37 @@ class ManageView(View):
         if not party or party["status"] == "disbanded":
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
-        await interaction.response.send_modal(
-            InviteModal(party, self.original_message, self.total_slots)
+
+        slots_in_party = await db.get_party_slots(party["message_id"])
+        reserved       = await db.get_reserved_slots(party["message_id"])
+        occupied       = {s["slot_number"] for s in slots_in_party}
+        in_party_ids   = {s["discord_id"] for s in slots_in_party} | set(reserved.values())
+        in_party_ids.add(party["leader_id"])
+
+        # API 등록 유저 목록 (이미 참여/예약된 유저 제외)
+        import aiosqlite
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            cur = await conn.execute(
+                "SELECT u.discord_id, "
+                "COALESCE("
+                "  (SELECT uc.character_name FROM user_characters uc WHERE uc.discord_id=u.discord_id ORDER BY uc.added_at LIMIT 1),"
+                "  (SELECT ps.character_name FROM party_slots ps WHERE ps.discord_id=u.discord_id ORDER BY ps.joined_at DESC LIMIT 1)"
+                ") AS representative "
+                "FROM users u ORDER BY u.registered_at DESC"
+            )
+            all_users = [dict(r) for r in await cur.fetchall()]
+
+        invitable = [u for u in all_users if u["discord_id"] not in in_party_ids]
+        if not invitable:
+            await interaction.response.send_message("초대 가능한 유저가 없습니다.", ephemeral=True)
+            return
+
+        view = InviteUserSelectView(
+            party, self.original_message, self.total_slots,
+            invitable, occupied, set(reserved.keys()),
         )
+        await interaction.response.edit_message(content="초대할 유저를 선택하세요:", view=view)
 
     # ── 파티장 위임 ───────────────────────────────────
 
