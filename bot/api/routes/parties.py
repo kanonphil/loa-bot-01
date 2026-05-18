@@ -42,6 +42,13 @@ async def get_party(message_id: str):
   return {**party, "slots": slots}
 
 
+# ── disbanded 이력 ────────────────────────────────────────
+
+@router.get("/history")
+async def get_party_history(guild_id: str, limit: int = 50):
+  return await db.get_disbanded_parties(guild_id, limit)
+
+
 # ── 파티 상태 변경 ────────────────────────────────────────
 
 @router.patch("/{message_id}/close")

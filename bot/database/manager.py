@@ -116,6 +116,15 @@ CREATE TABLE IF NOT EXISTS raid_subscriptions (
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (discord_id, raid_name, difficulty)
 );
+
+CREATE TABLE IF NOT EXISTS notification_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id  TEXT NOT NULL,
+    raid_name   TEXT NOT NULL,
+    difficulty  TEXT NOT NULL,
+    message_id  TEXT NOT NULL,
+    sent_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -818,6 +827,118 @@ async def get_prev_week_active_parties(week_start_iso: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def get_disbanded_parties(guild_id: str, limit: int = 50) -> list[dict]:
+    """disbanded 파티 이력 (최신순)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM parties WHERE guild_id=? AND status='disbanded' "
+            "ORDER BY created_at DESC LIMIT ?",
+            (guild_id, limit),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def add_completion(
+    discord_id: str, character_name: str, raid_name: str, difficulty: str, week_key: str
+) -> bool:
+    """레이드 클리어 수동 추가."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "INSERT INTO raid_completions "
+                "(discord_id, character_name, raid_name, difficulty, week_key) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (discord_id, character_name, raid_name, difficulty, week_key),
+            )
+            await db.commit()
+        return True
+    except aiosqlite.IntegrityError:
+        return False
+
+
+async def remove_completion(
+    discord_id: str, character_name: str, raid_name: str, difficulty: str, week_key: str
+) -> bool:
+    """레이드 클리어 수동 삭제."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "DELETE FROM raid_completions "
+            "WHERE discord_id=? AND character_name=? AND raid_name=? AND difficulty=? AND week_key=?",
+            (discord_id, character_name, raid_name, difficulty, week_key),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def get_weekly_activity(guild_id: str) -> list[dict]:
+    """서버의 주차별 파티 생성 수."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT strftime('%Y-%W', created_at) AS week, COUNT(*) AS count "
+            "FROM parties WHERE guild_id=? "
+            "GROUP BY week ORDER BY week DESC LIMIT 12",
+            (guild_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_popular_raids(guild_id: str) -> list[dict]:
+    """서버의 레이드별 공대 생성 수 (전체 기간)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT raid_name, difficulty, COUNT(*) AS count "
+            "FROM parties WHERE guild_id=? "
+            "GROUP BY raid_name, difficulty ORDER BY count DESC LIMIT 10",
+            (guild_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_active_users(guild_id: str) -> list[dict]:
+    """서버에서 파티에 참여한 유저 수 (주차별)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT COUNT(DISTINCT ps.discord_id) AS user_count "
+            "FROM party_slots ps JOIN parties p ON ps.party_message_id = p.message_id "
+            "WHERE p.guild_id=? AND p.status != 'disbanded'",
+            (guild_id,),
+        )
+        row = await cur.fetchone()
+    return dict(row) if row else {"user_count": 0}
+
+
+async def log_notification(
+    discord_id: str, raid_name: str, difficulty: str, message_id: str
+) -> None:
+    """구독 DM 발송 이력 기록."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO notification_logs (discord_id, raid_name, difficulty, message_id) "
+            "VALUES (?, ?, ?, ?)",
+            (discord_id, raid_name, difficulty, message_id),
+        )
+        await db.commit()
+
+
+async def get_notification_logs(limit: int = 100) -> list[dict]:
+    """알림 발송 이력 조회."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM notification_logs ORDER BY sent_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def get_user_party_history(discord_id: str) -> list[dict]:
   """유저의 파티 참여 이력 (최근 20개)."""
   async with aiosqlite.connect(DB_PATH) as db:
@@ -1149,6 +1270,18 @@ async def get_user_subscriptions(discord_id: str) -> list[dict]:
             "SELECT raid_name, difficulty, created_at FROM raid_subscriptions "
             "WHERE discord_id=? ORDER BY raid_name, difficulty",
             (discord_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_all_subscriptions() -> list[dict]:
+    """관리자용 — 전체 구독 목록."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT discord_id, raid_name, difficulty, created_at "
+            "FROM raid_subscriptions ORDER BY raid_name, difficulty, created_at"
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]

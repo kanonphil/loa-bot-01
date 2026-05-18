@@ -125,3 +125,26 @@ async def delete_difficulty(raid_name: str, difficulty: str):
   removed = await db.remove_difficulty(raid_name, difficulty)
   await raids_module.reload()
   return {"success": removed}
+
+
+# ── 직업 ─────────────────────────────────────────────────
+
+class JobClassBody(BaseModel):
+  name: str
+  is_support: bool = False
+
+@router.get("/classes")
+async def get_classes():
+  return await db.get_all_job_classes()
+
+@router.post("/classes")
+async def add_class(body: JobClassBody):
+  added = await db.add_job_class(body.name, body.is_support)
+  await raids_module.reload()
+  return {"success": added}
+
+@router.delete("/classes/{name}")
+async def delete_class(name: str):
+  removed = await db.remove_job_class(name)
+  await raids_module.reload()
+  return {"success": removed}

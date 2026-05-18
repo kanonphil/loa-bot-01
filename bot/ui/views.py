@@ -762,9 +762,11 @@ async def _post_party(
             f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**\n"
             f"{link}"
         )
+        msg_id = str(starter_msg.id)
         for sub_id in subscribers:
             if sub_id != leader_id:
                 await _send_dm(interaction.client, sub_id, dm_content)
+                await db.log_notification(sub_id, raid_name, difficulty, msg_id)
 
 
 async def _auto_join_dps(

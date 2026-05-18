@@ -42,6 +42,8 @@ class LoABot(commands.Bot):
         print("[LoABot] 슬래시 커맨드 동기화 완료")
         # FastAPI 서버 시작 ────────────────────────────────────
         from bot.api.server import app
+        from bot.api import bot_ref
+        bot_ref.set_bot(self)
         config = uvicorn.Config(
             app,
             host="0.0.0.0",
