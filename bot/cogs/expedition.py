@@ -68,14 +68,15 @@ class Expedition(commands.Cog):
         await interaction.response.send_modal(AddCharacterModal(discord_id, api_key))
 
     @app_commands.command(name="캐릭터삭제", description="원정대에서 캐릭터를 삭제합니다.")
-    @app_commands.describe(캐릭터명="삭제할 캐릭터 이름")
-    async def unregister_char(self, interaction: discord.Interaction, 캐릭터명: str) -> None:
-        removed = await db.remove_character(str(interaction.user.id), 캐릭터명)
+    @app_commands.describe(char_name="삭제할 캐릭터 이름")
+    @app_commands.rename(char_name="캐릭터명")
+    async def unregister_char(self, interaction: discord.Interaction, char_name: str) -> None:
+        removed = await db.remove_character(str(interaction.user.id), char_name)
         if removed:
-            await interaction.response.send_message(f"🗑️ **{캐릭터명}** 삭제 완료.", ephemeral=True)
+            await interaction.response.send_message(f"🗑️ **{char_name}** 삭제 완료.", ephemeral=True)
         else:
             await interaction.response.send_message(
-                f"**{캐릭터명}**은(는) 등록된 캐릭터가 아닙니다.", ephemeral=True
+                f"**{char_name}**은(는) 등록된 캐릭터가 아닙니다.", ephemeral=True
             )
 
 

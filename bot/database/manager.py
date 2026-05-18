@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS raid_subscriptions (
 CREATE TABLE IF NOT EXISTS party_invites (
     message_id  TEXT,
     discord_id  TEXT,
+    slot_number INTEGER NOT NULL DEFAULT 0,
     invited_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (message_id, discord_id)
 );
@@ -220,6 +221,10 @@ async def init_db() -> None:
                 await db.execute(f"ALTER TABLE user_characters ADD COLUMN {col} {definition}")
             except Exception:
                 pass
+        try:
+            await db.execute("ALTER TABLE party_invites ADD COLUMN slot_number INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
         await db.commit()
     await seed_game_data()
     await _migrate_encrypt_api_keys()
@@ -926,12 +931,13 @@ async def get_active_users(guild_id: str) -> list[dict]:
     return dict(row) if row else {"user_count": 0}
 
 
-async def create_invite(message_id: str, discord_id: str) -> bool:
+async def create_invite(message_id: str, discord_id: str, slot_number: int) -> bool:
+    """초대 생성. 중복이면 False."""
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(
-                "INSERT INTO party_invites (message_id, discord_id) VALUES (?, ?)",
-                (message_id, discord_id),
+                "INSERT INTO party_invites (message_id, discord_id, slot_number) VALUES (?, ?, ?)",
+                (message_id, discord_id, slot_number),
             )
             await db.commit()
         return True
@@ -946,6 +952,86 @@ async def delete_invite(message_id: str, discord_id: str) -> None:
             (message_id, discord_id),
         )
         await db.commit()
+
+
+async def get_reserved_slots(message_id: str) -> dict[int, str]:
+    """예약된 슬롯 번호 → discord_id 맵 반환."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT slot_number, discord_id FROM party_invites WHERE message_id=?",
+            (message_id,),
+        )
+        rows = await cur.fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+async def assign_invite_slot(
+    message_id: str, discord_id: str,
+    character_name: str, character_class: str, role: str,
+) -> tuple[bool, str]:
+    """예약된 슬롯에 직접 배정. (success, message)"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # 예약 슬롯 번호 조회
+        cur = await db.execute(
+            "SELECT slot_number FROM party_invites WHERE message_id=? AND discord_id=?",
+            (message_id, discord_id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return False, "초대 정보를 찾을 수 없습니다."
+        slot_number = row[0]
+
+        # 이미 해당 슬롯에 누군가 있으면 실패
+        cur = await db.execute(
+            "SELECT 1 FROM party_slots WHERE party_message_id=? AND slot_number=?",
+            (message_id, slot_number),
+        )
+        if await cur.fetchone():
+            return False, "이미 점유된 슬롯입니다."
+
+        # 이미 파티에 참여 중이면 실패
+        cur = await db.execute(
+            "SELECT 1 FROM party_slots WHERE party_message_id=? AND discord_id=?",
+            (message_id, discord_id),
+        )
+        if await cur.fetchone():
+            return False, "이미 파티에 참여 중입니다."
+
+        # 서포터 중복 체크
+        if role == "support":
+            cur = await db.execute(
+                "SELECT COUNT(*) FROM party_slots WHERE party_message_id=? AND role='support'",
+                (message_id,),
+            )
+            if (await cur.fetchone())[0] >= 1:
+                return False, "이미 서포터가 있습니다."
+
+        await db.execute(
+            "INSERT INTO party_slots "
+            "(party_message_id, slot_number, discord_id, character_name, character_class, role) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (message_id, slot_number, discord_id, character_name, character_class, role),
+        )
+        await db.execute(
+            "DELETE FROM party_invites WHERE message_id=? AND discord_id=?",
+            (message_id, discord_id),
+        )
+
+        # 파티 풀 여부 확인
+        cur = await db.execute(
+            "SELECT COUNT(*), p.total_slots FROM party_slots ps "
+            "JOIN parties p ON p.message_id = ps.party_message_id "
+            "WHERE ps.party_message_id=?",
+            (message_id,),
+        )
+        count, total = await cur.fetchone()
+        if count >= total:
+            await db.execute(
+                "UPDATE parties SET status='full' WHERE message_id=? AND status='recruiting'",
+                (message_id,),
+            )
+        await db.commit()
+    return True, f"{slot_number}번 슬롯 배정 완료"
 
 
 async def get_pre_notify_hours(discord_id: str) -> float:

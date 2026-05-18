@@ -46,7 +46,7 @@ async def _raid_autocomplete(
 async def _difficulty_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
-    raid_name = interaction.namespace.레이드명 or ""
+    raid_name = interaction.namespace.raid_name or ""
     raid = raids_module.RAIDS.get(raid_name, {})
     diffs = list(raid.get("difficulties", {}).keys())
     return [
@@ -156,29 +156,31 @@ class Admin(commands.Cog):
     # ── 카테고리 ─────────────────────────────────────────
 
     @manage.command(name="카테고리추가", description="레이드 카테고리를 추가합니다.")
-    @app_commands.describe(이름="카테고리명 (예: 카제로스)", 순서="표시 순서 (작을수록 위)")
-    async def add_category(self, interaction: discord.Interaction, 이름: str, 순서: int) -> None:
+    @app_commands.describe(name="카테고리명 (예: 카제로스)", sort_order="표시 순서 (작을수록 위)")
+    @app_commands.rename(name="이름", sort_order="순서")
+    async def add_category(self, interaction: discord.Interaction, name: str, sort_order: int) -> None:
         if not await _check_owner(interaction):
             return
-        added = await db.add_category(이름, 순서)
+        added = await db.add_category(name, sort_order)
         if not added:
             await interaction.response.send_message(
-                f"❌ **{이름}** 카테고리가 이미 존재합니다.", ephemeral=True
+                f"❌ **{name}** 카테고리가 이미 존재합니다.", ephemeral=True
             )
             return
         await raids_module.reload()
         await interaction.response.send_message(
-            f"✅ 카테고리 **{이름}** (순서 {순서}) 추가 완료.", ephemeral=True
+            f"✅ 카테고리 **{name}** (순서 {sort_order}) 추가 완료.", ephemeral=True
         )
 
     @manage.command(name="카테고리삭제", description="레이드 카테고리를 삭제합니다.")
-    @app_commands.describe(이름="삭제할 카테고리명")
-    @app_commands.autocomplete(이름=_category_autocomplete)
-    async def del_category(self, interaction: discord.Interaction, 이름: str) -> None:
+    @app_commands.describe(name="삭제할 카테고리명")
+    @app_commands.rename(name="이름")
+    @app_commands.autocomplete(name=_category_autocomplete)
+    async def del_category(self, interaction: discord.Interaction, name: str) -> None:
         if not await _check_owner(interaction):
             return
         raids = await db.get_raids_dict()
-        using = [r for r, info in raids.items() if info["category"] == 이름]
+        using = [r for r, info in raids.items() if info["category"] == name]
         if using:
             await interaction.response.send_message(
                 f"❌ 이 카테고리를 사용 중인 레이드가 있습니다: {', '.join(using)}\n"
@@ -186,32 +188,33 @@ class Admin(commands.Cog):
                 ephemeral=True,
             )
             return
-        removed = await db.remove_category(이름)
+        removed = await db.remove_category(name)
         if not removed:
             await interaction.response.send_message(
-                f"❌ **{이름}** 카테고리를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{name}** 카테고리를 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
         await interaction.response.send_message(
-            f"🗑️ 카테고리 **{이름}** 삭제 완료.", ephemeral=True
+            f"🗑️ 카테고리 **{name}** 삭제 완료.", ephemeral=True
         )
 
     @manage.command(name="카테고리순서", description="카테고리 표시 순서를 변경합니다.")
-    @app_commands.describe(이름="대상 카테고리명", 순서="새 표시 순서")
-    @app_commands.autocomplete(이름=_category_autocomplete)
-    async def sort_category(self, interaction: discord.Interaction, 이름: str, 순서: int) -> None:
+    @app_commands.describe(name="대상 카테고리명", sort_order="새 표시 순서")
+    @app_commands.rename(name="이름", sort_order="순서")
+    @app_commands.autocomplete(name=_category_autocomplete)
+    async def sort_category(self, interaction: discord.Interaction, name: str, sort_order: int) -> None:
         if not await _check_owner(interaction):
             return
-        updated = await db.update_category_sort(이름, 순서)
+        updated = await db.update_category_sort(name, sort_order)
         if not updated:
             await interaction.response.send_message(
-                f"❌ **{이름}** 카테고리를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{name}** 카테고리를 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
         await interaction.response.send_message(
-            f"✅ **{이름}** 카테고리 순서 → {순서} 변경 완료.", ephemeral=True
+            f"✅ **{name}** 카테고리 순서 → {sort_order} 변경 완료.", ephemeral=True
         )
 
     @manage.command(name="카테고리목록", description="현재 카테고리 목록을 확인합니다.")
@@ -237,200 +240,212 @@ class Admin(commands.Cog):
         await interaction.response.send_modal(AddRaidModal())
 
     @manage.command(name="레이드삭제", description="레이드와 모든 난이도를 삭제합니다.")
-    @app_commands.describe(레이드명="삭제할 레이드명")
-    @app_commands.autocomplete(레이드명=_raid_autocomplete)
-    async def del_raid(self, interaction: discord.Interaction, 레이드명: str) -> None:
+    @app_commands.describe(raid_name="삭제할 레이드명")
+    @app_commands.rename(raid_name="레이드명")
+    @app_commands.autocomplete(raid_name=_raid_autocomplete)
+    async def del_raid(self, interaction: discord.Interaction, raid_name: str) -> None:
         if not await _check_owner(interaction):
             return
-        removed = await db.remove_raid(레이드명)
+        removed = await db.remove_raid(raid_name)
         if not removed:
             await interaction.response.send_message(
-                f"❌ **{레이드명}** 레이드를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{raid_name}** 레이드를 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
         await interaction.response.send_message(
-            f"🗑️ **{레이드명}** 및 모든 난이도 삭제 완료.", ephemeral=True
+            f"🗑️ **{raid_name}** 및 모든 난이도 삭제 완료.", ephemeral=True
         )
 
     # ── 난이도 ───────────────────────────────────────────
 
     @manage.command(name="난이도추가", description="레이드에 난이도를 추가합니다.")
     @app_commands.describe(
-        레이드명="대상 레이드명",
-        난이도명="예) 노말, 하드, 나이트메어",
-        최소레벨="입장 최소 아이템 레벨",
-        인원수="전체 파티원 수 (4 또는 8)",
-        파티분할="파티 분할 인원 (없으면 0)",
-        관문수="관문 수",
-        표시순서="난이도 표시 순서 (작을수록 위)",
+        raid_name="대상 레이드명",
+        diff_name="예) 노말, 하드, 나이트메어",
+        min_level="입장 최소 아이템 레벨",
+        total_slots="전체 파티원 수 (4 또는 8)",
+        party_split="파티 분할 인원 (없으면 0)",
+        gates="관문 수",
+        sort_order="난이도 표시 순서 (작을수록 위)",
     )
-    @app_commands.autocomplete(레이드명=_raid_autocomplete)
+    @app_commands.rename(
+        raid_name="레이드명", diff_name="난이도명", min_level="최소레벨",
+        total_slots="인원수", party_split="파티분할", gates="관문수", sort_order="표시순서",
+    )
+    @app_commands.autocomplete(raid_name=_raid_autocomplete)
     async def add_difficulty(
         self,
         interaction: discord.Interaction,
-        레이드명: str,
-        난이도명: str,
-        최소레벨: int,
-        인원수: int,
-        파티분할: int = 0,
-        관문수: int = 1,
-        표시순서: int = 0,
+        raid_name: str,
+        diff_name: str,
+        min_level: int,
+        total_slots: int,
+        party_split: int = 0,
+        gates: int = 1,
+        sort_order: int = 0,
     ) -> None:
         if not await _check_owner(interaction):
             return
-        if not await db.raid_exists(레이드명):
+        if not await db.raid_exists(raid_name):
             await interaction.response.send_message(
-                f"❌ **{레이드명}** 레이드가 없습니다. 먼저 `/관리 레이드추가`로 추가해주세요.",
+                f"❌ **{raid_name}** 레이드가 없습니다. 먼저 `/관리 레이드추가`로 추가해주세요.",
                 ephemeral=True,
             )
             return
-        split = 파티분할 if 파티분할 > 0 else None
-        added = await db.add_difficulty(레이드명, 난이도명, 최소레벨, 인원수, split, 관문수, 표시순서)
+        split = party_split if party_split > 0 else None
+        added = await db.add_difficulty(raid_name, diff_name, min_level, total_slots, split, gates, sort_order)
         if not added:
             await interaction.response.send_message(
-                f"❌ **{레이드명} {난이도명}** 난이도가 이미 존재합니다.", ephemeral=True
+                f"❌ **{raid_name} {diff_name}** 난이도가 이미 존재합니다.", ephemeral=True
             )
             return
         await raids_module.reload()
-        split_str = f"{파티분할}인 분할" if 파티분할 > 0 else "단일 파티"
+        split_str = f"{party_split}인 분할" if party_split > 0 else "단일 파티"
         await interaction.response.send_message(
-            f"✅ **{레이드명} {난이도명}** "
-            f"(최소 {최소레벨} / {인원수}인 / {split_str} / {관문수}관문) 추가 완료.",
+            f"✅ **{raid_name} {diff_name}** "
+            f"(최소 {min_level} / {total_slots}인 / {split_str} / {gates}관문) 추가 완료.",
             ephemeral=True,
         )
 
     @manage.command(name="난이도삭제", description="레이드 난이도를 삭제합니다.")
-    @app_commands.describe(레이드명="대상 레이드명", 난이도명="삭제할 난이도명")
-    @app_commands.autocomplete(레이드명=_raid_autocomplete, 난이도명=_difficulty_autocomplete)
+    @app_commands.describe(raid_name="대상 레이드명", diff_name="삭제할 난이도명")
+    @app_commands.rename(raid_name="레이드명", diff_name="난이도명")
+    @app_commands.autocomplete(raid_name=_raid_autocomplete, diff_name=_difficulty_autocomplete)
     async def del_difficulty(
-        self, interaction: discord.Interaction, 레이드명: str, 난이도명: str
+        self, interaction: discord.Interaction, raid_name: str, diff_name: str
     ) -> None:
         if not await _check_owner(interaction):
             return
-        removed = await db.remove_difficulty(레이드명, 난이도명)
+        removed = await db.remove_difficulty(raid_name, diff_name)
         if not removed:
             await interaction.response.send_message(
-                f"❌ **{레이드명} {난이도명}** 난이도를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{raid_name} {diff_name}** 난이도를 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
         await interaction.response.send_message(
-            f"🗑️ **{레이드명} {난이도명}** 난이도 삭제 완료.", ephemeral=True
+            f"🗑️ **{raid_name} {diff_name}** 난이도 삭제 완료.", ephemeral=True
         )
 
     # ── 익스트림 관리 ──────────────────────────────────────
 
     @manage.command(name="카테고리익스트림", description="카테고리의 익스트림 여부를 설정합니다.")
-    @app_commands.describe(이름="카테고리명", 익스트림="True = 익스트림, False = 일반")
-    @app_commands.autocomplete(이름=_category_autocomplete)
+    @app_commands.describe(name="카테고리명", is_extreme="True = 익스트림, False = 일반")
+    @app_commands.rename(name="이름", is_extreme="익스트림")
+    @app_commands.autocomplete(name=_category_autocomplete)
     async def set_category_extreme(
-        self, interaction: discord.Interaction, 이름: str, 익스트림: bool
+        self, interaction: discord.Interaction, name: str, is_extreme: bool
     ) -> None:
         if not await _check_owner(interaction):
             return
-        updated = await db.update_category_extreme(이름, 익스트림)
+        updated = await db.update_category_extreme(name, is_extreme)
         if not updated:
             await interaction.response.send_message(
-                f"❌ **{이름}** 카테고리를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{name}** 카테고리를 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
-        label = "익스트림" if 익스트림 else "일반"
+        label = "익스트림" if is_extreme else "일반"
         await interaction.response.send_message(
-            f"✅ **{이름}** 카테고리 → {label} 설정 완료.", ephemeral=True
+            f"✅ **{name}** 카테고리 → {label} 설정 완료.", ephemeral=True
         )
 
     @manage.command(name="레이드활성화", description="레이드를 활성화하거나 비활성화합니다.")
-    @app_commands.describe(레이드명="대상 레이드명", 활성화="True = 활성화, False = 비활성화")
-    @app_commands.autocomplete(레이드명=_raid_autocomplete)
+    @app_commands.describe(raid_name="대상 레이드명", is_active="True = 활성화, False = 비활성화")
+    @app_commands.rename(raid_name="레이드명", is_active="활성화")
+    @app_commands.autocomplete(raid_name=_raid_autocomplete)
     async def set_raid_active(
-        self, interaction: discord.Interaction, 레이드명: str, 활성화: bool
+        self, interaction: discord.Interaction, raid_name: str, is_active: bool
     ) -> None:
         if not await _check_owner(interaction):
             return
-        updated = await db.set_raid_active(레이드명, 활성화)
+        updated = await db.set_raid_active(raid_name, is_active)
         if not updated:
             await interaction.response.send_message(
-                f"❌ **{레이드명}** 레이드를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{raid_name}** 레이드를 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
-        label = "활성화" if 활성화 else "비활성화"
+        label = "활성화" if is_active else "비활성화"
         await interaction.response.send_message(
-            f"✅ **{레이드명}** {label} 완료.", ephemeral=True
+            f"✅ **{raid_name}** {label} 완료.", ephemeral=True
         )
 
     @manage.command(name="레이드기간설정", description="익스트림 레이드 운영 기간을 설정합니다.")
-    @app_commands.describe(레이드명="대상 레이드명")
-    @app_commands.autocomplete(레이드명=_raid_autocomplete)
+    @app_commands.describe(raid_name="대상 레이드명")
+    @app_commands.rename(raid_name="레이드명")
+    @app_commands.autocomplete(raid_name=_raid_autocomplete)
     async def set_raid_period(
-        self, interaction: discord.Interaction, 레이드명: str
+        self, interaction: discord.Interaction, raid_name: str
     ) -> None:
         if not await _check_owner(interaction):
             return
-        if not await db.raid_exists(레이드명):
+        if not await db.raid_exists(raid_name):
             await interaction.response.send_message(
-                f"❌ **{레이드명}** 레이드를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{raid_name}** 레이드를 찾을 수 없습니다.", ephemeral=True
             )
             return
-        await interaction.response.send_modal(RaidPeriodModal(레이드명))
+        await interaction.response.send_modal(RaidPeriodModal(raid_name))
 
     @manage.command(name="레이드기간삭제", description="익스트림 레이드 운영 기간을 삭제합니다.")
-    @app_commands.describe(레이드명="대상 레이드명")
-    @app_commands.autocomplete(레이드명=_raid_autocomplete)
+    @app_commands.describe(raid_name="대상 레이드명")
+    @app_commands.rename(raid_name="레이드명")
+    @app_commands.autocomplete(raid_name=_raid_autocomplete)
     async def clear_raid_period(
-        self, interaction: discord.Interaction, 레이드명: str
+        self, interaction: discord.Interaction, raid_name: str
     ) -> None:
         if not await _check_owner(interaction):
             return
-        updated = await db.set_raid_period(레이드명, None, None)
+        updated = await db.set_raid_period(raid_name, None, None)
         if not updated:
             await interaction.response.send_message(
-                f"❌ **{레이드명}** 레이드를 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{raid_name}** 레이드를 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
         await interaction.response.send_message(
-            f"✅ **{레이드명}** 운영 기간 삭제 완료.", ephemeral=True
+            f"✅ **{raid_name}** 운영 기간 삭제 완료.", ephemeral=True
         )
 
     # ── 직업 ─────────────────────────────────────────────
 
     @manage.command(name="직업추가", description="직업을 추가합니다.")
-    @app_commands.describe(직업명="직업 이름 (예: 신규직업)", 서포터="서포터 여부")
+    @app_commands.describe(class_name="직업 이름 (예: 신규직업)", is_support="서포터 여부")
+    @app_commands.rename(class_name="직업명", is_support="서포터")
     async def add_class(
-        self, interaction: discord.Interaction, 직업명: str, 서포터: bool
+        self, interaction: discord.Interaction, class_name: str, is_support: bool
     ) -> None:
         if not await _check_owner(interaction):
             return
-        added = await db.add_job_class(직업명, 서포터)
+        added = await db.add_job_class(class_name, is_support)
         if not added:
             await interaction.response.send_message(
-                f"❌ **{직업명}** 직업이 이미 존재합니다.", ephemeral=True
+                f"❌ **{class_name}** 직업이 이미 존재합니다.", ephemeral=True
             )
             return
         await raids_module.reload()
-        role = "서포터" if 서포터 else "딜러"
+        role = "서포터" if is_support else "딜러"
         await interaction.response.send_message(
-            f"✅ **{직업명}** ({role}) 직업 추가 완료.", ephemeral=True
+            f"✅ **{class_name}** ({role}) 직업 추가 완료.", ephemeral=True
         )
 
     @manage.command(name="직업삭제", description="직업을 삭제합니다.")
-    @app_commands.describe(직업명="삭제할 직업 이름")
-    @app_commands.autocomplete(직업명=_class_autocomplete)
-    async def del_class(self, interaction: discord.Interaction, 직업명: str) -> None:
+    @app_commands.describe(class_name="삭제할 직업 이름")
+    @app_commands.rename(class_name="직업명")
+    @app_commands.autocomplete(class_name=_class_autocomplete)
+    async def del_class(self, interaction: discord.Interaction, class_name: str) -> None:
         if not await _check_owner(interaction):
             return
-        removed = await db.remove_job_class(직업명)
+        removed = await db.remove_job_class(class_name)
         if not removed:
             await interaction.response.send_message(
-                f"❌ **{직업명}** 직업을 찾을 수 없습니다.", ephemeral=True
+                f"❌ **{class_name}** 직업을 찾을 수 없습니다.", ephemeral=True
             )
             return
         await raids_module.reload()
         await interaction.response.send_message(
-            f"🗑️ **{직업명}** 직업 삭제 완료.", ephemeral=True
+            f"🗑️ **{class_name}** 직업 삭제 완료.", ephemeral=True
         )
 
     @manage.command(name="직업목록", description="등록된 직업 목록을 확인합니다.")

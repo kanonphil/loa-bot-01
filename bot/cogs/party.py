@@ -16,12 +16,13 @@ class Party(commands.Cog):
         name="공대채널설정",
         description="공대 모집글이 올라갈 포럼 채널을 설정합니다. (관리자 전용)",
     )
-    @app_commands.describe(채널="공대 모집글을 올릴 포럼 채널")
+    @app_commands.describe(channel="공대 모집글을 올릴 포럼 채널")
+    @app_commands.rename(channel="채널")
     @app_commands.default_permissions(administrator=True)
-    async def set_forum(self, interaction: discord.Interaction, 채널: discord.ForumChannel) -> None:
-        await db.set_forum_channel(str(interaction.guild_id), str(채널.id))
+    async def set_forum(self, interaction: discord.Interaction, channel: discord.ForumChannel) -> None:
+        await db.set_forum_channel(str(interaction.guild_id), str(channel.id))
         await interaction.response.send_message(
-            f"✅ 공대 모집 포럼 채널이 {채널.mention}으로 설정되었습니다.", ephemeral=True
+            f"✅ 공대 모집 포럼 채널이 {channel.mention}으로 설정되었습니다.", ephemeral=True
         )
 
     @app_commands.command(

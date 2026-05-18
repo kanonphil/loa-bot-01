@@ -229,15 +229,17 @@ def raid_checklist_embed(
 # 공대 모집
 # ─────────────────────────────────────────────────────
 
-def _slot_text(slot: dict | None) -> str:
+def _slot_text(slot: dict | None, is_reserved: bool = False) -> str:
     if slot:
         role = slot.get("role", "dps")
         icon = "🛡️" if role == "support" else "⚔️"
         return f"{icon} **{slot['character_name']}** · _{slot['character_class']}_"
+    if is_reserved:
+        return "⏳ _예약됨_"
     return "➖ _빈 자리_"
 
 
-def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
+def party_embed(party: dict, slots: list[dict], reserved: dict[int, str] | None = None) -> discord.Embed:
     raid_name    = party["raid_name"]
     difficulty   = party["difficulty"]
     proficiency  = party["proficiency"]
@@ -269,8 +271,9 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
         color      = 0x95A5A6
         status_text = "⚫ 모집 종료"
 
-    slot_map = {s["slot_number"]: s for s in slots}
-    filled   = len(slots)
+    slot_map  = {s["slot_number"]: s for s in slots}
+    reserved  = reserved or {}
+    filled    = len(slots)
 
     # Discord 타임스탬프 (사용자 로컬 시간 자동 변환)
     ts_display = sched_time
@@ -325,7 +328,7 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
                 all_lines.append("")
             all_lines.append(f"**[{p + 1}파티]**  `{p_filled}/{party_split}`")
             for sn in range(start, start + party_split):
-                all_lines.append(f"{CIRCLE_NUMBERS[sn - 1]} {_slot_text(slot_map.get(sn))}")
+                all_lines.append(f"{CIRCLE_NUMBERS[sn - 1]} {_slot_text(slot_map.get(sn), sn in reserved)}")
 
         if remainder:
             start = num_parties * party_split + 1
@@ -333,13 +336,13 @@ def party_embed(party: dict, slots: list[dict]) -> discord.Embed:
             all_lines.append("")
             all_lines.append(f"**[{num_parties + 1}파티]**  `{p_filled}/{remainder}`")
             for sn in range(start, total_slots + 1):
-                all_lines.append(f"{CIRCLE_NUMBERS[sn - 1]} {_slot_text(slot_map.get(sn))}")
+                all_lines.append(f"{CIRCLE_NUMBERS[sn - 1]} {_slot_text(slot_map.get(sn), sn in reserved)}")
 
         embed.add_field(name="​", value="\n".join(all_lines), inline=False)
     else:
         lines = []
         for sn in range(1, total_slots + 1):
-            lines.append(f"{CIRCLE_NUMBERS[sn - 1]} {_slot_text(slot_map.get(sn))}")
+            lines.append(f"{CIRCLE_NUMBERS[sn - 1]} {_slot_text(slot_map.get(sn), sn in reserved)}")
         embed.add_field(name="​", value="\n".join(lines), inline=False)
 
     if status in ("recruiting", "full"):
