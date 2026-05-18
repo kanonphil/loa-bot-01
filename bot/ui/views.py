@@ -28,7 +28,7 @@ async def _notify_waitlist(client: discord.Client, party: dict) -> None:
     if not waitlist:
         return
     raid_title = f"{party['raid_name']} {party['difficulty']}"
-    link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+    link = f"<#{party['channel_id']}>"
     for discord_id in waitlist:
         await _send_dm(
             client, discord_id,
@@ -694,7 +694,7 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
 
         # 파티원(파티장 제외)에게 DM
         raid_title = f"{party['raid_name']} {party['difficulty']}"
-        link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+        link = f"<#{party['channel_id']}>"
         leader_id = party["leader_id"]
         for s in slots:
             if s["discord_id"] != leader_id:
@@ -756,7 +756,7 @@ async def _post_party(
     # 구독자 DM 발송 (생성자 제외)
     subscribers = await db.get_raid_subscribers(raid_name, difficulty)
     if subscribers:
-        link = f"https://discord.com/channels/{interaction.guild_id}/{thread.id}"
+        link = f"<#{thread.id}>"
         dm_content = (
             f"🔔 **{raid_name} {difficulty}** 새 공대가 모집을 시작했습니다!\n"
             f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**\n"
@@ -803,7 +803,7 @@ async def _auto_join_dps(
         party_info = await db.get_party(message_id)
         if party_info and party_info["leader_id"] != discord_id:
             raid_title = f"{party_info['raid_name']} {party_info['difficulty']}"
-            link = f"https://discord.com/channels/{party_info['guild_id']}/{party_info['channel_id']}"
+            link = f"<#{party_info['channel_id']}>"
             await _send_dm(
                 interaction.client, party_info["leader_id"],
                 f"⚔️ **{raid_title}** 공대에 **{char_info['name']}**({char_info['class']})이(가) 참여했습니다!\n{link}",
@@ -1080,7 +1080,7 @@ class PartyView(View):
                 await interaction.channel.send(
                     f"👑 **파티장 변경** — <@{new_leader}>님이 새 파티장이 되었습니다."
                 )
-                link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+                link = f"<#{party['channel_id']}>"
                 await _send_dm(
                     interaction.client, new_leader,
                     f"👑 **{party['raid_name']} {party['difficulty']}** 공대의 파티장이 되었습니다!\n{link}",
@@ -1438,7 +1438,7 @@ class RoleSelectView(View):
             await db.remove_waitlist(self.message_id, self.discord_id)
             if party and party["leader_id"] != self.discord_id:
                 raid_title = f"{party['raid_name']} {party['difficulty']}"
-                link = f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+                link = f"<#{party['channel_id']}>"
                 role_icon = "🛡️" if role == "support" else "⚔️"
                 await _send_dm(
                     interaction.client, party["leader_id"],
