@@ -67,6 +67,21 @@ async def disband_party(message_id: str):
   return {"success": True}
 
 
+# ── 클리어 ───────────────────────────────────────────────
+
+@router.patch("/{message_id}/clear")
+async def clear_party(message_id: str):
+  party = await db.get_party(message_id)
+  if not party or party["status"] == "disbanded":
+    return {"success": False, "reason": "이미 종료된 파티입니다."}
+  slots = await db.get_party_slots(message_id)
+  if not slots:
+    return {"success": False, "reason": "파티원이 없습니다."}
+  count = await db.complete_raid_for_party(message_id)
+  await db.disband_party(message_id)
+  return {"success": True, "count": count}
+
+
 # ── 파티 취소 (완전 삭제) ─────────────────────────────────
 
 @router.delete("/{message_id}")
