@@ -22,6 +22,7 @@ COGS = [
     "bot.cogs.raid",
     "bot.cogs.party",
     "bot.cogs.admin",
+    "bot.cogs.subscription",
 ]
 
 

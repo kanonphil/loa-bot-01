@@ -753,6 +753,19 @@ async def _post_party(
     party = await db.get_party(str(starter_msg.id))
     await starter_msg.edit(embed=party_embed(party, []), view=view)
 
+    # 구독자 DM 발송 (생성자 제외)
+    subscribers = await db.get_raid_subscribers(raid_name, difficulty)
+    if subscribers:
+        link = f"https://discord.com/channels/{interaction.guild_id}/{thread.id}"
+        dm_content = (
+            f"🔔 **{raid_name} {difficulty}** 새 공대가 모집을 시작했습니다!\n"
+            f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**\n"
+            f"{link}"
+        )
+        for sub_id in subscribers:
+            if sub_id != leader_id:
+                await _send_dm(interaction.client, sub_id, dm_content)
+
 
 async def _auto_join_dps(
     interaction: discord.Interaction,

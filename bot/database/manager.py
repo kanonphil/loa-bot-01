@@ -108,6 +108,14 @@ CREATE TABLE IF NOT EXISTS job_classes (
     name       TEXT PRIMARY KEY,
     is_support INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS raid_subscriptions (
+    discord_id  TEXT,
+    raid_name   TEXT,
+    difficulty  TEXT,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (discord_id, raid_name, difficulty)
+);
 """
 
 
@@ -810,6 +818,24 @@ async def get_prev_week_active_parties(week_start_iso: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def get_user_party_history(discord_id: str) -> list[dict]:
+  """유저의 파티 참여 이력 (최근 20개)."""
+  async with aiosqlite.connect(DB_PATH) as db:
+    db.row_factory = aiosqlite.Row
+    cur = await db.execute(
+      "SELECT DISTINCT p.raid_name, p.difficulty, p.proficiency, "
+      "p.scheduled_time, p.status, p.guild_id, p.channel_id, "
+      "ps.character_name, ps.role "
+      "FROM parties p "
+      "JOIN party_slots ps ON p.message_id = ps.party_message_id "
+      "WHERE ps.discord_id = ? "
+      "ORDER BY p.created_at DESC LIMIT 20",
+      (discord_id,),
+    )
+    rows = await cur.fetchall()
+  return [dict(r) for r in rows]
+
+
 async def get_all_active_party_ids() -> list[tuple[str, str]]:
     """봇 재시작 시 활성 파티 복구용. (message_id, channel_id) 반환."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -1085,6 +1111,59 @@ async def remove_job_class(name: str) -> bool:
 
 
 # ── 초기 시드 ───────────────────────────────────
+
+# ──────────────────────────────────────────────
+# 레이드 구독
+# ──────────────────────────────────────────────
+
+async def subscribe_raid(discord_id: str, raid_name: str, difficulty: str) -> bool:
+    """구독 등록. 이미 있으면 False 반환."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "INSERT INTO raid_subscriptions (discord_id, raid_name, difficulty) VALUES (?, ?, ?)",
+                (discord_id, raid_name, difficulty),
+            )
+            await db.commit()
+        return True
+    except aiosqlite.IntegrityError:
+        return False
+
+
+async def unsubscribe_raid(discord_id: str, raid_name: str, difficulty: str) -> bool:
+    """구독 취소. 없으면 False 반환."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "DELETE FROM raid_subscriptions WHERE discord_id=? AND raid_name=? AND difficulty=?",
+            (discord_id, raid_name, difficulty),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def get_user_subscriptions(discord_id: str) -> list[dict]:
+    """유저의 구독 목록 반환."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT raid_name, difficulty, created_at FROM raid_subscriptions "
+            "WHERE discord_id=? ORDER BY raid_name, difficulty",
+            (discord_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_raid_subscribers(raid_name: str, difficulty: str) -> list[str]:
+    """특정 레이드+난이도 구독자 discord_id 목록 반환."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT discord_id FROM raid_subscriptions WHERE raid_name=? AND difficulty=?",
+            (raid_name, difficulty),
+        )
+        rows = await cur.fetchall()
+    return [r[0] for r in rows]
+
 
 async def seed_game_data() -> None:
     """테이블이 비어있을 때 기본 레이드·직업 데이터를 삽입한다."""

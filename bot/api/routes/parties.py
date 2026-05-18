@@ -1,19 +1,32 @@
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from bot.api.auth import verify_api_key
 import bot.database.manager as db
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
+
+# ── 요청 바디 모델 ─────────────────────────────────────────
+
+class ScheduleBody(BaseModel):
+  scheduled_time: str
+  scheduled_datetime: str
+
+class MemoBody(BaseModel):
+  memo: str | None = None
+
+class LeaderBody(BaseModel):
+  new_leader_id: str
+
+
 # ── 파티 목록 ─────────────────────────────────────────────
 
 @router.get("")
-# guild_id: str: 쿼리 파라미터로 자동 처리 (/api/parties?guild_id=123)
 async def get_parties(guild_id: str):
   parties = await db.get_guild_parties(guild_id)
   result = []
   for party in parties:
     slots = await db.get_party_slots(party["message_id"])
-    # {**party, "slots": slots}: 파티 정보 + 슬롯 정보를 합쳐서 한번에 반환
     result.append({**party, "slots": slots})
   return result
 
@@ -29,9 +42,59 @@ async def get_party(message_id: str):
   return {**party, "slots": slots}
 
 
-# ── 파티 강제 종료 ────────────────────────────────────────
+# ── 파티 상태 변경 ────────────────────────────────────────
 
-@router.delete("/{message_id}")
+@router.patch("/{message_id}/close")
+async def close_party(message_id: str):
+  await db.close_party(message_id)
+  return {"success": True}
+
+@router.patch("/{message_id}/reopen")
+async def reopen_party(message_id: str):
+  await db.reopen_party(message_id)
+  return {"success": True}
+
+@router.patch("/{message_id}/disband")
 async def disband_party(message_id: str):
   await db.disband_party(message_id)
+  return {"success": True}
+
+
+# ── 파티 취소 (완전 삭제) ─────────────────────────────────
+
+@router.delete("/{message_id}")
+async def cancel_party(message_id: str):
+  await db.purge_party(message_id)
+  return {"success": True}
+
+
+# ── 일정 변경 ─────────────────────────────────────────────
+
+@router.patch("/{message_id}/schedule")
+async def update_schedule(message_id: str, body: ScheduleBody):
+  await db.update_party_schedule(message_id, body.scheduled_time, body.scheduled_datetime)
+  return {"success": True}
+
+
+# ── 메모 변경 ─────────────────────────────────────────────
+
+@router.patch("/{message_id}/memo")
+async def update_memo(message_id: str, body: MemoBody):
+  await db.update_party_memo(message_id, body.memo)
+  return {"success": True}
+
+
+# ── 파티원 강제 퇴장 ──────────────────────────────────────
+
+@router.delete("/{message_id}/slots/{discord_id}")
+async def kick_member(message_id: str, discord_id: str):
+  removed = await db.leave_slot(message_id, discord_id)
+  return {"success": removed}
+
+
+# ── 파티장 변경 ───────────────────────────────────────────
+
+@router.patch("/{message_id}/leader")
+async def change_leader(message_id: str, body: LeaderBody):
+  await db.transfer_leader(message_id, body.new_leader_id)
   return {"success": True}
