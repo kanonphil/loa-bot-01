@@ -12,6 +12,291 @@ KST = timezone(timedelta(hours=9))
 
 
 # ─────────────────────────────────────────────────────
+# 파티 초대 — 응답 뷰 (ManageView에서 사용)
+# ─────────────────────────────────────────────────────
+
+async def _refresh_party_embed_with_reserved(client: discord.Client, party: dict) -> None:
+    from bot.ui.embeds import party_embed as _party_embed
+    try:
+        thread = client.get_channel(int(party["channel_id"]))
+        if thread is None:
+            thread = await client.fetch_channel(int(party["channel_id"]))
+        msg      = await thread.fetch_message(int(party["message_id"]))
+        slots    = await db.get_party_slots(party["message_id"])
+        reserved = await db.get_reserved_slots(party["message_id"])
+        closed   = party["status"] == "closed"
+        await msg.edit(
+            embed=_party_embed(party, slots, reserved),
+            view=PartyView(total_slots=party["total_slots"], closed=closed),
+        )
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+
+class InviteRoleSelectView(View):
+    def __init__(self, message_id: str, party: dict, invitee_id: str,
+                 char_name: str, char_class: str) -> None:
+        super().__init__(timeout=300)
+        self.message_id = message_id
+        self.party      = party
+        self.invitee_id = invitee_id
+        self.char_name  = char_name
+        self.char_class = char_class
+
+        is_support = char_class in SUPPORT_CLASSES
+        dps_btn = Button(label="딜러", emoji="⚔️", style=discord.ButtonStyle.secondary)
+        dps_btn.callback = self._make_cb("dps")
+        self.add_item(dps_btn)
+        sup_btn = Button(
+            label="서포터 (추천)" if is_support else "서포터",
+            emoji="🛡️", style=discord.ButtonStyle.primary,
+        )
+        sup_btn.callback = self._make_cb("support")
+        self.add_item(sup_btn)
+
+    def _make_cb(self, role: str):
+        async def cb(interaction: discord.Interaction) -> None:
+            if str(interaction.user.id) != self.invitee_id:
+                await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+                return
+            ok, msg = await db.assign_invite_slot(
+                self.message_id, self.invitee_id, self.char_name, self.char_class, role,
+            )
+            role_text = "서포터" if role == "support" else "딜러"
+            if ok:
+                await interaction.response.edit_message(
+                    content=f"✅ **{self.char_name}** ({role_text})로 공대에 참여했습니다!", view=None
+                )
+                party = await db.get_party(self.message_id)
+                if party:
+                    await _refresh_party_embed_with_reserved(interaction.client, party)
+                    try:
+                        leader = await interaction.client.fetch_user(int(party["leader_id"]))
+                        await leader.send(
+                            f"✅ **{self.char_name}**({self.char_class}/{role_text})님이 "
+                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!"
+                        )
+                    except discord.HTTPException:
+                        pass
+            else:
+                await interaction.response.edit_message(content=f"❌ {msg}", view=None)
+            self.stop()
+        return cb
+
+
+class InviteCharSelectView(View):
+    def __init__(self, message_id: str, party: dict, invitee_id: str,
+                 qualifying: list[dict]) -> None:
+        super().__init__(timeout=300)
+        self.message_id = message_id
+        self.party      = party
+        self.invitee_id = invitee_id
+        self.char_map   = {q["name"]: q for q in qualifying}
+
+        options = [
+            discord.SelectOption(label=q["name"], description=f"{q['class']} | {q['level']:.0f}", value=q["name"])
+            for q in qualifying
+        ]
+        sel = Select(placeholder="참여할 캐릭터를 선택하세요", options=options)
+        sel.callback = self._on_select
+        self.add_item(sel)
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.invitee_id:
+            await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+            return
+        char_name = interaction.data["values"][0]
+        char_info = self.char_map[char_name]
+        if char_info["class"] in SUPPORT_CLASSES:
+            view = InviteRoleSelectView(self.message_id, self.party, self.invitee_id, char_name, char_info["class"])
+            await interaction.response.edit_message(
+                content=f"**{char_name}** ({char_info['class']}) — 역할을 선택하세요:", view=view
+            )
+        else:
+            ok, msg = await db.assign_invite_slot(self.message_id, self.invitee_id, char_name, char_info["class"], "dps")
+            if ok:
+                await interaction.response.edit_message(content=f"✅ **{char_name}**으로 공대에 참여했습니다!", view=None)
+                party = await db.get_party(self.message_id)
+                if party:
+                    await _refresh_party_embed_with_reserved(interaction.client, party)
+                    try:
+                        leader = await interaction.client.fetch_user(int(party["leader_id"]))
+                        await leader.send(
+                            f"✅ **{char_name}**({char_info['class']})님이 "
+                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!"
+                        )
+                    except discord.HTTPException:
+                        pass
+            else:
+                await interaction.response.edit_message(content=f"❌ {msg}", view=None)
+        self.stop()
+
+
+class InviteResponseView(View):
+    def __init__(self, message_id: str, party: dict, invitee_id: str) -> None:
+        super().__init__(timeout=3600)
+        self.message_id = message_id
+        self.party      = party
+        self.invitee_id = invitee_id
+
+    async def on_timeout(self) -> None:
+        await db.delete_invite(self.message_id, self.invitee_id)
+
+    @discord.ui.button(label="수락", style=discord.ButtonStyle.success, emoji="✅")
+    async def accept(self, interaction: discord.Interaction, button: Button) -> None:
+        if str(interaction.user.id) != self.invitee_id:
+            await interaction.response.send_message("본인만 응답할 수 있습니다.", ephemeral=True)
+            return
+        party = await db.get_party(self.message_id)
+        if not party or party["status"] == "disbanded":
+            await interaction.response.edit_message(content="❌ 이미 종료된 공대입니다.", view=None)
+            self.stop()
+            return
+        discord_id = str(interaction.user.id)
+        api_key    = await db.get_user_api_key(discord_id)
+        if not api_key:
+            await interaction.response.edit_message(content="❌ `/api등록`으로 API 키를 먼저 등록해주세요.", view=None)
+            self.stop()
+            return
+        registered = await db.get_user_characters(discord_id)
+        if not registered:
+            await interaction.response.edit_message(content="❌ `/원정대`에서 캐릭터를 먼저 등록해주세요.", view=None)
+            self.stop()
+            return
+        cached    = await db.get_cached_characters(discord_id, max_age_hours=99999)
+        cache_map = {c["character_name"]: c for c in cached}
+        qualifying = [
+            {"name": n, "level": cache_map[n]["item_level"], "class": cache_map[n]["character_class"]}
+            for n in registered
+            if n in cache_map and cache_map[n]["item_level"] and cache_map[n]["item_level"] >= party["min_level"]
+        ]
+        if not qualifying:
+            await interaction.response.edit_message(
+                content=f"❌ 최소 아이템 레벨({party['min_level']}) 이상의 캐릭터가 없습니다.", view=None
+            )
+            self.stop()
+            return
+        if len(qualifying) == 1:
+            q = qualifying[0]
+            if q["class"] in SUPPORT_CLASSES:
+                view = InviteRoleSelectView(self.message_id, party, discord_id, q["name"], q["class"])
+                await interaction.response.edit_message(content=f"**{q['name']}** ({q['class']}) — 역할을 선택하세요:", view=view)
+            else:
+                ok, msg = await db.assign_invite_slot(self.message_id, discord_id, q["name"], q["class"], "dps")
+                if ok:
+                    await interaction.response.edit_message(content=f"✅ **{q['name']}**으로 공대에 참여했습니다!", view=None)
+                    await _refresh_party_embed_with_reserved(interaction.client, party)
+                    try:
+                        leader = await interaction.client.fetch_user(int(party["leader_id"]))
+                        await leader.send(f"✅ **{q['name']}**({q['class']})님이 **{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!")
+                    except discord.HTTPException:
+                        pass
+                else:
+                    await interaction.response.edit_message(content=f"❌ {msg}", view=None)
+        else:
+            view = InviteCharSelectView(self.message_id, party, discord_id, qualifying)
+            await interaction.response.edit_message(content="참여할 캐릭터를 선택하세요:", view=view)
+        self.stop()
+
+    @discord.ui.button(label="거절", style=discord.ButtonStyle.danger, emoji="❌")
+    async def decline(self, interaction: discord.Interaction, button: Button) -> None:
+        if str(interaction.user.id) != self.invitee_id:
+            await interaction.response.send_message("본인만 응답할 수 있습니다.", ephemeral=True)
+            return
+        await db.delete_invite(self.message_id, self.invitee_id)
+        await interaction.response.edit_message(content="❌ 초대를 거절했습니다.", view=None)
+        party = await db.get_party(self.message_id)
+        if party:
+            await _refresh_party_embed_with_reserved(interaction.client, party)
+        try:
+            leader = await interaction.client.fetch_user(int(self.party["leader_id"]))
+            await leader.send(f"❌ <@{self.invitee_id}>님이 **{self.party['raid_name']} {self.party['difficulty']}** 초대를 거절했습니다.")
+        except discord.HTTPException:
+            pass
+        self.stop()
+
+
+class InviteModal(Modal, title="파티원 초대"):
+    user_id_input = TextInput(
+        label="Discord User ID",
+        placeholder="초대할 유저의 18자리 숫자 ID",
+        min_length=17, max_length=20,
+    )
+    slot_input = TextInput(
+        label="슬롯 번호",
+        placeholder="예) 3",
+        min_length=1, max_length=2,
+    )
+
+    def __init__(self, party: dict, original_message: discord.Message, total_slots: int) -> None:
+        super().__init__()
+        self.party           = party
+        self.original_message = original_message
+        self.total_slots_count = total_slots
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        raw_id = self.user_id_input.value.strip()
+        try:
+            target_id = int(raw_id)
+            slot      = int(self.slot_input.value.strip())
+        except ValueError:
+            await interaction.response.send_message("❌ 올바른 형식으로 입력해주세요.", ephemeral=True)
+            return
+
+        if not (1 <= slot <= self.total_slots_count):
+            await interaction.response.send_message(f"❌ 슬롯 번호는 1 ~ {self.total_slots_count} 사이여야 합니다.", ephemeral=True)
+            return
+
+        # 슬롯 점유 확인
+        slots = await db.get_party_slots(self.party["message_id"])
+        if any(s["discord_id"] == str(target_id) for s in slots):
+            await interaction.response.send_message("❌ 해당 유저는 이미 공대에 참여 중입니다.", ephemeral=True)
+            return
+        if any(s["slot_number"] == slot for s in slots):
+            await interaction.response.send_message(f"❌ **{slot}번** 슬롯은 이미 점유되어 있습니다.", ephemeral=True)
+            return
+        reserved = await db.get_reserved_slots(self.party["message_id"])
+        if slot in reserved:
+            await interaction.response.send_message(f"❌ **{slot}번** 슬롯은 이미 예약되어 있습니다.", ephemeral=True)
+            return
+
+        # 초대 생성
+        added = await db.create_invite(self.party["message_id"], str(target_id), slot)
+        if not added:
+            await interaction.response.send_message("❌ 이미 초대된 유저입니다.", ephemeral=True)
+            return
+
+        # embed 갱신
+        party = await db.get_party(self.party["message_id"])
+        if party:
+            await _refresh_party_embed_with_reserved(interaction.client, party)
+
+        # DM 발송
+        raid_title = f"{self.party['raid_name']} {self.party['difficulty']} {self.party['proficiency']}"
+        view = InviteResponseView(self.party["message_id"], self.party, str(target_id))
+        try:
+            target_user = await interaction.client.fetch_user(target_id)
+            await target_user.send(
+                f"⚔️ **{interaction.user.display_name}**님이 "
+                f"**{raid_title}** 공대 **{slot}번** 슬롯에 초대했습니다!\n"
+                f"일정: **{self.party['scheduled_time']}** | <#{self.party['channel_id']}>\n\n"
+                f"참여 의사를 알려주세요:",
+                view=view,
+            )
+            await interaction.response.send_message(
+                f"✅ <@{target_id}>님에게 **{slot}번** 슬롯 초대를 발송했습니다.", ephemeral=True
+            )
+        except discord.NotFound:
+            await db.delete_invite(self.party["message_id"], str(target_id))
+            await interaction.response.send_message("❌ 유저를 찾을 수 없습니다. ID를 확인해주세요.", ephemeral=True)
+        except discord.Forbidden:
+            await db.delete_invite(self.party["message_id"], str(target_id))
+            if party:
+                await _refresh_party_embed_with_reserved(interaction.client, party)
+            await interaction.response.send_message("❌ 해당 유저의 DM이 비활성화되어 있습니다.", ephemeral=True)
+
+
+# ─────────────────────────────────────────────────────
 # 유틸
 # ─────────────────────────────────────────────────────
 
@@ -1583,6 +1868,11 @@ class ManageView(View):
         delegate_btn.callback = self._handle_delegate
         self.add_item(delegate_btn)
 
+        invite_btn = Button(label="초대", emoji="👥",
+                            style=discord.ButtonStyle.primary, row=3)
+        invite_btn.callback = self._handle_invite
+        self.add_item(invite_btn)
+
 
     async def _refresh_original(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
@@ -1706,6 +1996,17 @@ class ManageView(View):
             return
         await interaction.response.send_modal(
             ScheduleChangeModal(party, self.original_message)
+        )
+
+    # ── 초대 ──────────────────────────────────────────
+
+    async def _handle_invite(self, interaction: discord.Interaction) -> None:
+        party = await db.get_party(self.party["message_id"])
+        if not party or party["status"] == "disbanded":
+            await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
+            return
+        await interaction.response.send_modal(
+            InviteModal(party, self.original_message, self.total_slots)
         )
 
     # ── 파티장 위임 ───────────────────────────────────
