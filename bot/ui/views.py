@@ -1583,6 +1583,7 @@ class ManageView(View):
         delegate_btn.callback = self._handle_delegate
         self.add_item(delegate_btn)
 
+
     async def _refresh_original(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
         if not party:

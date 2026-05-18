@@ -117,6 +117,18 @@ CREATE TABLE IF NOT EXISTS raid_subscriptions (
     PRIMARY KEY (discord_id, raid_name, difficulty)
 );
 
+CREATE TABLE IF NOT EXISTS party_invites (
+    message_id  TEXT,
+    discord_id  TEXT,
+    invited_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, discord_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+    discord_id        TEXT PRIMARY KEY,
+    pre_notify_hours  REAL NOT NULL DEFAULT 1.0
+);
+
 CREATE TABLE IF NOT EXISTS notification_logs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_id  TEXT NOT NULL,
@@ -912,6 +924,76 @@ async def get_active_users(guild_id: str) -> list[dict]:
         )
         row = await cur.fetchone()
     return dict(row) if row else {"user_count": 0}
+
+
+async def create_invite(message_id: str, discord_id: str) -> bool:
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "INSERT INTO party_invites (message_id, discord_id) VALUES (?, ?)",
+                (message_id, discord_id),
+            )
+            await db.commit()
+        return True
+    except aiosqlite.IntegrityError:
+        return False
+
+
+async def delete_invite(message_id: str, discord_id: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM party_invites WHERE message_id=? AND discord_id=?",
+            (message_id, discord_id),
+        )
+        await db.commit()
+
+
+async def get_pre_notify_hours(discord_id: str) -> float:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT pre_notify_hours FROM user_preferences WHERE discord_id=?",
+            (discord_id,),
+        )
+        row = await cur.fetchone()
+    return row[0] if row else 1.0
+
+
+async def set_pre_notify_hours(discord_id: str, hours: float) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO user_preferences (discord_id, pre_notify_hours) VALUES (?, ?) "
+            "ON CONFLICT(discord_id) DO UPDATE SET pre_notify_hours=excluded.pre_notify_hours",
+            (discord_id, hours),
+        )
+        await db.commit()
+
+
+async def get_parties_due_pre_notification(now_iso: str) -> list[dict]:
+    """사전 알림 시간이 된 미통보 파티 슬롯 반환."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT p.*, ps.discord_id AS member_id, "
+            "COALESCE(up.pre_notify_hours, 1.0) AS pre_hours "
+            "FROM parties p "
+            "JOIN party_slots ps ON ps.party_message_id = p.message_id "
+            "LEFT JOIN user_preferences up ON up.discord_id = ps.discord_id "
+            "WHERE p.scheduled_datetime IS NOT NULL "
+            "AND p.status IN ('recruiting', 'full', 'closed') "
+            "AND p.notified = 0 "
+            "AND datetime(p.scheduled_datetime, '-' || CAST(COALESCE(up.pre_notify_hours,1.0)*60 AS INTEGER) || ' minutes') <= ?",
+            (now_iso,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def mark_pre_notified(message_id: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE parties SET notified=1 WHERE message_id=?", (message_id,)
+        )
+        await db.commit()
 
 
 async def log_notification(
