@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(where.exe gh 2>$null; [System.Environment]::GetEnvironmentVariable\\(\"GITHUB_TOKEN\"\\))"
     ]
   }
 }
