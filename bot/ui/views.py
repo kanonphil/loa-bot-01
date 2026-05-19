@@ -1051,10 +1051,12 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
         leader_id = party["leader_id"]
         for s in slots:
             if s["discord_id"] != leader_id:
+                reason = self.memo_input.value.strip()
+                reason_text = f"\n📝 사유: {reason}" if reason else ""
                 await _send_dm(
                     interaction.client, s["discord_id"],
                     f"📅 **{raid_title}** 공대 일정이 변경되었습니다.\n"
-                    f"새 일정: **{scheduled_time}**\n{link}",
+                    f"새 일정: **{scheduled_time}**{reason_text}\n{link}",
                 )
 
 
