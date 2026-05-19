@@ -934,6 +934,43 @@ class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
             )
 
 
+class CancelModal(Modal, title="공대 취소"):
+    reason = TextInput(
+        label="취소 사유 (선택사항)",
+        placeholder="예) 인원 부족, 일정 변경, 개인 사정 등",
+        required=False,
+        max_length=200,
+        style=discord.TextStyle.short,
+    )
+
+    def __init__(self, party: dict) -> None:
+        super().__init__()
+        self.party = party
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        message_id = self.party["message_id"]
+        slots      = await db.get_party_slots(message_id)
+        raid_title = f"{self.party['raid_name']} {self.party['difficulty']}"
+        reason_text = self.reason.value.strip()
+
+        await db.purge_party(message_id)
+        await interaction.response.send_message("❌ 공대가 취소되었습니다.", ephemeral=True)
+
+        leader_id = self.party["leader_id"]
+        dm_content = f"❌ **{raid_title}** 공대가 파티장에 의해 취소되었습니다."
+        if reason_text:
+            dm_content += f"\n📌 사유: {reason_text}"
+
+        for s in slots:
+            if s["discord_id"] != leader_id:
+                await _send_dm(interaction.client, s["discord_id"], dm_content)
+
+        try:
+            await interaction.channel.delete()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+
 class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
     date_input = TextInput(
         label="날짜",
@@ -1986,22 +2023,7 @@ class ManageView(View):
         if not party or party["status"] == "disbanded":
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
-        message_id = party["message_id"]
-        slots      = await db.get_party_slots(message_id)
-        raid_title = f"{party['raid_name']} {party['difficulty']}"
-        await db.purge_party(message_id)
-        await interaction.response.edit_message(content="❌ 공대가 취소되었습니다.", view=None)
-        leader_id = party["leader_id"]
-        for s in slots:
-            if s["discord_id"] != leader_id:
-                await _send_dm(
-                    interaction.client, s["discord_id"],
-                    f"❌ **{raid_title}** 공대가 파티장에 의해 취소되었습니다.",
-                )
-        try:
-            await interaction.channel.delete()
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            pass
+        await interaction.response.send_modal(CancelModal(party))
 
     # ── 강제 퇴장 ─────────────────────────────────────
 
