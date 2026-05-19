@@ -7,7 +7,12 @@ app = FastAPI(title="로아봇 관리자 API", version="1.0.0")
 
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=["*"],
+  allow_origins=[
+    "http://localhost:5173",   # Vite 개발 서버
+    "http://localhost:4173",   # Vite 프리뷰
+    "http://localhost:3000",   # 기타 로컬 개발
+    "null",                    # 패키징된 Electron (file:// origin)
+  ],
   allow_methods=["*"],
   allow_headers=["*"],
 )
