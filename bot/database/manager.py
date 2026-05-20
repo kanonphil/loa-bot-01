@@ -138,6 +138,12 @@ CREATE TABLE IF NOT EXISTS notification_logs (
     message_id  TEXT NOT NULL,
     sent_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS party_pre_notifications (
+    message_id  TEXT,
+    discord_id  TEXT,
+    PRIMARY KEY (message_id, discord_id)
+);
 """
 
 
@@ -746,12 +752,15 @@ async def update_party_memo(message_id: str, memo: str | None) -> None:
 async def update_party_schedule(
     message_id: str, scheduled_time: str, scheduled_datetime: str
 ) -> None:
-    """일정 변경. notified=0 리셋으로 새 시간에 알림이 재발송된다."""
+    """일정 변경. notified·pre_notified 모두 리셋하여 새 시각에 알림이 재발송된다."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE parties SET scheduled_time=?, scheduled_datetime=?, notified=0 "
-            "WHERE message_id=?",
+            "UPDATE parties SET scheduled_time=?, scheduled_datetime=?, "
+            "notified=0, pre_notified=0 WHERE message_id=?",
             (scheduled_time, scheduled_datetime, message_id),
+        )
+        await db.execute(
+            "DELETE FROM party_pre_notifications WHERE message_id=?", (message_id,)
         )
         await db.commit()
 
@@ -824,11 +833,13 @@ async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
 
 
 async def purge_party(message_id: str) -> None:
-    """파티·슬롯·대기열 레코드를 완전히 삭제한다."""
+    """파티·슬롯·대기열·알림 기록을 완전히 삭제한다."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM party_slots    WHERE party_message_id=?", (message_id,))
-        await db.execute("DELETE FROM party_waitlist WHERE party_message_id=?", (message_id,))
-        await db.execute("DELETE FROM parties         WHERE message_id=?",       (message_id,))
+        await db.execute("DELETE FROM party_slots             WHERE party_message_id=?", (message_id,))
+        await db.execute("DELETE FROM party_waitlist          WHERE party_message_id=?", (message_id,))
+        await db.execute("DELETE FROM party_pre_notifications WHERE message_id=?",       (message_id,))
+        await db.execute("DELETE FROM party_invites           WHERE message_id=?",       (message_id,))
+        await db.execute("DELETE FROM parties                 WHERE message_id=?",       (message_id,))
         await db.commit()
 
 
@@ -1038,80 +1049,6 @@ async def assign_invite_slot(
     return True, f"{slot_number}번 슬롯 배정 완료"
 
 
-async def get_pre_notify_hours(discord_id: str) -> float:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "SELECT pre_notify_hours FROM user_preferences WHERE discord_id=?",
-            (discord_id,),
-        )
-        row = await cur.fetchone()
-    return row[0] if row else 1.0
-
-
-async def set_pre_notify_hours(discord_id: str, hours: float) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO user_preferences (discord_id, pre_notify_hours) VALUES (?, ?) "
-            "ON CONFLICT(discord_id) DO UPDATE SET pre_notify_hours=excluded.pre_notify_hours",
-            (discord_id, hours),
-        )
-        await db.commit()
-
-
-async def get_parties_due_pre_notification(now_iso: str) -> list[dict]:
-    """사전 알림 발송 대상 파티 반환.
-
-    SQLite datetime() 함수의 timezone 처리 불일치 문제를 피하기 위해
-    Python에서 직접 datetime 비교를 수행한다.
-    파티원 중 알림 설정(>0)이 있는 유저의 최대 pre_hours 기준으로 threshold를 계산한다.
-    """
-    now = datetime.fromisoformat(now_iso)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=KST)
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        # 파티원이 있는 활성 파티 중 아직 사전 알림이 가지 않은 것만 조회
-        # MAX(pre_notify_hours) → 파티원 중 가장 이른 알림 시간(시간 값이 클수록 일찍 발송)
-        cur = await db.execute(
-            "SELECT p.*, "
-            "MAX(CASE WHEN COALESCE(up.pre_notify_hours, 1.0) > 0 "
-            "         THEN COALESCE(up.pre_notify_hours, 1.0) "
-            "         ELSE NULL END) AS max_pre_hours "
-            "FROM parties p "
-            "JOIN party_slots ps ON ps.party_message_id = p.message_id "
-            "LEFT JOIN user_preferences up ON up.discord_id = ps.discord_id "
-            "WHERE p.scheduled_datetime IS NOT NULL "
-            "AND p.pre_notified = 0 "
-            "AND p.status IN ('recruiting', 'full', 'closed') "
-            "GROUP BY p.message_id",
-        )
-        rows = await cur.fetchall()
-
-    result = []
-    for row in rows:
-        r = dict(row)
-        max_hours = r.get("max_pre_hours")
-        if not max_hours:
-            continue  # 파티원 전원 알림 끄기
-        try:
-            sdt = datetime.fromisoformat(r["scheduled_datetime"])
-            if sdt.tzinfo is None:
-                sdt = sdt.replace(tzinfo=KST)
-        except (ValueError, TypeError):
-            continue
-        threshold = sdt - timedelta(hours=max_hours)
-        if now >= threshold:
-            result.append(r)
-    return result
-
-
-async def mark_pre_notified(message_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE parties SET pre_notified=1 WHERE message_id=?", (message_id,)
-        )
-        await db.commit()
 
 
 async def log_notification(
