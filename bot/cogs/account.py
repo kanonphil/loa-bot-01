@@ -4,11 +4,59 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Modal, TextInput
+from discord.ui import Modal, TextInput, View, Button
 
 import bot.api.lostark as loa
 import bot.database.manager as db
 from bot.cogs.guide import send_guide
+
+
+class CharRegisterView(View):
+    """API 등록 완료 후 캐릭터 등록 방식 선택."""
+
+    def __init__(self, discord_id: str, verified_name: str, siblings: list[dict]) -> None:
+        super().__init__(timeout=60)
+        self.discord_id    = discord_id
+        self.verified_name = verified_name
+        self.siblings      = siblings
+
+    async def _finish(self, interaction: discord.Interaction, header: str) -> None:
+        await interaction.response.edit_message(content=header, view=None)
+        await send_guide(interaction.followup.send)
+
+    @discord.ui.button(label="이 캐릭터만 등록", style=discord.ButtonStyle.secondary, emoji="👤")
+    async def register_one(self, interaction: discord.Interaction, button: Button) -> None:
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+            return
+        await db.add_character(self.discord_id, self.verified_name)
+        self.stop()
+        await self._finish(
+            interaction,
+            f"✅ **{self.verified_name}** 캐릭터가 원정대에 등록되었습니다.\n"
+            f"나머지 캐릭터는 `/캐릭터등록`으로 추가할 수 있습니다.\n\n"
+            f"📖 아래 가이드를 따라 시작해보세요!",
+        )
+
+    @discord.ui.button(label="원정대 전체 등록", style=discord.ButtonStyle.primary, emoji="👥")
+    async def register_all(self, interaction: discord.Interaction, button: Button) -> None:
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+            return
+        added = sum(
+            1 for char in self.siblings
+            if char.get("CharacterName") and await db.add_character(self.discord_id, char["CharacterName"])
+        )
+        self.stop()
+        await self._finish(
+            interaction,
+            f"✅ 원정대 캐릭터 **{added}개** 전체가 등록되었습니다.\n\n"
+            f"📖 아래 가이드를 따라 시작해보세요!",
+        )
+
+    async def on_timeout(self) -> None:
+        # 타임아웃 시 검증 캐릭터만 등록
+        await db.add_character(self.discord_id, self.verified_name)
 
 
 class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
@@ -59,20 +107,13 @@ class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
         # 저장
         await db.set_user_api_key(self.discord_id, key)
 
-        # 원정대 전체 캐릭터 자동 등록
-        added = 0
-        for char in siblings:
-            char_name = char.get("CharacterName", "")
-            if char_name and await db.add_character(self.discord_id, char_name):
-                added += 1
-
-        await send_guide(
-            interaction.followup.send,
-            header=(
-                f"✅ **API 키 등록 완료!**\n"
-                f"원정대 캐릭터 **{len(siblings)}**개를 자동 등록했습니다.\n\n"
-                f"📖 아래 가이드를 따라 시작해보세요!"
-            ),
+        # 캐릭터 등록 방식 선택 (1개 vs 전체)
+        view = CharRegisterView(self.discord_id, name, siblings)
+        await interaction.followup.send(
+            f"✅ **API 키 등록 완료!** (원정대 캐릭터 **{len(siblings)}개** 확인)\n\n"
+            f"원정대에 등록할 캐릭터를 선택하세요:",
+            view=view,
+            ephemeral=True,
         )
 
 
