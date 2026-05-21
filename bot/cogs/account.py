@@ -8,6 +8,7 @@ from discord.ui import Modal, TextInput
 
 import bot.api.lostark as loa
 import bot.database.manager as db
+from bot.cogs.guide import send_guide
 
 
 class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
@@ -65,11 +66,13 @@ class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
             if char_name and await db.add_character(self.discord_id, char_name):
                 added += 1
 
-        await interaction.followup.send(
-            f"✅ **API 키 등록 완료!**\n\n"
-            f"원정대 캐릭터 **{len(siblings)}**개를 자동 등록했습니다.\n"
-            f"`/원정대` 명령어로 원정대를 확인하세요.",
-            ephemeral=True,
+        await send_guide(
+            interaction.followup.send,
+            header=(
+                f"✅ **API 키 등록 완료!**\n"
+                f"원정대 캐릭터 **{len(siblings)}**개를 자동 등록했습니다.\n\n"
+                f"📖 아래 가이드를 따라 시작해보세요!"
+            ),
         )
 
 

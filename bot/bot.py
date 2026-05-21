@@ -24,6 +24,7 @@ COGS = [
     "bot.cogs.admin",
     "bot.cogs.subscription",
     "bot.cogs.invite",
+    "bot.cogs.guide",
 ]
 
 
