@@ -58,17 +58,17 @@ class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
         # 저장
         await db.set_user_api_key(self.discord_id, key)
 
-        # 원정대 전체 캐릭터 수
-        char_count = len(siblings)
-
-        # 검증에 사용한 캐릭터 자동 등록 여부 확인
-        await db.add_character(self.discord_id, name)  # 이미 있으면 무시됨
+        # 원정대 전체 캐릭터 자동 등록
+        added = 0
+        for char in siblings:
+            char_name = char.get("CharacterName", "")
+            if char_name and await db.add_character(self.discord_id, char_name):
+                added += 1
 
         await interaction.followup.send(
             f"✅ **API 키 등록 완료!**\n\n"
-            f"원정대 캐릭터 **{char_count}**개 확인 완료.\n"
-            f"**{name}** 캐릭터가 원정대에 자동 등록되었습니다.\n\n"
-            f"`/원정대` 명령어로 원정대를 관리하세요.",
+            f"원정대 캐릭터 **{len(siblings)}**개를 자동 등록했습니다.\n"
+            f"`/원정대` 명령어로 원정대를 확인하세요.",
             ephemeral=True,
         )
 

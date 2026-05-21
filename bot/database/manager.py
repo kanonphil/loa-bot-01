@@ -287,7 +287,9 @@ async def _migrate_encrypt_api_keys() -> None:
 
 async def delete_user(discord_id: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM users WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM users          WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM user_characters WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM user_preferences WHERE discord_id=?", (discord_id,))
         await db.commit()
 
 
