@@ -138,6 +138,12 @@ CREATE TABLE IF NOT EXISTS notification_logs (
     message_id  TEXT NOT NULL,
     sent_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS party_pre_notifications (
+    message_id  TEXT,
+    discord_id  TEXT,
+    PRIMARY KEY (message_id, discord_id)
+);
 """
 
 
@@ -225,6 +231,10 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE party_invites ADD COLUMN slot_number INTEGER NOT NULL DEFAULT 0")
         except Exception:
             pass
+        try:
+            await db.execute("ALTER TABLE parties ADD COLUMN pre_notified INTEGER DEFAULT 0")
+        except Exception:
+            pass
         await db.commit()
     await seed_game_data()
     await _migrate_encrypt_api_keys()
@@ -277,7 +287,9 @@ async def _migrate_encrypt_api_keys() -> None:
 
 async def delete_user(discord_id: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM users WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM users          WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM user_characters WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM user_preferences WHERE discord_id=?", (discord_id,))
         await db.commit()
 
 
@@ -742,12 +754,15 @@ async def update_party_memo(message_id: str, memo: str | None) -> None:
 async def update_party_schedule(
     message_id: str, scheduled_time: str, scheduled_datetime: str
 ) -> None:
-    """일정 변경. notified=0 리셋으로 새 시간에 알림이 재발송된다."""
+    """일정 변경. notified·pre_notified 모두 리셋하여 새 시각에 알림이 재발송된다."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE parties SET scheduled_time=?, scheduled_datetime=?, notified=0 "
-            "WHERE message_id=?",
+            "UPDATE parties SET scheduled_time=?, scheduled_datetime=?, "
+            "notified=0, pre_notified=0 WHERE message_id=?",
             (scheduled_time, scheduled_datetime, message_id),
+        )
+        await db.execute(
+            "DELETE FROM party_pre_notifications WHERE message_id=?", (message_id,)
         )
         await db.commit()
 
@@ -820,11 +835,13 @@ async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
 
 
 async def purge_party(message_id: str) -> None:
-    """파티·슬롯·대기열 레코드를 완전히 삭제한다."""
+    """파티·슬롯·대기열·알림 기록을 완전히 삭제한다."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM party_slots    WHERE party_message_id=?", (message_id,))
-        await db.execute("DELETE FROM party_waitlist WHERE party_message_id=?", (message_id,))
-        await db.execute("DELETE FROM parties         WHERE message_id=?",       (message_id,))
+        await db.execute("DELETE FROM party_slots             WHERE party_message_id=?", (message_id,))
+        await db.execute("DELETE FROM party_waitlist          WHERE party_message_id=?", (message_id,))
+        await db.execute("DELETE FROM party_pre_notifications WHERE message_id=?",       (message_id,))
+        await db.execute("DELETE FROM party_invites           WHERE message_id=?",       (message_id,))
+        await db.execute("DELETE FROM parties                 WHERE message_id=?",       (message_id,))
         await db.commit()
 
 
@@ -1034,52 +1051,6 @@ async def assign_invite_slot(
     return True, f"{slot_number}번 슬롯 배정 완료"
 
 
-async def get_pre_notify_hours(discord_id: str) -> float:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "SELECT pre_notify_hours FROM user_preferences WHERE discord_id=?",
-            (discord_id,),
-        )
-        row = await cur.fetchone()
-    return row[0] if row else 1.0
-
-
-async def set_pre_notify_hours(discord_id: str, hours: float) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO user_preferences (discord_id, pre_notify_hours) VALUES (?, ?) "
-            "ON CONFLICT(discord_id) DO UPDATE SET pre_notify_hours=excluded.pre_notify_hours",
-            (discord_id, hours),
-        )
-        await db.commit()
-
-
-async def get_parties_due_pre_notification(now_iso: str) -> list[dict]:
-    """사전 알림 시간이 된 미통보 파티 슬롯 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            "SELECT p.*, ps.discord_id AS member_id, "
-            "COALESCE(up.pre_notify_hours, 1.0) AS pre_hours "
-            "FROM parties p "
-            "JOIN party_slots ps ON ps.party_message_id = p.message_id "
-            "LEFT JOIN user_preferences up ON up.discord_id = ps.discord_id "
-            "WHERE p.scheduled_datetime IS NOT NULL "
-            "AND p.status IN ('recruiting', 'full', 'closed') "
-            "AND p.notified = 0 "
-            "AND datetime(p.scheduled_datetime, '-' || CAST(COALESCE(up.pre_notify_hours,1.0)*60 AS INTEGER) || ' minutes') <= ?",
-            (now_iso,),
-        )
-        rows = await cur.fetchall()
-    return [dict(r) for r in rows]
-
-
-async def mark_pre_notified(message_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE parties SET notified=1 WHERE message_id=?", (message_id,)
-        )
-        await db.commit()
 
 
 async def log_notification(

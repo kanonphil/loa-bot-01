@@ -4,7 +4,11 @@
       "Bash(python -c ' *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "PowerShell(where.exe gh 2>$null; [System.Environment]::GetEnvironmentVariable\\(\"GITHUB_TOKEN\"\\))"
+      "PowerShell(where.exe gh 2>$null; [System.Environment]::GetEnvironmentVariable\\(\"GITHUB_TOKEN\"\\))",
+      "Bash(dir D:\\\\01-STUDY\\\\loa-bot /s /b)",
+      "Bash(findstr /i \"assets\\\\|image\\\\|png\\\\|jpg\")",
+      "Bash(git -C \"D:\\\\01-STUDY\\\\loa-bot\" status)",
+      "Bash(git -C \"D:\\\\01-STUDY\\\\loa-bot\" diff)"
     ]
   }
 }

@@ -24,7 +24,7 @@ COGS = [
     "bot.cogs.admin",
     "bot.cogs.subscription",
     "bot.cogs.invite",
-    "bot.cogs.preference",
+    "bot.cogs.guide",
 ]
 
 
@@ -73,34 +73,6 @@ class LoABot(commands.Bot):
         """30초마다 일정 알림 발송 + 24시간 지난 파티 자동 정리"""
         now     = datetime.now(KST)
         now_iso = now.isoformat()
-
-        # 사전 알림 (개인별 설정 시간 전 DM)
-        pre_rows = await db.get_parties_due_pre_notification(now_iso)
-        pre_notified: set[str] = set()
-        for row in pre_rows:
-            msg_id = row["message_id"]
-            if msg_id in pre_notified:
-                continue
-            pre_notified.add(msg_id)
-            slots = await db.get_party_slots(msg_id)
-            raid_title = f"{row['raid_name']} {row['difficulty']} {row['proficiency']}"
-            link = f"<#{row['channel_id']}>"
-            for s in slots:
-                hours = await db.get_pre_notify_hours(s["discord_id"])
-                if hours == 0.0:
-                    continue
-                h = int(hours)
-                m = int((hours - h) * 60)
-                time_str = f"{h}시간" if m == 0 else f"{h}시간 {m}분" if h > 0 else f"{m}분"
-                try:
-                    user = await self.fetch_user(int(s["discord_id"]))
-                    await user.send(
-                        f"⏰ **{raid_title}** 공대가 **{time_str} 후** 시작합니다!\n"
-                        f"일정: **{row['scheduled_time']}** | {link}"
-                    )
-                except discord.HTTPException:
-                    pass
-            await db.mark_pre_notified(msg_id)
 
         # 시작 시각 알림 (채널 멘션)
         for party in await db.get_parties_due_notification(now_iso):

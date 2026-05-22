@@ -171,9 +171,21 @@ class InviteResponseView(View):
             if n in cache_map and cache_map[n]["item_level"] and cache_map[n]["item_level"] >= party["min_level"]
         ]
         if not qualifying:
-            await interaction.response.edit_message(
-                content=f"❌ 최소 아이템 레벨({party['min_level']}) 이상의 캐릭터가 없습니다.", view=None
-            )
+            # 캐시가 전혀 없는 캐릭터가 있으면 원인을 구체적으로 안내
+            no_cache = [n for n in registered if n not in cache_map or not cache_map[n].get("item_level")]
+            if no_cache:
+                await interaction.response.edit_message(
+                    content=(
+                        f"❌ 캐릭터 정보가 아직 로드되지 않았습니다.\n"
+                        f"`/원정대` 명령어를 한 번 실행한 후 다시 시도해주세요."
+                    ),
+                    view=None,
+                )
+            else:
+                await interaction.response.edit_message(
+                    content=f"❌ 최소 아이템 레벨 **{party['min_level']}** 이상의 캐릭터가 없습니다.",
+                    view=None,
+                )
             self.stop()
             return
         if len(qualifying) == 1:
@@ -1108,20 +1120,28 @@ async def _post_party(
     party = await db.get_party(str(starter_msg.id))
     await starter_msg.edit(embed=party_embed(party, []), view=view)
 
-    # 구독자 DM 발송 (생성자 제외)
+    # 구독자 DM 발송 (생성자·이미 해당 레이드 참여 중인 유저 제외)
     subscribers = await db.get_raid_subscribers(raid_name, difficulty)
     if subscribers:
+        # 이번 주 해당 레이드에 이미 참여 중인 유저 집합
+        party_week_key = db.get_week_key_for_dt(scheduled_datetime) if scheduled_datetime else db.get_week_key()
+        already_in: set[str] = set()
+        new_msg_id = str(starter_msg.id)
+        for sub_id in subscribers:
+            slots = await db.get_user_active_slots_in_raid(sub_id, raid_name, new_msg_id, party_week_key)
+            if slots:
+                already_in.add(sub_id)
+
         link = f"<#{thread.id}>"
         dm_content = (
             f"🔔 **{raid_name} {difficulty}** 새 공대가 모집을 시작했습니다!\n"
             f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**\n"
             f"{link}"
         )
-        msg_id = str(starter_msg.id)
         for sub_id in subscribers:
-            if sub_id != leader_id:
+            if sub_id != leader_id and sub_id not in already_in:
                 await _send_dm(interaction.client, sub_id, dm_content)
-                await db.log_notification(sub_id, raid_name, difficulty, msg_id)
+                await db.log_notification(sub_id, raid_name, difficulty, new_msg_id)
 
 
 async def _auto_join_dps(
