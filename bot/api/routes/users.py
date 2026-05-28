@@ -43,7 +43,7 @@ async def get_users(guild_id: str | None = None):
       if guild:
         for u in users:
           member = guild.get_member(int(u["discord_id"]))
-          u["discord_nick"] = member.nick if member else None
+          u["discord_nick"] = member.display_name if member else None
 
   return users
 
