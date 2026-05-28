@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from bot.api.auth import verify_api_key
+from bot.api import bot_ref
 import bot.database.manager as db
 import aiosqlite
 
@@ -9,7 +10,7 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 # ── 유저 목록 ─────────────────────────────────────────────
 
 @router.get("")
-async def get_users():
+async def get_users(guild_id: str | None = None):
   async with aiosqlite.connect(db.DB_PATH) as conn:
     conn.row_factory = aiosqlite.Row
     # 1단계: 유저 목록 조회
@@ -33,6 +34,17 @@ async def get_users():
         )
         row = await cur.fetchone()
         u["representative"] = row[0] if row else None
+
+  # 3단계: 디스코드 서버 별명 조회
+  if guild_id:
+    bot = bot_ref.get_bot()
+    if bot:
+      guild = bot.get_guild(int(guild_id))
+      if guild:
+        for u in users:
+          member = guild.get_member(int(u["discord_id"]))
+          u["discord_nick"] = member.nick if member else None
+
   return users
 
 
