@@ -866,8 +866,10 @@ async def get_disbanded_parties(guild_id: str, limit: int = 50) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT * FROM parties WHERE guild_id=? AND status='disbanded' "
-            "ORDER BY created_at DESC LIMIT ?",
+            "SELECT p.*, "
+            "(SELECT COUNT(*) FROM party_slots s WHERE s.party_message_id = p.message_id) AS slot_count "
+            "FROM parties p WHERE p.guild_id=? AND p.status='disbanded' "
+            "ORDER BY p.created_at DESC LIMIT ?",
             (guild_id, limit),
         )
         rows = await cur.fetchall()
