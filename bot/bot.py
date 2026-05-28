@@ -32,6 +32,7 @@ class LoABot(commands.Bot):
     def __init__(self) -> None:
         intents = discord.Intents.default()
         intents.message_content = False
+        intents.members = True
         super().__init__(command_prefix="!", intents=intents, help_command=None)
         self._thread_purge_failures: dict[str, int] = {}  # channel_id → 실패 횟수
 
