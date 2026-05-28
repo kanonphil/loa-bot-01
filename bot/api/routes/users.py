@@ -58,7 +58,7 @@ async def get_characters(discord_id: str):
 # ── 유저 참여 이력 ────────────────────────────────────────
 
 @router.get("/stale")
-async def get_stale_users(days: int = 14):
+async def get_stale_users(days: int = 28):
   """캐릭터 동기화가 N일 이상 안 된 유저 (API 키 만료 의심)."""
   async with aiosqlite.connect(db.DB_PATH) as conn:
     conn.row_factory = aiosqlite.Row
