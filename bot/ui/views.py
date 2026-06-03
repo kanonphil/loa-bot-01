@@ -133,14 +133,21 @@ class InviteCharSelectView(View):
 
 
 class InviteResponseView(View):
-    def __init__(self, message_id: str, party: dict, invitee_id: str) -> None:
+    def __init__(self, message_id: str, party: dict, invitee_id: str,
+                 client: discord.Client | None = None) -> None:
         super().__init__(timeout=3600)
         self.message_id = message_id
         self.party      = party
         self.invitee_id = invitee_id
+        self._client    = client
 
     async def on_timeout(self) -> None:
         await db.delete_invite(self.message_id, self.invitee_id)
+        # 초대 만료 시 파티 embed의 예약 슬롯 표시 제거
+        if self._client:
+            party = await db.get_party(self.message_id)
+            if party:
+                await _refresh_party_embed_with_reserved(self._client, party)
 
     @discord.ui.button(label="수락", style=discord.ButtonStyle.success, emoji="✅")
     async def accept(self, interaction: discord.Interaction, button: Button) -> None:
@@ -277,7 +284,8 @@ class InviteSlotSelectView(View):
             await _refresh_party_embed_with_reserved(interaction.client, party)
 
         raid_title = f"{self.party['raid_name']} {self.party['difficulty']} {self.party['proficiency']}"
-        view = InviteResponseView(self.party["message_id"], self.party, self.target_id)
+        view = InviteResponseView(self.party["message_id"], self.party, self.target_id,
+                                  client=interaction.client)
         try:
             target_user = await interaction.client.fetch_user(int(self.target_id))
             await target_user.send(
@@ -689,6 +697,7 @@ class RecruitView(View):
         self.memo:                str | None = None
         self._uid = f"{id(self):x}"  # 인스턴스마다 고유 — custom_id 일관성 유지
         self._original_interaction: discord.Interaction | None = None
+        self._creating = False  # 공대 생성 중복 실행 방지
         self._build()
 
     # ── 뷰 재구성 ──────────────────────────────────
@@ -853,6 +862,10 @@ class RecruitView(View):
         if str(interaction.user.id) != self.leader_id:
             await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
             return
+        if self._creating:
+            await interaction.response.send_message("이미 공대를 생성 중입니다.", ephemeral=True)
+            return
+        self._creating = True  # 첫 번째 await 이전에 플래그 설정 — 경쟁 조건 방지
         self.stop()  # 생성 완료 후 타임아웃 핸들러가 메시지를 덮지 않도록 중단
         await _post_party(
             interaction,

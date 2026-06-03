@@ -604,12 +604,16 @@ async def auto_assign_slot(
 
         slot_number = available[0]
 
-        await db.execute(
-            "INSERT INTO party_slots "
-            "(party_message_id, slot_number, discord_id, character_name, character_class, role) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (message_id, slot_number, discord_id, character_name, character_class, role),
-        )
+        try:
+            await db.execute(
+                "INSERT INTO party_slots "
+                "(party_message_id, slot_number, discord_id, character_name, character_class, role) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (message_id, slot_number, discord_id, character_name, character_class, role),
+            )
+        except aiosqlite.IntegrityError:
+            # 동시 참여 요청으로 슬롯 충돌 발생 시
+            return False, 0, "다른 유저가 동시에 참여해 슬롯이 찼습니다. 다시 시도해주세요."
 
         cur = await db.execute(
             "SELECT COUNT(*), p.total_slots FROM party_slots ps "
