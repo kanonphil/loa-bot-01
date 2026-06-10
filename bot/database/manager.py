@@ -570,6 +570,12 @@ async def auto_assign_slot(
             (message_id,),
         )
         taken = {r[0] for r in await cur.fetchall()}
+        # party_invites 예약 슬롯도 taken으로 처리 — 초대 중인 슬롯 탈취 방지
+        cur = await db.execute(
+            "SELECT slot_number FROM party_invites WHERE message_id=?",
+            (message_id,),
+        )
+        taken |= {r[0] for r in await cur.fetchall()}
 
         if party_group and party_split:
             start = (party_group - 1) * party_split + 1
@@ -1020,14 +1026,34 @@ async def assign_invite_slot(
         if await cur.fetchone():
             return False, "이미 파티에 참여 중입니다."
 
-        # 서포터 중복 체크
+        # 서포터 중복 체크 — 파티 분할 단위 적용
         if role == "support":
             cur = await db.execute(
-                "SELECT COUNT(*) FROM party_slots WHERE party_message_id=? AND role='support'",
+                "SELECT rd.party_split FROM parties p "
+                "JOIN raid_difficulties rd ON rd.raid_name=p.raid_name AND rd.difficulty=p.difficulty "
+                "WHERE p.message_id=?",
                 (message_id,),
             )
-            if (await cur.fetchone())[0] >= 1:
-                return False, "이미 서포터가 있습니다."
+            split_row  = await cur.fetchone()
+            party_split_val = split_row[0] if split_row else None
+            if party_split_val:
+                sub_idx = (slot_number - 1) // party_split_val
+                rng_start = sub_idx * party_split_val + 1
+                rng_end   = rng_start + party_split_val
+                cur = await db.execute(
+                    "SELECT COUNT(*) FROM party_slots "
+                    "WHERE party_message_id=? AND slot_number >= ? AND slot_number < ? AND role='support'",
+                    (message_id, rng_start, rng_end),
+                )
+                if (await cur.fetchone())[0] >= 1:
+                    return False, f"이미 {sub_idx + 1}파티에 서포터가 있습니다."
+            else:
+                cur = await db.execute(
+                    "SELECT COUNT(*) FROM party_slots WHERE party_message_id=? AND role='support'",
+                    (message_id,),
+                )
+                if (await cur.fetchone())[0] >= 1:
+                    return False, "이미 서포터가 있습니다."
 
         await db.execute(
             "INSERT INTO party_slots "

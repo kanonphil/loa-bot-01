@@ -229,7 +229,9 @@ class InviteResponseView(View):
             await _refresh_party_embed_with_reserved(interaction.client, party)
         try:
             leader = await interaction.client.fetch_user(int(self.party["leader_id"]))
-            await leader.send(f"❌ <@{self.invitee_id}>님이 **{self.party['raid_name']} {self.party['difficulty']}** 초대를 거절했습니다.")
+            await leader.send(
+                f"❌ <@{self.invitee_id}>님이 **{self.party['raid_name']} {self.party['difficulty']}** 초대를 거절했습니다.\n{_party_url(self.party)}"
+            )
         except discord.HTTPException:
             pass
         self.stop()
@@ -995,6 +997,15 @@ class CancelModal(Modal, title="공대 취소"):
             if s["discord_id"] != leader_id:
                 await _send_dm(interaction.client, s["discord_id"], dm_content)
 
+        # embed를 종료 상태로 갱신 — 채널 삭제 실패 시에도 embed가 방치되지 않도록
+        try:
+            from bot.ui.embeds import party_embed
+            cancelled_party = {**self.party, "status": "disbanded"}
+            msg = await interaction.channel.fetch_message(int(message_id))
+            await msg.edit(embed=party_embed(cancelled_party, slots), view=None)
+        except discord.HTTPException:
+            pass
+
         try:
             await interaction.channel.delete()
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
@@ -1051,10 +1062,11 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
         await db.update_party_schedule(message_id, scheduled_time, dt_kst.isoformat())
         await db.update_party_memo(message_id, self.memo_input.value.strip() or None)
 
-        party = await db.get_party(message_id)
-        slots = await db.get_party_slots(message_id)
+        party    = await db.get_party(message_id)
+        slots    = await db.get_party_slots(message_id)
+        reserved = await db.get_reserved_slots(message_id)
         from bot.ui.embeds import party_embed
-        embed = party_embed(party, slots)
+        embed = party_embed(party, slots, reserved)
 
         closed = party["status"] == "closed"
         await self.message.edit(
@@ -1474,10 +1486,13 @@ class PartyView(View):
                 await interaction.channel.send(
                     f"👑 **파티장 변경** — <@{new_leader}>님이 새 파티장이 되었습니다."
                 )
+                # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록
+                await self._refresh_party(interaction.message, was_full=was_full, client=interaction.client)
                 await _send_dm(
                     interaction.client, new_leader,
                     f"👑 **{party['raid_name']} {party['difficulty']}** 공대의 파티장이 되었습니다!\n{_party_url(party)}",
                 )
+                return
             else:
                 # 마지막 멤버였으면 파티 자동 종료
                 await db.disband_party(message_id)
@@ -1555,7 +1570,8 @@ class PartyView(View):
         slots = await db.get_party_slots(party["message_id"])
 
         from bot.ui.embeds import party_embed
-        embed = party_embed(party, slots)
+        reserved = await db.get_reserved_slots(party["message_id"])
+        embed = party_embed(party, slots, reserved)
         if party["status"] == "disbanded":
             await message.edit(embed=embed, view=None)
             return
@@ -1986,12 +2002,13 @@ class ManageView(View):
         party = await db.get_party(self.party["message_id"])
         if not party:
             return
-        slots = await db.get_party_slots(party["message_id"])
+        slots    = await db.get_party_slots(party["message_id"])
+        reserved = await db.get_reserved_slots(party["message_id"])
         from bot.ui.embeds import party_embed
         closed = party["status"] == "closed"
         try:
             await self.original_message.edit(
-                embed=party_embed(party, slots),
+                embed=party_embed(party, slots, reserved),
                 view=PartyView(total_slots=self.total_slots, closed=closed),
             )
         except discord.HTTPException:
@@ -2185,12 +2202,13 @@ class DelegateSelectView(View):
 
         # 원본 공대 embed 갱신
         try:
-            party = await db.get_party(self.party["message_id"])
-            slots = await db.get_party_slots(self.party["message_id"])
+            party    = await db.get_party(self.party["message_id"])
+            slots    = await db.get_party_slots(self.party["message_id"])
+            reserved = await db.get_reserved_slots(self.party["message_id"])
             from bot.ui.embeds import party_embed
             closed = (party or {}).get("status") == "closed"
             await self.original_message.edit(
-                embed=party_embed(party, slots),
+                embed=party_embed(party, slots, reserved),
                 view=PartyView(total_slots=self.total_slots, closed=closed),
             )
         except discord.HTTPException:
