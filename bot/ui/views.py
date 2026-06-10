@@ -74,7 +74,7 @@ class InviteRoleSelectView(View):
                         leader = await interaction.client.fetch_user(int(party["leader_id"]))
                         await leader.send(
                             f"✅ **{self.char_name}**({self.char_class}/{role_text})님이 "
-                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!"
+                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}"
                         )
                     except discord.HTTPException:
                         pass
@@ -123,7 +123,7 @@ class InviteCharSelectView(View):
                         leader = await interaction.client.fetch_user(int(party["leader_id"]))
                         await leader.send(
                             f"✅ **{char_name}**({char_info['class']})님이 "
-                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!"
+                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}"
                         )
                     except discord.HTTPException:
                         pass
@@ -207,7 +207,7 @@ class InviteResponseView(View):
                     await _refresh_party_embed_with_reserved(interaction.client, party)
                     try:
                         leader = await interaction.client.fetch_user(int(party["leader_id"]))
-                        await leader.send(f"✅ **{q['name']}**({q['class']})님이 **{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!")
+                        await leader.send(f"✅ **{q['name']}**({q['class']})님이 **{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}")
                     except discord.HTTPException:
                         pass
                 else:
@@ -1829,19 +1829,19 @@ class RoleSelectView(View):
                 view=None,
             )
             await db.remove_waitlist(self.message_id, self.discord_id)
-            if party and party["leader_id"] != self.discord_id:
-                raid_title = f"{party['raid_name']} {party['difficulty']}"
-                link = f"<#{party['channel_id']}>"
-                role_icon = "🛡️" if role == "support" else "⚔️"
-                await _send_dm(
-                    interaction.client, party["leader_id"],
-                    f"{role_icon} **{raid_title}** 공대에 **{char['name']}**({char['class']})이(가) 참여했습니다!\n{link}",
-                )
+            # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록
             try:
                 msg = await interaction.channel.fetch_message(int(self.message_id))
                 await self.party_view._refresh_party(msg)
             except discord.HTTPException:
                 pass
+            if party and party["leader_id"] != self.discord_id:
+                raid_title = f"{party['raid_name']} {party['difficulty']}"
+                role_icon = "🛡️" if role == "support" else "⚔️"
+                await _send_dm(
+                    interaction.client, party["leader_id"],
+                    f"{role_icon} **{raid_title}** 공대에 **{char['name']}**({char['class']})이(가) 참여했습니다!\n{_party_url(party)}",
+                )
         return cb
 
 
@@ -2202,5 +2202,5 @@ class DelegateSelectView(View):
         )
         await _send_dm(
             interaction.client, new_leader_id,
-            f"👑 **{self.party['raid_name']} {self.party['difficulty']}** 공대의 파티장이 되었습니다!",
+            f"👑 **{self.party['raid_name']} {self.party['difficulty']}** 공대의 파티장이 되었습니다!\n{_party_url(self.party)}",
         )
