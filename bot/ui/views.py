@@ -291,7 +291,7 @@ class InviteSlotSelectView(View):
             await target_user.send(
                 f"⚔️ **{interaction.user.display_name}**님이 "
                 f"**{raid_title}** 공대 **{slot}번** 슬롯에 초대했습니다!\n"
-                f"일정: **{self.party['scheduled_time']}** | <#{self.party['channel_id']}>\n\n"
+                f"일정: **{self.party['scheduled_time']}** | {_party_url(self.party)}\n\n"
                 f"참여 의사를 알려주세요:",
                 view=view,
             )
@@ -359,12 +359,17 @@ async def _send_dm(client: discord.Client, discord_id: str, content: str) -> Non
         pass
 
 
+def _party_url(party: dict) -> str:
+    """DM용 공대 스레드 직접 링크 — 채널 멘션(<#id>)은 포럼 스레드에서 알 수 없음으로 표시."""
+    return f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+
+
 async def _notify_waitlist(client: discord.Client, party: dict) -> None:
     waitlist = await db.get_waitlist(party["message_id"])
     if not waitlist:
         return
     raid_title = f"{party['raid_name']} {party['difficulty']}"
-    link = f"<#{party['channel_id']}>"
+    link = _party_url(party)
     for discord_id in waitlist:
         await _send_dm(
             client, discord_id,
@@ -1072,7 +1077,7 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
 
         # 파티원(파티장 제외)에게 DM
         raid_title = f"{party['raid_name']} {party['difficulty']}"
-        link = f"<#{party['channel_id']}>"
+        link = _party_url(party)
         leader_id = party["leader_id"]
         for s in slots:
             if s["discord_id"] != leader_id:
@@ -1145,7 +1150,7 @@ async def _post_party(
             if slots:
                 already_in.add(sub_id)
 
-        link = f"<#{thread.id}>"
+        link = f"https://discord.com/channels/{interaction.guild_id}/{thread.id}"
         dm_content = (
             f"🔔 **{raid_name} {difficulty}** 새 공대가 모집을 시작했습니다!\n"
             f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**\n"
@@ -1189,18 +1194,19 @@ async def _auto_join_dps(
     if ok:
         await db.remove_waitlist(message_id, discord_id)
         party_info = await db.get_party(message_id)
-        if party_info and party_info["leader_id"] != discord_id:
-            raid_title = f"{party_info['raid_name']} {party_info['difficulty']}"
-            link = f"<#{party_info['channel_id']}>"
-            await _send_dm(
-                interaction.client, party_info["leader_id"],
-                f"⚔️ **{raid_title}** 공대에 **{char_info['name']}**({char_info['class']})이(가) 참여했습니다!\n{link}",
-            )
+        # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록
         try:
             msg = await interaction.channel.fetch_message(int(message_id))
             await party_view._refresh_party(msg)
         except discord.HTTPException:
             pass
+        if party_info and party_info["leader_id"] != discord_id:
+            raid_title = f"{party_info['raid_name']} {party_info['difficulty']}"
+            link = _party_url(party_info)
+            await _send_dm(
+                interaction.client, party_info["leader_id"],
+                f"⚔️ **{raid_title}** 공대에 **{char_info['name']}**({char_info['class']})이(가) 참여했습니다!\n{link}",
+            )
 
 
 # ─────────────────────────────────────────────────────
@@ -1468,10 +1474,9 @@ class PartyView(View):
                 await interaction.channel.send(
                     f"👑 **파티장 변경** — <@{new_leader}>님이 새 파티장이 되었습니다."
                 )
-                link = f"<#{party['channel_id']}>"
                 await _send_dm(
                     interaction.client, new_leader,
-                    f"👑 **{party['raid_name']} {party['difficulty']}** 공대의 파티장이 되었습니다!\n{link}",
+                    f"👑 **{party['raid_name']} {party['difficulty']}** 공대의 파티장이 되었습니다!\n{_party_url(party)}",
                 )
             else:
                 # 마지막 멤버였으면 파티 자동 종료
