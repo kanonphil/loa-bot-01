@@ -1162,15 +1162,19 @@ async def _post_party(
             if slots:
                 already_in.add(sub_id)
 
-        link = f"https://discord.com/channels/{interaction.guild_id}/{thread.id}"
-        dm_content = (
-            f"🔔 **{raid_name} {difficulty}** 새 공대가 모집을 시작했습니다!\n"
-            f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**\n"
-            f"{link}"
+        dm_embed = discord.Embed(
+            title=f"🔔 {raid_name} {difficulty} 새 공대가 모집을 시작했습니다!",
+            url=f"https://discord.com/channels/{interaction.guild_id}/{thread.id}/{starter_msg.id}",
+            description=f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**",
+            color=0x3498DB,
         )
         for sub_id in subscribers:
             if sub_id != leader_id and sub_id not in already_in:
-                await _send_dm(interaction.client, sub_id, dm_content)
+                try:
+                    user = await interaction.client.fetch_user(int(sub_id))
+                    await user.send(embed=dm_embed)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass
                 await db.log_notification(sub_id, raid_name, difficulty, new_msg_id)
 
 
