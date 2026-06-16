@@ -235,6 +235,10 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE parties ADD COLUMN pre_notified INTEGER DEFAULT 0")
         except Exception:
             pass
+        try:
+            await db.execute("ALTER TABLE parties ADD COLUMN extreme_period_notified INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
         await db.commit()
     await seed_game_data()
     await _migrate_encrypt_api_keys()
@@ -1314,7 +1318,7 @@ async def get_user_extreme_slot_this_week(
 
 
 async def get_expired_extreme_parties(now_iso: str) -> list[dict]:
-    """available_until이 지난 익스트림 레이드의 활성 파티."""
+    """available_until이 지났고 아직 기간 만료 알림이 발송되지 않은 익스트림 레이드의 활성 파티."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
@@ -1324,11 +1328,22 @@ async def get_expired_extreme_parties(now_iso: str) -> list[dict]:
             "WHERE c.is_extreme = 1 "
             "AND r.available_until IS NOT NULL "
             "AND r.available_until < ? "
-            "AND p.status IN ('recruiting', 'full', 'closed')",
+            "AND p.status IN ('recruiting', 'full', 'closed') "
+            "AND (p.extreme_period_notified IS NULL OR p.extreme_period_notified = 0)",
             (now_iso,),
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
+
+
+async def mark_extreme_period_notified(message_id: str) -> None:
+    """익스트림 레이드 운영 기간 만료 알림 발송 완료 표시 — 30초 루프 중복 방지."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE parties SET extreme_period_notified = 1 WHERE message_id = ?",
+            (message_id,),
+        )
+        await db.commit()
 
 
 # ── 난이도 ─────────────────────────────────────

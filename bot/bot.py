@@ -90,9 +90,10 @@ class LoABot(commands.Bot):
             )
             await db.mark_notified(party["message_id"])
 
-        # 익스트림 레이드 운영 기간 만료 → 활성 파티 자동 종료
+        # 익스트림 레이드 운영 기간 만료 → 알림만 발송, 파티는 유지
+        # embed/버튼/스레드 잠금 없음 — 공대장이 직접 클리어/해체 처리하도록
         for party in await db.get_expired_extreme_parties(now_iso):
-            await db.disband_party(party["message_id"])
+            await db.mark_extreme_period_notified(party["message_id"])
             thread = self.get_channel(int(party["channel_id"]))
             if thread is None:
                 try:
@@ -101,19 +102,12 @@ class LoABot(commands.Bot):
                     thread = None
             if thread is None:
                 continue
-            try:
-                msg = await thread.fetch_message(int(party["message_id"]))
-                party["status"] = "disbanded"
-                slots = await db.get_party_slots(party["message_id"])
-                await msg.edit(embed=party_embed(party, slots), view=None)
-            except (discord.NotFound, discord.Forbidden):
-                pass
             raid_title = f"{party['raid_name']} {party['difficulty']}"
-            await thread.send(
-                f"⏰ **{raid_title}** 익스트림 레이드 운영 기간이 종료되었습니다."
-            )
             try:
-                await thread.edit(archived=True, locked=True)
+                await thread.send(
+                    f"⏰ **{raid_title}** 익스트림 레이드 운영 기간이 종료되었습니다.\n"
+                    f"클리어 또는 파티 해체를 처리해 주세요."
+                )
             except discord.HTTPException:
                 pass
 
