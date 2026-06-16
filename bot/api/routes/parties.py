@@ -92,6 +92,9 @@ async def clear_party(message_id: str):
       channel = bot.get_channel(int(party["channel_id"]))
       if channel is None:
         channel = await bot.fetch_channel(int(party["channel_id"]))
+      # 잠긴/아카이브된 스레드는 먼저 열어야 메시지 발송 가능
+      if getattr(channel, 'locked', False) or getattr(channel, 'archived', False):
+        await channel.edit(archived=False, locked=False)
       msg = await channel.fetch_message(int(message_id))
       cleared_party = {**party, "status": "disbanded"}
       await msg.edit(embed=party_embed(cleared_party, slots), view=None)
@@ -109,6 +112,33 @@ async def clear_party(message_id: str):
       pass
 
   return {"success": True, "count": count}
+
+
+# ── 스레드 잠금 해제 ──────────────────────────────────────
+
+@router.patch("/{message_id}/unlock")
+async def unlock_thread(message_id: str):
+  import discord as _discord
+  from bot.api import bot_ref
+
+  party = await db.get_party(message_id)
+  if not party:
+    return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+
+  bot = bot_ref.get_bot()
+  if not bot:
+    return {"success": False, "reason": "봇이 준비되지 않았습니다."}
+
+  try:
+    channel = bot.get_channel(int(party["channel_id"]))
+    if channel is None:
+      channel = await bot.fetch_channel(int(party["channel_id"]))
+    await channel.edit(archived=False, locked=False)
+    return {"success": True}
+  except (_discord.NotFound, _discord.Forbidden):
+    return {"success": False, "reason": "채널을 찾을 수 없거나 권한이 없습니다."}
+  except _discord.HTTPException as e:
+    return {"success": False, "reason": str(e)}
 
 
 # ── 파티 취소 (완전 삭제) ─────────────────────────────────
