@@ -71,14 +71,43 @@ async def disband_party(message_id: str):
 
 @router.patch("/{message_id}/clear")
 async def clear_party(message_id: str):
+  import discord as _discord
+  from bot.api import bot_ref
+  from bot.ui.embeds import party_embed
+
   party = await db.get_party(message_id)
-  if not party or party["status"] == "disbanded":
-    return {"success": False, "reason": "이미 종료된 파티입니다."}
+  if not party:
+    return {"success": False, "reason": "파티를 찾을 수 없습니다."}
   slots = await db.get_party_slots(message_id)
   if not slots:
     return {"success": False, "reason": "파티원이 없습니다."}
+
   count = await db.complete_raid_for_party(message_id)
   await db.disband_party(message_id)
+
+  # Discord embed 갱신 + 클리어 메시지 발송
+  bot = bot_ref.get_bot()
+  if bot:
+    try:
+      channel = bot.get_channel(int(party["channel_id"]))
+      if channel is None:
+        channel = await bot.fetch_channel(int(party["channel_id"]))
+      msg = await channel.fetch_message(int(message_id))
+      cleared_party = {**party, "status": "disbanded"}
+      await msg.edit(embed=party_embed(cleared_party, slots), view=None)
+      raid_title = f"{party['raid_name']} {party['difficulty']}"
+      mentions   = " ".join(f"<@{s['discord_id']}>" for s in slots)
+      await channel.send(
+        f"🏆 **{raid_title}** 클리어!\n{mentions}\n"
+        f"파티원 **{count}명**의 레이드 체크가 완료되었습니다."
+      )
+      try:
+        await channel.edit(archived=True, locked=True)
+      except _discord.HTTPException:
+        pass
+    except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
+      pass
+
   return {"success": True, "count": count}
 
 
