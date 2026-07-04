@@ -1,11 +1,22 @@
-<p class="raid-progress">{{ done_count }} / {{ total_slots }} 완료</p>
+{% set pct = ((done_count / total_slots * 100) | round(0) | int) if total_slots else 0 %}
+<div class="raid-progress-card">
+  <div class="raid-progress-header">
+    <span class="raid-progress-label">이번 주 진행률</span>
+    <span class="raid-progress-count">{{ done_count }} / {{ total_slots }} 완료</span>
+  </div>
+  <div class="raid-progress-bar">
+    <div class="raid-progress-fill" style="width: {{ pct }}%"></div>
+  </div>
+</div>
 
+<div class="raid-checklist-card">
 {% for group in groups %}
 <div class="raid-category">
   <h3>{{ group.category }}</h3>
   {% for r in group.raids %}
   <div class="raid-row">
-    <span class="raid-name">{{ r.icon }} {{ r.short_name }}</span>
+    <span class="raid-icon">{{ r.icon }}</span>
+    <span class="raid-name">{{ r.short_name }}</span>
     <span class="raid-diffs">
       {% for diff_name, diff_info in r.difficulties %}
       <form
@@ -27,3 +38,4 @@
   {% endfor %}
 </div>
 {% endfor %}
+</div>

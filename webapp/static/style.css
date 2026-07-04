@@ -352,38 +352,105 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   outline: none;
 }
 
-.raid-progress {
-  font-size: 15px;
-  color: var(--text-muted);
+.raid-progress-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
   margin-bottom: 16px;
 }
 
+.raid-progress-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.raid-progress-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.raid-progress-count {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.raid-progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--sidebar-bg);
+  overflow: hidden;
+}
+
+.raid-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #9aa4ff);
+  transition: width 0.3s ease;
+}
+
+.raid-checklist-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px 6px;
+}
+
 .raid-category {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .raid-category h3 {
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
 }
 
 .raid-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.raid-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.raid-row + .raid-row {
+  border-top: 1px solid var(--border);
+}
+
+.raid-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--sidebar-bg);
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .raid-name {
-  min-width: 160px;
+  min-width: 100px;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .raid-diffs {
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
 .diff-toggle-form {
@@ -391,12 +458,13 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 }
 
 .diff-toggle {
-  padding: 6px 14px;
-  border-radius: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--sidebar-bg);
   color: var(--text-muted);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, filter 0.15s ease;
 }
@@ -410,6 +478,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+  font-weight: 600;
 }
 
 .diff-toggle.done:hover {
