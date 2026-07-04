@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from bot.api.routes import raids, parties, users, stats, status, completions, subscriptions
+from bot.api.routes import raids, parties, users, stats, status, completions, subscriptions, internal
 
 app = FastAPI(title="로아봇 관리자 API", version="1.0.0")
 
@@ -24,6 +24,7 @@ app.include_router(stats.router,         prefix="/api/stats",         tags=["sta
 app.include_router(status.router,        prefix="/api/status",        tags=["status"])
 app.include_router(completions.router,   prefix="/api/completions",   tags=["completions"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
+app.include_router(internal.router,      prefix="/api/internal",      tags=["internal"])
 
 
 @app.get("/api/health")

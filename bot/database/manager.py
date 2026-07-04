@@ -1,9 +1,11 @@
+import os
 import aiosqlite
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from config import encrypt_api_key, decrypt_api_key, is_plaintext_key
 
-DB_PATH = "loa_bot.db"
+# LOA_DB_PATH로 덮어쓸 수 있음 — 로컬 테스트 시 운영 DB(loa_bot.db)와 분리하는 용도.
+DB_PATH = os.environ.get("LOA_DB_PATH", "loa_bot.db")
 KST = timezone(timedelta(hours=9))
 
 SCHEMA = """
@@ -314,6 +316,16 @@ async def get_user_api_key(discord_id: str) -> Optional[str]:
         )
         row = await cur.fetchone()
     return decrypt_api_key(row[0]) if row else None
+
+
+async def user_exists(discord_id: str) -> bool:
+    """discord_id가 /api등록을 마쳐 users 테이블에 있는지만 확인 (복호화 없이 가볍게)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT 1 FROM users WHERE discord_id=?", (discord_id,)
+        )
+        row = await cur.fetchone()
+    return row is not None
 
 
 # ──────────────────────────────────────────────
