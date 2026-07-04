@@ -141,6 +141,13 @@ body {
   overflow-x: auto;
 }
 
+/* 레이드체크/공대모집처럼 폭이 좁은 페이지 콘텐츠를 화면 중앙에 배치 */
+.page-content {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
 .welcome-banner {
   font-size: 18px;
   font-weight: 500;
@@ -408,7 +415,7 @@ body {
 
 .party-slots {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
   max-width: 700px;
   margin-bottom: 24px;
@@ -424,8 +431,8 @@ body {
 
 .party-group {
   flex: 1;
-  min-width: 220px;
-  max-width: 320px;
+  min-width: 260px;
+  max-width: 340px;
 }
 
 .party-group-header {
@@ -465,10 +472,15 @@ body {
   font-weight: 600;
   color: var(--text-muted);
   min-width: 18px;
+  flex-shrink: 0;
 }
 
 .slot-char {
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .slot-class {
@@ -478,6 +490,8 @@ body {
   background: var(--sidebar-bg);
   color: var(--text-muted);
   margin-left: auto; /* 캐릭터명은 왼쪽 고정, 직업 태그부터는 역할 배지와 함께 오른쪽으로 정렬 */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* 딜러/서포터 배지 — 아이콘+긴 텍스트 대신 색으로만 구분 */

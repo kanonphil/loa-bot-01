@@ -19,6 +19,7 @@
   {% endif %}
 {% endmacro %}
 
+<div class="page-content">
 <a href="/parties" class="party-back-link">&larr; 목록으로</a>
 <h1>{{ party.raid_name }} {{ party.difficulty }} &middot; {{ party.proficiency }}</h1>
 <p class="party-meta">
@@ -93,5 +94,6 @@
 {% elif eligibility %}
 <p class="party-cannot-join">{{ eligibility.reason }}</p>
 {% endif %}
+</div>
 {% endif %}
 {% endblock %}

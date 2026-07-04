@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<div class="page-content">
 <h1>레이드 체크</h1>
 
 {% if not characters %}
@@ -19,4 +20,5 @@
   {% include "_raid_checklist.html" %}
 </div>
 {% endif %}
+</div>
 {% endblock %}
