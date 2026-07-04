@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="chat-box">
+  <div class="chat-messages" id="chat-messages">
+    {% for m in messages %}
+    <div class="chat-message {{ 'user' if m.role == 'user' else 'ai' }}">{{ m.content }}</div>
+    {% endfor %}
+  </div>
+  <form
+    class="chat-form"
+    hx-post="/chat/send"
+    hx-target="#chat-messages"
+    hx-swap="beforeend"
+    hx-on::after-request="this.reset()"
+  >
+    <input type="hidden" name="session_id" value="{{ session_id }}">
+    <input type="text" name="message" placeholder="질문을 입력하세요" autocomplete="off" required>
+    <button type="submit">전송</button>
+  </form>
+</div>
+{% endblock %}

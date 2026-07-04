@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="empty-state">
+  <p class="empty-state-greeting">{{ welcome_message }}</p>
+  <form class="pill-input-form" hx-post="/chat/send">
+    <input type="text" name="message" placeholder="무엇이든 물어보세요" autocomplete="off" required>
+    <button type="submit" aria-label="전송">➤</button>
+  </form>
+</div>
+{% endblock %}
