@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content">
+<h1>메인</h1>
+
+<div class="dashboard-grid">
+  <div class="dash-card">
+    <h2 class="dash-card-title">이번 주 레이드 진행률</h2>
+    {% if not characters %}
+    <p class="dash-empty">등록된 캐릭터가 없습니다. 디스코드에서 <code>/api등록</code>으로 캐릭터를 먼저 등록해주세요.</p>
+    {% else %}
+    <p class="dash-overall-progress">
+      원정대 전체 <strong>{{ overall_done }}/{{ overall_total }}</strong> 완료
+    </p>
+    <ul class="dash-char-progress-list">
+      {% for c in raid_progress %}
+      <li>
+        <span class="dash-char-name">{{ c.character_name }}</span>
+        <span class="dash-char-class">{{ c.character_class }}</span>
+        <span class="dash-char-count">{{ c.done_count }}/{{ c.total_slots }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <a href="/raid-check" class="dash-card-link">레이드 체크로 이동 &rarr;</a>
+    {% endif %}
+  </div>
+
+  <div class="dash-card">
+    <h2 class="dash-card-title">모집 중인 공대</h2>
+    {% if not recruiting_parties %}
+    <p class="dash-empty">모집 중인 공대가 없습니다.</p>
+    {% else %}
+    <ul class="dash-party-list">
+      {% for p in recruiting_parties %}
+      <li>
+        <a href="/parties/{{ p.message_id }}">
+          <span class="dash-party-title">{{ p.raid_name }} {{ p.difficulty }}</span>
+          <span class="dash-party-meta">{{ p.scheduled_time }} &middot; {{ p.slots | length }}/{{ p.total_slots }}인</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <a href="/parties" class="dash-card-link">공대 모집 전체 보기 &rarr;</a>
+  </div>
+
+  <div class="dash-card">
+    <h2 class="dash-card-title">내 캐릭터</h2>
+    {% if not characters %}
+    <p class="dash-empty">등록된 캐릭터가 없습니다.</p>
+    {% else %}
+    <ul class="dash-character-list">
+      {% for c in characters %}
+      <li>
+        <span class="dash-char-name">{{ c.character_name }}</span>
+        <span class="dash-char-class">{{ c.character_class }}</span>
+        <span class="dash-char-level">{{ c.item_level }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+</div>
+{% endblock %}
