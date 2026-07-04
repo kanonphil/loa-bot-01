@@ -36,15 +36,23 @@ async def _page_context(discord_id: str, character_name: str | None) -> dict:
     item_level = selected_info.get("item_level") or 0
     groups = group_by_category(raids, categories, applicable_raids(raids, item_level))
     done = set(completion_data["completions"])
-    total_slots = sum(len(r["difficulties"]) for g in groups for r in g["raids"])
+    # 레이드 하나당 난이도는 여러 개지만, 진행률은 "레이드 단위"로 센다 —
+    # 한 레이드에서 어느 난이도든 하나만 완료하면 그 레이드는 끝난 것으로 취급.
+    total_raids = sum(len(g["raids"]) for g in groups)
+    done_count = sum(
+        1
+        for g in groups
+        for r in g["raids"]
+        if any(f"{r['raid_name']}_{diff_name}" in done for diff_name, _ in r["difficulties"])
+    )
 
     return {
         "characters": characters,
         "selected_character": selected_character,
         "groups": groups,
         "done": done,
-        "done_count": len(done),
-        "total_slots": total_slots,
+        "done_count": done_count,
+        "total_slots": total_raids,
     }
 
 

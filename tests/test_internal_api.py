@@ -164,3 +164,27 @@ def test_toggle_completion_marks_then_unmarks(client):
         headers={"X-Webapp-Key": "test-webapp-key"},
     )
     assert check_again.json()["completions"] == []
+
+
+def test_toggle_completion_replaces_other_difficulty_of_same_raid(client):
+    """레이드 하나당 이번 주 인정되는 난이도는 1개뿐 — 노말을 체크한 뒤 하드를
+    체크하면 노말 체크는 자동으로 사라지고 하드만 남아야 한다."""
+    toggle_url = "/api/internal/completions/toggle"
+    headers = {"X-Webapp-Key": "test-webapp-key"}
+    base = {"discord_id": "111", "character_name": "발키리", "raid_name": "아르모체(4막)"}
+
+    client.post(toggle_url, json={**base, "difficulty": "노말"}, headers=headers)
+    check = client.get(
+        "/api/internal/completions",
+        params={"discord_id": "111", "character_name": "발키리"},
+        headers=headers,
+    )
+    assert check.json()["completions"] == ["아르모체(4막)_노말"]
+
+    client.post(toggle_url, json={**base, "difficulty": "하드"}, headers=headers)
+    check_after = client.get(
+        "/api/internal/completions",
+        params={"discord_id": "111", "character_name": "발키리"},
+        headers=headers,
+    )
+    assert check_after.json()["completions"] == ["아르모체(4막)_하드"]

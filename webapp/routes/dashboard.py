@@ -15,17 +15,25 @@ router = APIRouter()
 async def _character_progress(character: dict, raids: dict, categories: list[dict]) -> dict:
     item_level = character.get("item_level") or 0
     groups = group_by_category(raids, categories, applicable_raids(raids, item_level))
-    total_slots = sum(len(r["difficulties"]) for g in groups for r in g["raids"])
+    # 레이드 하나당 난이도는 여러 개지만, 진행률은 "레이드 단위"로 센다 —
+    # 한 레이드에서 어느 난이도든 하나만 완료하면 그 레이드는 끝난 것으로 취급.
+    total_raids = sum(len(g["raids"]) for g in groups)
     completion_data = await bot_client.get_completions(
         character["discord_id"], character["character_name"]
     )
-    done_count = len(completion_data["completions"])
+    done = set(completion_data["completions"])
+    done_count = sum(
+        1
+        for g in groups
+        for r in g["raids"]
+        if any(f"{r['raid_name']}_{diff_name}" in done for diff_name, _ in r["difficulties"])
+    )
     return {
         "character_name": character["character_name"],
         "character_class": character.get("character_class"),
         "item_level": item_level,
         "done_count": done_count,
-        "total_slots": total_slots,
+        "total_slots": total_raids,
     }
 
 

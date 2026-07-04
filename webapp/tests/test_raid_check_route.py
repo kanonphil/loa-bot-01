@@ -24,6 +24,19 @@ RAIDS = {
         },
     },
 }
+
+# 난이도가 2개인 레이드 — "레이드 단위" 진행률 계산 검증용
+RAIDS_MULTI_DIFF = {
+    "종막": {
+        "short_name": "종막", "icon": "⚔️", "category": "카제로스",
+        "is_extreme": False, "is_active": True,
+        "available_from": None, "available_until": None,
+        "difficulties": {
+            "노말": {"min_level": 1690, "total_slots": 8, "party_split": 4, "gates": 3},
+            "하드": {"min_level": 1710, "total_slots": 8, "party_split": 4, "gates": 3},
+        },
+    },
+}
 CATEGORIES = [{"name": "카제로스", "sort_order": 0, "is_extreme": 0}]
 CHARACTERS = [{"character_name": "발키리", "character_class": "서포터", "item_level": 1720.0}]
 
@@ -112,6 +125,25 @@ def test_toggle_rejects_character_not_owned_by_user(client):
 
     assert resp.status_code == 403
     assert not toggle_route.called  # 봇 API가 아예 호출되지 않아야 함
+
+
+def test_progress_counts_by_raid_not_difficulty(client):
+    """레이드 하나에 난이도가 2개 있어도 분모는 1이어야 하고(레이드 단위),
+    그 중 하나만 완료해도 그 레이드는 완료로 잡혀야 한다."""
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS_MULTI_DIFF))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        respx.get(COMPLETIONS_URL).mock(
+            return_value=httpx.Response(
+                200, json={"week_key": "2026-01-07", "completions": ["종막_하드"]}
+            )
+        )
+        resp = client.get("/raid-check")
+
+    assert resp.status_code == 200
+    assert "1 / 1 완료" in resp.text  # 2/2가 아니라 1/1 — 레이드 단위 집계
 
 
 def test_raid_check_requires_login(client):

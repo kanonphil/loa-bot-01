@@ -17,6 +17,15 @@ RAIDS = {
         "available_from": None, "available_until": None,
         "difficulties": {"노말": {"min_level": 1700, "total_slots": 8, "party_split": 4, "gates": 2}},
     },
+    "종막": {
+        "short_name": "종막", "icon": "⚔️", "category": "카제로스",
+        "is_extreme": False, "is_active": True,
+        "available_from": None, "available_until": None,
+        "difficulties": {
+            "노말": {"min_level": 1690, "total_slots": 8, "party_split": 4, "gates": 3},
+            "하드": {"min_level": 1710, "total_slots": 8, "party_split": 4, "gates": 3},
+        },
+    },
 }
 CATEGORIES = [{"name": "카제로스", "sort_order": 0, "is_extreme": 0}]
 CHARACTERS = [{"character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0}]
@@ -57,7 +66,19 @@ def test_dashboard_shows_progress_and_characters(client):
     body = resp.text
     assert "발키리" in body
     assert "홀리나이트" in body
-    assert "1/1" in body  # 원정대 전체 진행률
+    assert "1/2" in body  # 원정대 전체 진행률 — 레이드 2개 중 1개만 완료
+
+
+def test_dashboard_progress_counts_by_raid_not_difficulty(client):
+    """종막(난이도 2개) 중 하나만 완료해도 레이드 1개 완료로 잡히고,
+    분모도 난이도 수(3)가 아니라 레이드 수(2)여야 한다."""
+    with respx.mock:
+        log_in(client)
+        _mock_common(completions=["아르모체(4막)_노말", "종막_하드"])
+        resp = client.get("/main")
+
+    assert resp.status_code == 200
+    assert "2/2" in resp.text
 
 
 def test_dashboard_only_shows_recruiting_parties(client):

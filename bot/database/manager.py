@@ -429,6 +429,13 @@ async def toggle_completion(
             await db.commit()
             return False
         else:
+            # 레이드 하나당 이번 주에 인정되는 난이도는 1개뿐 — 다른 난이도로
+            # 새로 체크하면 그 레이드의 기존 체크는 자동으로 대체된다.
+            await db.execute(
+                "DELETE FROM raid_completions "
+                "WHERE discord_id=? AND character_name=? AND raid_name=? AND week_key=?",
+                (discord_id, character_name, raid_name, week),
+            )
             await db.execute(
                 "INSERT INTO raid_completions (discord_id, character_name, raid_name, difficulty, week_key) "
                 "VALUES (?, ?, ?, ?, ?)",

@@ -509,6 +509,11 @@ class RaidChecklistView(View):
                 return
             now_done = await db.toggle_completion(self.discord_id, self.char, raid_name, diff_name)
             if now_done:
+                # DB에서 같은 레이드의 다른 난이도 체크는 자동으로 대체됐으니,
+                # 화면에 들고 있는 completions도 동일하게 맞춰준다.
+                self.completions = {
+                    k for k in self.completions if not k.startswith(f"{raid_name}_")
+                }
                 self.completions.add(key)
             else:
                 self.completions.discard(key)
