@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content">
+<h1>원정대 관리</h1>
+
+{% if action_result and not action_result.success %}
+<p class="party-action-error">{{ action_result.reason }}</p>
+{% elif action_result and action_result.success and action_result.character_name %}
+<p class="expedition-success">
+  ✅ {{ action_result.character_name }} ({{ action_result.character_class }} / {{ action_result.item_level }}) 등록 완료!
+</p>
+{% endif %}
+
+{% if sync_result %}
+  {% if sync_result.success %}
+  <p class="expedition-success">🔄 {{ sync_result.updated }}/{{ sync_result.total }}개 캐릭터 동기화 완료!</p>
+  {% else %}
+  <p class="party-action-error">{{ sync_result.reason }}</p>
+  {% endif %}
+{% endif %}
+
+<form method="post" action="/expedition/add" class="expedition-add-form">
+  <input type="text" name="character_name" placeholder="캐릭터 이름 (정확히 입력)" maxlength="12" required>
+  <button type="submit">캐릭터 추가</button>
+</form>
+
+{% if not characters %}
+<p class="dash-empty">등록된 캐릭터가 없습니다.</p>
+{% else %}
+<form method="post" action="/expedition/sync" class="expedition-sync-form">
+  <button type="submit">🔄 전체 동기화</button>
+</form>
+
+<ul class="expedition-list">
+  {% for c in characters %}
+  <li class="expedition-item">
+    <span class="dash-char-name">{{ c.character_name }}</span>
+    <span class="dash-char-class">{{ c.character_class }}</span>
+    <span class="dash-char-level">{{ c.item_level }}</span>
+    <form method="post" action="/expedition/remove" class="expedition-remove-form">
+      <input type="hidden" name="character_name" value="{{ c.character_name }}">
+      <button type="submit" class="party-leave-btn">삭제</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+</div>
+{% endblock %}

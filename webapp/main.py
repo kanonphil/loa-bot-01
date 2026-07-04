@@ -10,7 +10,7 @@ from starlette.staticfiles import StaticFiles
 
 from webapp import chat_store, config
 from webapp.auth.dependencies import NotAuthenticated
-from webapp.routes import auth_routes, chat, dashboard, pages, party, raid_check
+from webapp.routes import auth_routes, chat, dashboard, expedition, pages, party, raid_check
 
 logger = logging.getLogger("webapp")
 
@@ -54,6 +54,7 @@ app.include_router(auth_routes.router)
 app.include_router(pages.router)
 app.include_router(chat.router)
 app.include_router(dashboard.router)
+app.include_router(expedition.router)
 app.include_router(raid_check.router)
 app.include_router(party.router)
 

@@ -60,6 +60,39 @@ async def get_completions(discord_id: str, character_name: str) -> dict:
         return resp.json()
 
 
+async def add_character(discord_id: str, character_name: str) -> dict:
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/characters/add",
+            json={"discord_id": discord_id, "character_name": character_name},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def remove_character(discord_id: str, character_name: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/characters/remove",
+            json={"discord_id": discord_id, "character_name": character_name},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def sync_characters(discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/characters/sync",
+            json={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def toggle_completion(
     discord_id: str, character_name: str, raid_name: str, difficulty: str
 ) -> bool:
