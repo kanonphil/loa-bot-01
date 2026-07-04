@@ -700,9 +700,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   gap: 8px;
 }
 
+/* 캐릭터명 길이가 제각각이라 flex로는 직업/수치 컬럼이 행마다 어긋난다 —
+   고정 폭 그리드로 모든 행의 컬럼을 세로로 맞춘다. */
 .dash-char-progress-list li,
 .dash-character-list li {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(90px, 150px) minmax(70px, 100px) 1fr;
   align-items: center;
   gap: 8px;
   font-size: 13px;
@@ -716,7 +719,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0;
 }
 
 .dash-char-class {
@@ -726,20 +728,21 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   background: var(--panel);
   color: var(--text-muted);
   white-space: nowrap;
-  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  justify-self: start;
 }
 
 .dash-char-count,
 .dash-char-level {
-  margin-left: auto;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  flex-shrink: 0;
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--accent-dim);
   color: var(--accent);
+  justify-self: end;
 }
 
 .dash-party-list a {
@@ -853,11 +856,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 560px;
+  max-width: 640px;
 }
 
 .expedition-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(100px, 170px) minmax(70px, 110px) 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
@@ -865,10 +869,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   border: 1px solid var(--border);
   background: var(--panel);
   font-size: 13px;
-}
-
-.expedition-remove-form {
-  margin-left: auto;
 }
 
 .expedition-remove-form .party-leave-btn {
