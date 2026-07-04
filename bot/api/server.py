@@ -3,7 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from bot.api.routes import raids, parties, users, stats, status, completions, subscriptions, internal
 
-app = FastAPI(title="로아봇 관리자 API", version="1.0.0")
+app = FastAPI(
+  title="로아봇 관리자 API",
+  version="1.0.0",
+  docs_url=None,
+  redoc_url=None,
+  openapi_url=None,
+)
 
 app.add_middleware(
   CORSMiddleware,
