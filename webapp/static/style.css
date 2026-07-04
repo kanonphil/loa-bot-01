@@ -134,9 +134,11 @@ body {
 
 .main {
   flex: 1;
+  min-width: 0; /* flex item는 기본적으로 내용의 최소 폭 아래로 안 줄어듦 — 없으면 넓은 콘텐츠가 사이드바를 밀어내며 가로 스크롤 발생 */
   display: flex;
   flex-direction: column;
   padding: 32px 40px;
+  overflow-x: auto;
 }
 
 .welcome-banner {
@@ -263,6 +265,276 @@ body {
   color: #fff;
   font-weight: 500;
   cursor: pointer;
+}
+
+/* ── 레이드 체크 ───────────────────────────────────────── */
+
+.character-select-form select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.raid-progress {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.raid-category {
+  margin-bottom: 20px;
+}
+
+.raid-category h3 {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.raid-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.raid-name {
+  min-width: 160px;
+  font-size: 14px;
+}
+
+.raid-diffs {
+  display: flex;
+  gap: 8px;
+}
+
+.diff-toggle-form {
+  display: inline-block;
+}
+
+.diff-toggle {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.diff-toggle.done {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── 공대 모집 ─────────────────────────────────────────── */
+
+.party-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.party-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  text-decoration: none;
+  color: var(--text);
+  position: relative;
+}
+
+.party-card-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.party-card-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.party-status {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--sidebar-bg);
+  color: var(--text-muted);
+}
+
+.party-status.status-recruiting {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.party-back-link {
+  display: inline-block;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.party-meta {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.party-memo {
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.party-action-error {
+  color: #f28b82;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.party-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  max-width: 700px;
+  margin-bottom: 24px;
+}
+
+/* 분할 파티 — "1파티 | 2파티" 처럼 나란히 */
+.party-groups {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.party-group {
+  flex: 1;
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.party-group-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.party-group-count {
+  font-weight: 400;
+}
+
+.party-slots-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.party-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 13px;
+}
+
+.party-slot.empty {
+  color: var(--text-muted);
+  border-style: dashed;
+}
+
+.slot-number {
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 18px;
+}
+
+.slot-char {
+  font-weight: 500;
+}
+
+.slot-class {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--sidebar-bg);
+  color: var(--text-muted);
+  margin-left: auto; /* 캐릭터명은 왼쪽 고정, 직업 태그부터는 역할 배지와 함께 오른쪽으로 정렬 */
+}
+
+/* 딜러/서포터 배지 — 아이콘+긴 텍스트 대신 색으로만 구분 */
+.role-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.role-badge.role-dps {
+  background: rgba(224, 92, 92, 0.18);
+  color: #e0807a;
+}
+
+.role-badge.role-support {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.party-join-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.party-join-form select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.party-join-form button,
+.party-leave-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.party-leave-btn {
+  background: #4a3030;
+  color: #f28b82;
+}
+
+.party-no-qualifying,
+.party-cannot-join {
+  color: var(--text-muted);
+  font-size: 14px;
 }
 
 /* ── 로그인 랜딩 페이지 ────────────────────────────────── */

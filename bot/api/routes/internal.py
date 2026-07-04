@@ -3,6 +3,7 @@
 X-Webapp-Key로만 인증하며, 관리자 API(X-API-Key)와는 분리되어 있다.
 """
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from bot.api.auth import verify_webapp_key
 import bot.database.manager as db
 
@@ -20,3 +21,166 @@ async def verify_user(discord_id: str):
 async def user_characters(discord_id: str):
   """AI 상담 프롬프트에 넣을 캐릭터 정보(직업·아이템레벨 등). 캐시된 값 그대로 반환."""
   return await db.get_cached_characters(discord_id, max_age_hours=99999)
+
+
+# ── 레이드 체크 (길드원 셀프서비스) ──────────────────────────
+
+@router.get("/raids")
+async def raids():
+  """레이드/난이도 전체 목록. 관리자 API(/api/raids)와 데이터는 같지만 웹앱 키로 접근."""
+  return await db.get_raids_dict()
+
+
+@router.get("/raid-categories")
+async def raid_categories():
+  return await db.get_categories()
+
+
+@router.get("/completions")
+async def completions(discord_id: str, character_name: str):
+  """이번 주(수요일 06:00 KST 기준) 완료 목록."""
+  week_key = db.get_week_key()
+  done = await db.get_completions(discord_id, character_name, week_key)
+  return {"week_key": week_key, "completions": sorted(done)}
+
+
+class ToggleCompletionBody(BaseModel):
+  discord_id: str
+  character_name: str
+  raid_name: str
+  difficulty: str
+
+
+@router.post("/completions/toggle")
+async def toggle_completion(body: ToggleCompletionBody):
+  completed = await db.toggle_completion(
+    body.discord_id, body.character_name, body.raid_name, body.difficulty
+  )
+  return {"completed": completed}
+
+
+# ── 공대 모집 (길드원 셀프서비스) ────────────────────────────
+
+@router.get("/parties")
+async def parties(guild_id: str):
+  result = await db.get_guild_parties(guild_id)
+  out = []
+  for party in result:
+    slots = await db.get_party_slots(party["message_id"])
+    out.append({**party, "slots": slots})
+  return out
+
+
+@router.get("/parties/{message_id}")
+async def party_detail(message_id: str):
+  party = await db.get_party(message_id)
+  if not party:
+    return None
+  slots = await db.get_party_slots(message_id)
+  return {**party, "slots": slots}
+
+
+@router.get("/parties/{message_id}/eligibility")
+async def party_eligibility(message_id: str, discord_id: str):
+  """이 유저가 이 파티에 참여 가능한지 + 참여 가능한 캐릭터 목록.
+  Discord 참여하기 버튼과 완전히 동일한 판단 로직(db.get_party_join_eligibility)을 사용한다.
+  """
+  return await db.get_party_join_eligibility(message_id, discord_id)
+
+
+class JoinPartyBody(BaseModel):
+  discord_id: str
+  character_name: str
+  role: str = "dps"
+  party_group: int | None = None  # 파티가 하위 그룹으로 나뉜 경우에만 필요
+
+
+@router.post("/parties/{message_id}/join")
+async def join_party(message_id: str, body: JoinPartyBody):
+  from bot.api import bot_ref
+  from bot.data.raids import SUPPORT_CLASSES
+  from bot.ui.views import _refresh_party_embed_with_reserved
+
+  result = await db.get_party_join_eligibility(message_id, body.discord_id)
+  if not result["can_join"]:
+    return {"success": False, "reason": result["reason"]}
+
+  char_info = next(
+    (q for q in result["qualifying"] if q["name"] == body.character_name), None
+  )
+  if char_info is None:
+    return {"success": False, "reason": "선택한 캐릭터는 참여 조건을 만족하지 않습니다."}
+
+  role = body.role if body.role in ("dps", "support") else "dps"
+  if role == "support" and char_info["class"] not in SUPPORT_CLASSES:
+    return {"success": False, "reason": "서포터 역할은 서포터 직업만 선택할 수 있습니다."}
+
+  party_split = result["party_split"]
+  total_slots = result["total_slots"]
+
+  kwargs: dict = {}
+  if party_split and total_slots > party_split:
+    if not body.party_group:
+      return {"success": False, "reason": "참여할 파티(하위 그룹)를 선택해주세요."}
+    kwargs["party_group"] = body.party_group
+    kwargs["party_split"] = party_split
+
+  success, slot_number, message = await db.auto_assign_slot(
+    message_id, body.discord_id, body.character_name, char_info["class"], role,
+    total_slots, **kwargs,
+  )
+
+  if success:
+    bot = bot_ref.get_bot()
+    party = await db.get_party(message_id)
+    if bot and party:
+      await _refresh_party_embed_with_reserved(bot, party)
+
+  return {"success": success, "slot_number": slot_number, "message": message}
+
+
+class LeavePartyBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/parties/{message_id}/leave")
+async def leave_party(message_id: str, body: LeavePartyBody):
+  import discord as _discord
+  from bot.api import bot_ref
+  from bot.ui.embeds import party_embed
+  from bot.ui.views import _refresh_party_embed_with_reserved
+
+  party = await db.get_party(message_id)
+  if not party:
+    return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+
+  is_leader = party["leader_id"] == body.discord_id
+
+  removed = await db.leave_slot(message_id, body.discord_id)
+  if not removed:
+    return {"success": False, "reason": "파티에 참여하지 않았습니다."}
+
+  if is_leader:
+    remaining = await db.get_party_slots(message_id)
+    if remaining:
+      await db.transfer_leader(message_id, remaining[0]["discord_id"])
+    else:
+      await db.disband_party(message_id)
+
+  bot = bot_ref.get_bot()
+  updated_party = await db.get_party(message_id)
+  if bot and updated_party:
+    if updated_party["status"] == "disbanded":
+      try:
+        channel = bot.get_channel(int(updated_party["channel_id"]))
+        if channel is None:
+          channel = await bot.fetch_channel(int(updated_party["channel_id"]))
+        slots = await db.get_party_slots(message_id)
+        msg = await channel.fetch_message(int(message_id))
+        await msg.edit(embed=party_embed(updated_party, slots), view=None)
+      except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
+        pass
+    else:
+      await _refresh_party_embed_with_reserved(bot, updated_party)
+
+  return {"success": True}

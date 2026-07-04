@@ -97,3 +97,70 @@ def test_user_characters_empty_for_user_with_none(client):
     )
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ── 레이드 체크 ────────────────────────────────────────────
+# db.init_db()가 비어있는 DB에는 항상 기본 레이드 데이터(seed_game_data)를
+# 자동으로 채워넣으므로, 그 기본 데이터를 그대로 사용해서 테스트한다.
+
+def test_raids_endpoint_returns_seeded_default_raids(client):
+    resp = client.get(
+        "/api/internal/raids", headers={"X-Webapp-Key": "test-webapp-key"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "아르모체(4막)" in data
+    assert data["아르모체(4막)"]["difficulties"]["노말"]["min_level"] == 1700
+    assert data["아르모체(4막)"]["difficulties"]["하드"]["min_level"] == 1720
+
+
+def test_raid_categories_endpoint(client):
+    resp = client.get(
+        "/api/internal/raid-categories", headers={"X-Webapp-Key": "test-webapp-key"}
+    )
+    assert resp.status_code == 200
+    names = [c["name"] for c in resp.json()]
+    assert names == ["카제로스", "그림자", "어비스"]  # sort_order 순
+
+
+def test_completions_endpoint_empty_by_default(client):
+    resp = client.get(
+        "/api/internal/completions",
+        params={"discord_id": "111", "character_name": "발키리"},
+        headers={"X-Webapp-Key": "test-webapp-key"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["completions"] == []
+    assert body["week_key"]  # 현재 주 키가 채워져 있어야 함
+
+
+def test_toggle_completion_marks_then_unmarks(client):
+    toggle_url = "/api/internal/completions/toggle"
+    payload = {
+        "discord_id": "111",
+        "character_name": "발키리",
+        "raid_name": "아르모체(4막)",
+        "difficulty": "노말",
+    }
+
+    first = client.post(toggle_url, json=payload, headers={"X-Webapp-Key": "test-webapp-key"})
+    assert first.status_code == 200
+    assert first.json() == {"completed": True}
+
+    check = client.get(
+        "/api/internal/completions",
+        params={"discord_id": "111", "character_name": "발키리"},
+        headers={"X-Webapp-Key": "test-webapp-key"},
+    )
+    assert check.json()["completions"] == ["아르모체(4막)_노말"]
+
+    second = client.post(toggle_url, json=payload, headers={"X-Webapp-Key": "test-webapp-key"})
+    assert second.json() == {"completed": False}
+
+    check_again = client.get(
+        "/api/internal/completions",
+        params={"discord_id": "111", "character_name": "발키리"},
+        headers={"X-Webapp-Key": "test-webapp-key"},
+    )
+    assert check_again.json()["completions"] == []

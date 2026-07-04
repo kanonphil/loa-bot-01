@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>레이드 체크</h1>
+
+{% if not characters %}
+<p>등록된 캐릭터가 없습니다. 디스코드에서 <code>/api등록</code>으로 캐릭터를 먼저 등록해주세요.</p>
+{% else %}
+<form method="get" action="/raid-check" class="character-select-form">
+  <select name="character" onchange="this.form.submit()">
+    {% for c in characters %}
+    <option value="{{ c.character_name }}" {% if c.character_name == selected_character %}selected{% endif %}>
+      {{ c.character_name }} ({{ c.character_class }}, {{ c.item_level }})
+    </option>
+    {% endfor %}
+  </select>
+</form>
+
+<div id="raid-checklist">
+  {% include "_raid_checklist.html" %}
+</div>
+{% endif %}
+{% endblock %}

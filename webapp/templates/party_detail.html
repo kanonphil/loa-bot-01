@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not party %}
+<p>공대를 찾을 수 없습니다. <a href="/parties">목록으로</a></p>
+{% else %}
+{% macro slot_row(s) %}
+  {% if s.filled %}
+  <div class="party-slot filled">
+    <span class="slot-number">{{ s.local_number if s.local_number is defined else s.slot_number }}</span>
+    <span class="slot-char">{{ s.character_name }}</span>
+    <span class="slot-class">{{ s.character_class }}</span>
+    <span class="role-badge role-{{ s.role }}">{{ "서포터" if s.role == "support" else "딜러" }}</span>
+  </div>
+  {% else %}
+  <div class="party-slot empty">
+    <span class="slot-number">{{ s.local_number if s.local_number is defined else s.slot_number }}</span>
+    <span class="slot-empty">빈 자리</span>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+<a href="/parties" class="party-back-link">&larr; 목록으로</a>
+<h1>{{ party.raid_name }} {{ party.difficulty }} &middot; {{ party.proficiency }}</h1>
+<p class="party-meta">
+  {{ party.scheduled_time }} &middot; 최소 {{ party.min_level }} &middot;
+  <span class="party-status status-{{ party.status }}">
+    {% if party.status == "recruiting" %}모집중{% elif party.status == "full" %}파티완성{% elif party.status == "closed" %}마감{% else %}종료{% endif %}
+  </span>
+</p>
+{% if party.memo %}<p class="party-memo">📌 {{ party.memo }}</p>{% endif %}
+
+{% if action_result and not action_result.success %}
+<p class="party-action-error">{{ action_result.reason }}</p>
+{% endif %}
+
+{% if party_groups %}
+<div class="party-groups">
+  {% for grp in party_groups %}
+  <div class="party-group">
+    <div class="party-group-header">
+      {{ grp.group_number }}파티 <span class="party-group-count">{{ grp.filled_count }}/{{ grp.total }}</span>
+    </div>
+    <div class="party-slots-column">
+      {% for s in grp.slots %}{{ slot_row(s) }}{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="party-slots">
+  {% for s in all_slots %}{{ slot_row(s) }}{% endfor %}
+</div>
+{% endif %}
+
+{% if joined %}
+<form method="post" action="/parties/{{ party.message_id }}/leave">
+  <button type="submit" class="party-leave-btn">나가기</button>
+</form>
+{% elif eligibility and eligibility.can_join %}
+  {% if eligibility.qualifying %}
+  <form method="post" action="/parties/{{ party.message_id }}/join" class="party-join-form">
+    <select name="character_name">
+      {% for q in eligibility.qualifying %}
+      <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
+      {% endfor %}
+    </select>
+    <select name="role">
+      <option value="dps">⚔️ 딜러</option>
+      <option value="support">🛡️ 서포터</option>
+    </select>
+    {% if sub_parties %}
+    <select name="party_group">
+      {% for g in sub_parties %}
+      <option value="{{ g }}">{{ g }}파티</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <button type="submit">참여하기</button>
+  </form>
+  {% else %}
+  <div class="party-no-qualifying">
+    <p>참여 가능한 캐릭터가 없습니다.</p>
+    {% if eligibility.gold_done %}<p>🏆 이번 주 골드 완료: {{ eligibility.gold_done | join(', ') }}</p>{% endif %}
+    {% if eligibility.in_other_party %}<p>⚔️ 다른 공대 참여 중: {{ eligibility.in_other_party | join(', ') }}</p>{% endif %}
+    {% if eligibility.level_too_low %}
+    <p>📉 레벨 미달 (최소 {{ eligibility.min_level }}):
+      {% for c in eligibility.level_too_low %}{{ c.name }} ({{ c.level }}){% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+    {% if eligibility.no_cache %}<p>❓ 레벨 미확인: {{ eligibility.no_cache | join(', ') }} — 디스코드 <code>/원정대</code>에서 동기화해주세요.</p>{% endif %}
+  </div>
+  {% endif %}
+{% elif eligibility %}
+<p class="party-cannot-join">{{ eligibility.reason }}</p>
+{% endif %}
+{% endif %}
+{% endblock %}

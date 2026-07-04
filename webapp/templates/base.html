@@ -19,8 +19,8 @@
       <ul class="sidebar-nav">
         <li><a class="disabled" title="준비중">메인 (준비중)</a></li>
         <li><a class="disabled" title="준비중">원정대 관리 (준비중)</a></li>
-        <li><a class="disabled" title="준비중">레이드 체크 (준비중)</a></li>
-        <li><a class="disabled" title="준비중">공대 모집 (준비중)</a></li>
+        <li><a href="/raid-check" class="{% if active == 'raid_check' %}active{% endif %}">레이드 체크</a></li>
+        <li><a href="/parties" class="{% if active == 'parties' %}active{% endif %}">공대 모집</a></li>
       </ul>
       <div class="sidebar-section-label">AI 상담</div>
       <ul class="sidebar-nav">

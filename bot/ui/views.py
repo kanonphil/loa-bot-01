@@ -1277,140 +1277,34 @@ class PartyView(View):
 
     async def _handle_join(self, interaction: discord.Interaction) -> None:
         party = await db.get_party_by_channel(str(interaction.channel.id))
-        if not party or party["status"] == "disbanded":
+        if not party:
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
-            return
-        if party["status"] == "closed":
-            await interaction.response.send_message("모집이 마감된 파티입니다.", ephemeral=True)
-            return
-        if party["status"] == "full":
-            await interaction.response.send_message("파티가 이미 꽉 찼습니다.", ephemeral=True)
             return
 
         message_id = party["message_id"]
         discord_id = str(interaction.user.id)
-        party_week_key = (
-            db.get_week_key_for_dt(party["scheduled_datetime"])
-            if party.get("scheduled_datetime")
-            else db.get_week_key()
-        )
 
-        slots = await db.get_party_slots(message_id)
-        if any(s["discord_id"] == discord_id for s in slots):
-            await interaction.response.send_message("이미 파티에 참여 중입니다.", ephemeral=True)
+        # 참여 가능 여부 판단은 웹 참여 API와 공유하는 단일 로직(db.get_party_join_eligibility)을 통해서만.
+        result = await db.get_party_join_eligibility(message_id, discord_id)
+        if not result["can_join"]:
+            await interaction.response.send_message(result["reason"], ephemeral=True)
             return
 
-
-        # ── 익스트림 레이드 추가 검증 ─────────────────────
-        raid_info = RAIDS.get(party["raid_name"], {})
-        if raid_info.get("is_extreme"):
-            now         = datetime.now(KST)
-            avail_from  = raid_info.get("available_from")
-            avail_until = raid_info.get("available_until")
-            sdt         = party.get("scheduled_datetime")
-
-            # 파티 일정이 운영 기간 시작 전이면 참여 불가
-            if sdt and avail_from:
-                try:
-                    if datetime.fromisoformat(sdt) < datetime.fromisoformat(avail_from):
-                        from_dt = datetime.fromisoformat(avail_from)
-                        await interaction.response.send_message(
-                            f"이 공대 일정은 운영 기간 시작({from_dt.month}/{from_dt.day}) 전입니다.",
-                            ephemeral=True,
-                        )
-                        return
-                except ValueError:
-                    pass
-
-            # 현재 시각이 운영 기간 종료 이후이면 참여 불가
-            if avail_until:
-                try:
-                    if datetime.fromisoformat(avail_until) < now:
-                        await interaction.response.send_message(
-                            "운영 기간이 종료된 레이드입니다.", ephemeral=True
-                        )
-                        return
-                except ValueError:
-                    pass
-            # 원정대 1캐릭터 제한
-            extreme_slot = await db.get_user_extreme_slot_this_week(discord_id, party_week_key)
-            if extreme_slot:
-                await interaction.response.send_message(
-                    f"이번 주 익스트림 레이드는 **{extreme_slot['character_name']}**으로 이미 참여 중입니다.\n"
-                    f"원정대당 1캐릭터만 참여할 수 있습니다.",
-                    ephemeral=True,
-                )
-                return
-
-        api_key = await db.get_user_api_key(discord_id)
-        if not api_key:
-            await interaction.response.send_message(
-                "먼저 `/api등록`으로 API 키를 등록해주세요.", ephemeral=True
-            )
-            return
-
-        registered = await db.get_user_characters(discord_id)
-        if not registered:
-            await interaction.response.send_message(
-                "먼저 `/캐릭터등록`으로 캐릭터를 등록해주세요.", ephemeral=True
-            )
-            return
-
-        min_level: int = party["min_level"]
-        cached    = await db.get_cached_characters(discord_id, max_age_hours=99999)
-        cache_map = {c["character_name"]: c for c in cached}
-
-        # 캐시 기반 필터 (API 호출 없음 → defer 불필요, 현재 메시지 위치에서 바로 응답)
-        qualifying: list[dict] = []
-        level_too_low: list[str] = []
-        no_cache: list[str] = []
-        raid_key = f"{party['raid_name']}_{party['difficulty']}"
-
-        for char_name in registered:
-            c = cache_map.get(char_name)
-            if not c or c["item_level"] is None:
-                no_cache.append(char_name)
-            elif c["item_level"] < min_level:
-                level_too_low.append(f"**{char_name}** ({c['item_level']:.0f})")
-            else:
-                qualifying.append({"name": char_name, "level": c["item_level"], "class": c["character_class"]})
-
-        # 골드 완료 캐릭터 필터링 — 파티 주차 기준으로 확인
-        gold_done: list[str] = []
-        filtered = []
-        for q in qualifying:
-            completions = await db.get_completions(discord_id, q["name"], week_key=party_week_key)
-            if any(k.startswith(f"{party['raid_name']}_") for k in completions):
-                gold_done.append(f"**{q['name']}**")
-            else:
-                filtered.append(q)
-        qualifying = filtered
-
-        # 같은 레이드·같은 주차의 다른 공대에 이미 참여 중인 캐릭터 필터링
-        # (discord_id 전체 차단 → 캐릭터 단위 차단으로 변경)
-        already_slots = await db.get_user_active_slots_in_raid(
-            discord_id, party["raid_name"], message_id, party_week_key=party_week_key
-        )
-        already_chars = {s["character_name"] for s in already_slots}
-        in_other_party: list[str] = []
-        filtered2 = []
-        for q in qualifying:
-            if q["name"] in already_chars:
-                in_other_party.append(f"**{q['name']}**")
-            else:
-                filtered2.append(q)
-        qualifying = filtered2
+        qualifying = result["qualifying"]
 
         if not qualifying:
             lines: list[str] = []
-            if gold_done:
-                lines.append(f"🏆 이번 주 골드 완료: {', '.join(gold_done)}")
-            if in_other_party:
-                lines.append(f"⚔️ 다른 공대 참여 중: {', '.join(in_other_party)}")
-            if level_too_low:
-                lines.append(f"📉 레벨 미달 (최소 {min_level}): {', '.join(level_too_low)}")
-            if no_cache:
-                names = ', '.join(f"**{n}**" for n in no_cache)
+            if result["gold_done"]:
+                names = ', '.join(f"**{n}**" for n in result["gold_done"])
+                lines.append(f"🏆 이번 주 골드 완료: {names}")
+            if result["in_other_party"]:
+                names = ', '.join(f"**{n}**" for n in result["in_other_party"])
+                lines.append(f"⚔️ 다른 공대 참여 중: {names}")
+            if result["level_too_low"]:
+                low = ', '.join(f"**{c['name']}** ({c['level']:.0f})" for c in result["level_too_low"])
+                lines.append(f"📉 레벨 미달 (최소 {result['min_level']}): {low}")
+            if result["no_cache"]:
+                names = ', '.join(f"**{n}**" for n in result["no_cache"])
                 lines.append(f"❓ 레벨 미확인: {names} — `/원정대`에서 동기화 후 다시 시도해주세요.")
             detail = "\n".join(lines) if lines else "(원인 불명)"
             await interaction.response.send_message(
@@ -1419,15 +1313,15 @@ class PartyView(View):
             )
             return
 
-        raid_info = RAIDS.get(party["raid_name"], {})
-        p_split   = (raid_info.get("difficulties") or {}).get(party["difficulty"], {}).get("party_split")
+        p_split     = result["party_split"]
+        total_slots = result["total_slots"]
 
         if len(qualifying) == 1:
             q = qualifying[0]
-            if p_split and party["total_slots"] > p_split:
+            if p_split and total_slots > p_split:
                 current_slots = await db.get_party_slots(message_id)
                 view = PartyGroupSelectView(
-                    discord_id, q, message_id, party["total_slots"],
+                    discord_id, q, message_id, total_slots,
                     p_split, current_slots, self,
                 )
                 await interaction.response.send_message(
@@ -1439,7 +1333,7 @@ class PartyView(View):
                 except discord.HTTPException:
                     pass
             elif q["class"] in SUPPORT_CLASSES:
-                view = RoleSelectView(discord_id, q, message_id, party["total_slots"], self)
+                view = RoleSelectView(discord_id, q, message_id, total_slots, self)
                 await interaction.response.send_message(
                     f"**{q['name']}** ({q['class']}) — 역할을 선택하세요:",
                     view=view, ephemeral=True,
@@ -1450,10 +1344,10 @@ class PartyView(View):
                     pass
             else:
                 await _auto_join_dps(
-                    interaction, discord_id, q, message_id, party["total_slots"], self,
+                    interaction, discord_id, q, message_id, total_slots, self,
                 )
         else:
-            view = CharSelectView(discord_id, qualifying, message_id, party["total_slots"], self)
+            view = CharSelectView(discord_id, qualifying, message_id, total_slots, self)
             await interaction.response.send_message("참여할 캐릭터를 선택하세요:", view=view, ephemeral=True)
             try:
                 view.message = await interaction.original_response()

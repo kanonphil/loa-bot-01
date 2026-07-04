@@ -654,6 +654,150 @@ async def auto_assign_slot(
     return True, slot_number, "참여 완료"
 
 
+async def get_party_join_eligibility(message_id: str, discord_id: str) -> dict:
+    """파티 참여 가능 여부 + 캐릭터별 필터링 결과.
+
+    Discord의 참여하기 버튼(bot/ui/views.py PartyView._handle_join)과 웹의 참여 API가
+    동일하게 사용하는 단일 검증 로직 — 두 곳에서 각자 구현하면 규칙이 어긋날 수 있으니
+    반드시 이 함수를 통해서만 판단할 것.
+
+    반환:
+      {"can_join": False, "reason": "..."}
+      또는
+      {"can_join": True, "qualifying": [{"name","level","class"}, ...],
+       "party_split": int | None, "total_slots": int,
+       "gold_done": [...], "in_other_party": [...],
+       "level_too_low": [{"name","level"}, ...], "no_cache": [...],
+       "min_level": int}
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from bot.data.raids import RAIDS
+
+    KST = timezone(timedelta(hours=9))
+
+    party = await get_party(message_id)
+    if not party or party["status"] == "disbanded":
+        return {"can_join": False, "reason": "유효하지 않은 파티입니다."}
+    if party["status"] == "closed":
+        return {"can_join": False, "reason": "모집이 마감된 파티입니다."}
+    if party["status"] == "full":
+        return {"can_join": False, "reason": "파티가 이미 꽉 찼습니다."}
+
+    party_week_key = (
+        get_week_key_for_dt(party["scheduled_datetime"])
+        if party.get("scheduled_datetime")
+        else get_week_key()
+    )
+
+    slots = await get_party_slots(message_id)
+    if any(s["discord_id"] == discord_id for s in slots):
+        return {"can_join": False, "reason": "이미 파티에 참여 중입니다."}
+
+    raid_info = RAIDS.get(party["raid_name"], {})
+    if raid_info.get("is_extreme"):
+        now = datetime.now(KST)
+        avail_from = raid_info.get("available_from")
+        avail_until = raid_info.get("available_until")
+        sdt = party.get("scheduled_datetime")
+
+        if sdt and avail_from:
+            try:
+                if datetime.fromisoformat(sdt) < datetime.fromisoformat(avail_from):
+                    from_dt = datetime.fromisoformat(avail_from)
+                    return {
+                        "can_join": False,
+                        "reason": f"이 공대 일정은 운영 기간 시작({from_dt.month}/{from_dt.day}) 전입니다.",
+                    }
+            except ValueError:
+                pass
+
+        if avail_until:
+            try:
+                if datetime.fromisoformat(avail_until) < now:
+                    return {"can_join": False, "reason": "운영 기간이 종료된 레이드입니다."}
+            except ValueError:
+                pass
+
+        extreme_slot = await get_user_extreme_slot_this_week(discord_id, party_week_key)
+        if extreme_slot:
+            return {
+                "can_join": False,
+                "reason": (
+                    f"이번 주 익스트림 레이드는 **{extreme_slot['character_name']}**으로 "
+                    f"이미 참여 중입니다.\n원정대당 1캐릭터만 참여할 수 있습니다."
+                ),
+            }
+
+    api_key = await get_user_api_key(discord_id)
+    if not api_key:
+        return {"can_join": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."}
+
+    registered = await get_user_characters(discord_id)
+    if not registered:
+        return {"can_join": False, "reason": "먼저 /캐릭터등록으로 캐릭터를 등록해주세요."}
+
+    min_level: int = party["min_level"]
+    cached = await get_cached_characters(discord_id, max_age_hours=99999)
+    cache_map = {c["character_name"]: c for c in cached}
+
+    qualifying: list[dict] = []
+    level_too_low: list[dict] = []
+    no_cache: list[str] = []
+
+    for char_name in registered:
+        c = cache_map.get(char_name)
+        if not c or c["item_level"] is None:
+            no_cache.append(char_name)
+        elif c["item_level"] < min_level:
+            level_too_low.append({"name": char_name, "level": c["item_level"]})
+        else:
+            qualifying.append(
+                {"name": char_name, "level": c["item_level"], "class": c["character_class"]}
+            )
+
+    # 골드 완료 캐릭터 필터링 — 파티 주차 기준
+    gold_done: list[str] = []
+    filtered = []
+    for q in qualifying:
+        completions = await get_completions(discord_id, q["name"], week_key=party_week_key)
+        if any(k.startswith(f"{party['raid_name']}_") for k in completions):
+            gold_done.append(q["name"])
+        else:
+            filtered.append(q)
+    qualifying = filtered
+
+    # 같은 레이드·같은 주차의 다른 공대에 이미 참여 중인 캐릭터 필터링
+    already_slots = await get_user_active_slots_in_raid(
+        discord_id, party["raid_name"], message_id, party_week_key=party_week_key
+    )
+    already_chars = {s["character_name"] for s in already_slots}
+    in_other_party: list[str] = []
+    filtered2 = []
+    for q in qualifying:
+        if q["name"] in already_chars:
+            in_other_party.append(q["name"])
+        else:
+            filtered2.append(q)
+    qualifying = filtered2
+
+    party_split = (raid_info.get("difficulties") or {}).get(party["difficulty"], {}).get(
+        "party_split"
+    )
+
+    return {
+        "can_join": True,
+        "qualifying": qualifying,
+        "party_split": party_split,
+        "total_slots": party["total_slots"],
+        "gold_done": gold_done,
+        "in_other_party": in_other_party,
+        "level_too_low": level_too_low,
+        "no_cache": no_cache,
+        "min_level": min_level,
+    }
+
+
 async def leave_slot(message_id: str, discord_id: str) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(

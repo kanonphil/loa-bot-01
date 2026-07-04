@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>공대 모집</h1>
+
+{% if not parties %}
+<p>진행 중인 공대가 없습니다.</p>
+{% else %}
+<div class="party-list">
+  {% for p in parties %}
+  <a class="party-card" href="/parties/{{ p.message_id }}">
+    <div class="party-card-title">{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }}</div>
+    <div class="party-card-meta">{{ p.scheduled_time }} &middot; {{ p.slots | length }}/{{ p.total_slots }}인 &middot; 최소 {{ p.min_level }}</div>
+    <span class="party-status status-{{ p.status }}">
+      {% if p.status == "recruiting" %}모집중{% elif p.status == "full" %}파티완성{% else %}마감{% endif %}
+    </span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

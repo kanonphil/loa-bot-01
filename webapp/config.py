@@ -14,6 +14,8 @@ DISCORD_REDIRECT_URI: str = os.environ.get(
 # ── 봇 서버(다른 머신) 내부 API ─────────────────────────────
 BOT_API_BASE_URL: str = os.environ.get("BOT_API_BASE_URL", "http://localhost:8000")
 BOT_API_WEBAPP_KEY: str = os.environ["BOT_API_WEBAPP_KEY"]
+# 공대 모집 목록 조회용 — 이 웹앱은 길드 하나만 서비스한다고 가정
+DISCORD_GUILD_ID: str = os.environ["DISCORD_GUILD_ID"]
 
 # ── 세션 ──────────────────────────────────────────────────
 SESSION_SECRET: str = os.environ.get("SESSION_SECRET", "dev-secret-change-me")

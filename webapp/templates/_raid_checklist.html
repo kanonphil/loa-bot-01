@@ -1,0 +1,29 @@
+<p class="raid-progress">{{ done_count }} / {{ total_slots }} 완료</p>
+
+{% for group in groups %}
+<div class="raid-category">
+  <h3>{{ group.category }}</h3>
+  {% for r in group.raids %}
+  <div class="raid-row">
+    <span class="raid-name">{{ r.icon }} {{ r.short_name }}</span>
+    <span class="raid-diffs">
+      {% for diff_name, diff_info in r.difficulties %}
+      <form
+        class="diff-toggle-form"
+        hx-post="/raid-check/toggle"
+        hx-target="#raid-checklist"
+        hx-swap="innerHTML"
+      >
+        <input type="hidden" name="raid_name" value="{{ r.raid_name }}">
+        <input type="hidden" name="difficulty" value="{{ diff_name }}">
+        <input type="hidden" name="character_name" value="{{ selected_character }}">
+        <button type="submit" class="diff-toggle {% if (r.raid_name ~ '_' ~ diff_name) in done %}done{% endif %}">
+          {{ diff_name }}
+        </button>
+      </form>
+      {% endfor %}
+    </span>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}

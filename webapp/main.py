@@ -10,7 +10,7 @@ from starlette.staticfiles import StaticFiles
 
 from webapp import chat_store, config
 from webapp.auth.dependencies import NotAuthenticated
-from webapp.routes import auth_routes, chat, pages
+from webapp.routes import auth_routes, chat, pages, party, raid_check
 
 logger = logging.getLogger("webapp")
 
@@ -53,6 +53,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(auth_routes.router)
 app.include_router(pages.router)
 app.include_router(chat.router)
+app.include_router(raid_check.router)
+app.include_router(party.router)
 
 
 @app.exception_handler(NotAuthenticated)
