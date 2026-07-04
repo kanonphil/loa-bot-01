@@ -154,7 +154,35 @@ async def cancel_party(message_id: str):
 @router.patch("/{message_id}/schedule")
 async def update_schedule(message_id: str, body: ScheduleBody):
   await db.update_party_schedule(message_id, body.scheduled_time, body.scheduled_datetime)
+
+  from bot.api import bot_ref
+  from bot.ui.views import _refresh_party_embed_with_reserved
+
+  bot = bot_ref.get_bot()
+  if bot:
+    party = await db.get_party(message_id)
+    if party:
+      await _refresh_party_embed_with_reserved(bot, party)
+      await _rename_party_channel(bot, party, body.scheduled_time)
+
   return {"success": True}
+
+
+async def _rename_party_channel(bot, party: dict, scheduled_time: str) -> None:
+  """스레드 제목에도 일정이 들어가므로, 봇의 /일정변경 커맨드와 동일하게 같이 갱신."""
+  import discord as _discord
+  from bot.data.raids import RAIDS
+
+  try:
+    channel = bot.get_channel(int(party["channel_id"]))
+    if channel is None:
+      channel = await bot.fetch_channel(int(party["channel_id"]))
+    raid_info = RAIDS.get(party["raid_name"], {})
+    short_name = raid_info.get("short_name", party["raid_name"])
+    new_name = f"{short_name} {party['difficulty']} {party['proficiency']} — {scheduled_time}"
+    await channel.edit(name=new_name)
+  except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
+    pass
 
 
 # ── 메모 변경 ─────────────────────────────────────────────
@@ -162,6 +190,16 @@ async def update_schedule(message_id: str, body: ScheduleBody):
 @router.patch("/{message_id}/memo")
 async def update_memo(message_id: str, body: MemoBody):
   await db.update_party_memo(message_id, body.memo)
+
+  from bot.api import bot_ref
+  from bot.ui.views import _refresh_party_embed_with_reserved
+
+  bot = bot_ref.get_bot()
+  if bot:
+    party = await db.get_party(message_id)
+    if party:
+      await _refresh_party_embed_with_reserved(bot, party)
+
   return {"success": True}
 
 
