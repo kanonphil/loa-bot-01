@@ -654,7 +654,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 16px;
 }
 
@@ -713,27 +713,42 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 
 .dash-char-name {
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .dash-char-class {
-  color: var(--text-muted);
   font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .dash-char-count,
 .dash-char-level {
   margin-left: auto;
-  color: var(--text-muted);
   font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
 }
 
 .dash-party-list a {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 12px;
   border-radius: 8px;
+  border-left: 3px solid var(--accent);
   background: var(--sidebar-bg);
   text-decoration: none;
   color: var(--text);
