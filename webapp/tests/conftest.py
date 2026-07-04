@@ -5,7 +5,11 @@ os.environ.setdefault("DISCORD_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("DISCORD_REDIRECT_URI", "http://localhost:8001/callback")
 os.environ.setdefault("BOT_API_BASE_URL", "http://bot-server.internal")
 os.environ.setdefault("BOT_API_WEBAPP_KEY", "test-webapp-key")
+os.environ.setdefault("DISCORD_GUILD_ID", "test-guild-id")
 os.environ.setdefault("SESSION_SECRET", "test-session-secret")
+# 로컬 실제 .env에 SESSION_HTTPS_ONLY=true가 있어도 테스트는 항상 http로 도니 강제로 false —
+# 안 그러면 세션 쿠키에 Secure가 붙어서 TestClient가 로그인 쿠키를 안 돌려보내 전부 로그아웃 상태로 보인다.
+os.environ["SESSION_HTTPS_ONLY"] = "false"
 # 실제 Gemini 키는 절대 여기 넣지 않음 — AI 응답 관련 테스트는 generate_reply를 직접 모킹한다.
 
 import asyncio
