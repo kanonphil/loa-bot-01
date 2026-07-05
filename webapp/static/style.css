@@ -1137,6 +1137,49 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   font-size: 12px;
 }
 
+/* ── 공대 없음/취소됨 안내 카드 ────────────────────────── */
+
+.party-empty-card {
+  max-width: 480px;
+  margin: 60px auto 0;
+  padding: 40px 36px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  text-align: center;
+}
+
+.party-empty-icon {
+  font-size: 36px;
+  margin: 0 0 12px;
+}
+
+.party-empty-card h1 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.party-empty-desc {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0 0 24px;
+}
+
+.party-empty-link {
+  display: inline-block;
+  padding: 10px 22px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 500;
+  transition: filter 0.15s ease;
+}
+
+.party-empty-link:hover {
+  filter: brightness(1.1);
+}
+
 /* ── 로그인 랜딩 페이지 ────────────────────────────────── */
 
 .landing {

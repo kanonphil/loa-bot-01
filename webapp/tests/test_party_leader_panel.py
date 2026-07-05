@@ -142,4 +142,30 @@ def test_cancel_action_calls_bot_with_reason(client):
         resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
 
     assert resp.status_code == 200
-    assert cancel_route.called
+
+
+def test_cancel_success_shows_styled_confirmation_when_party_purged(client):
+    """실제 취소 처리(db.purge_party)는 파티를 통째로 지우므로, 조회 시 null이 온다.
+    이때 밋밋한 "찾을 수 없습니다"가 아니라 취소 완료를 알리는 카드가 떠야 한다."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.post(CANCEL_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, text="null"))
+
+        resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
+
+    assert resp.status_code == 200
+    assert "공대가 취소되었습니다" in resp.text
+    assert "party-empty-card" in resp.text
+
+
+def test_visiting_unknown_party_shows_not_found_not_cancelled_message(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, text="null"))
+
+        resp = client.get("/parties/p1")
+
+    assert resp.status_code == 200
+    assert "공대를 찾을 수 없습니다" in resp.text
+    assert "취소되었습니다" not in resp.text
