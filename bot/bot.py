@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 
 import bot.database.manager as db
 import bot.api.lostark as loa
+from bot.services.expedition import sync_all_accounts_daily
 from bot.ui.views import PartyView
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
@@ -62,12 +63,27 @@ class LoABot(commands.Bot):
         await self._restore_party_views()
         if not self.party_notification_task.is_running():
             self.party_notification_task.start()
+        if not self.account_sync_task.is_running():
+            self.account_sync_task.start()
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.playing,
                 name="로스트아크 | /원정대",
             )
         )
+
+    @tasks.loop(hours=24)
+    async def account_sync_task(self) -> None:
+        """등록된 모든 유저의 모든 계정(부계정 포함) 캐릭터 정보를 하루 한 번 자동 동기화.
+        수동 "동기화" 버튼/웹 sync API와 동일한 핵심 로직을 공유한다
+        (bot.services.expedition.sync_all_accounts_daily)."""
+        print("[LoABot] 일일 계정 동기화 시작")
+        await sync_all_accounts_daily()
+        print("[LoABot] 일일 계정 동기화 완료")
+
+    @account_sync_task.before_loop
+    async def before_account_sync(self) -> None:
+        await self.wait_until_ready()
 
     @tasks.loop(seconds=30)
     async def party_notification_task(self) -> None:
