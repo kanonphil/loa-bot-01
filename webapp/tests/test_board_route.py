@@ -1,4 +1,6 @@
 """커뮤니티 게시판 페이지 검증 — 봇 서버는 respx로 모킹."""
+import json
+
 import httpx
 import respx
 
@@ -249,3 +251,116 @@ def test_delete_rejected_for_non_author_shows_error(client):
 
     assert resp.status_code == 200
     assert "작성자만 삭제할 수 있습니다." in resp.text
+
+
+# ── 리치 텍스트 에디터: 저장 전 HTML 정제 ──────────────────────
+
+def test_create_post_sanitizes_script_tags(client):
+    """에디터가 만들어낸 HTML은 저장 전에 정제된다 — script/onerror 등 위험 요소는 제거."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        create_route = respx.post(POSTS_URL).mock(
+            return_value=httpx.Response(200, json={"success": True, "post_id": 9})
+        )
+        resp = client.post(
+            "/board/create",
+            data={
+                "title": "제목",
+                "category": "자유",
+                "content": '<p>안녕</p><script>alert(1)</script><img src="x" onerror="alert(2)">',
+                "scheduled_datetime": "",
+            },
+        )
+
+    assert resp.status_code == 303
+    sent_payload = json.loads(create_route.calls.last.request.content)
+    assert "<script>" not in sent_payload["content"]
+    assert "onerror" not in sent_payload["content"]
+    assert "<p>안녕</p>" in sent_payload["content"]
+
+
+def test_edit_post_sanitizes_javascript_href(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        edit_route = respx.patch(POST1_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        respx.get(POST1_URL).mock(return_value=httpx.Response(200, json=POST1_DETAIL))
+        resp = client.post(
+            "/board/1/edit",
+            data={
+                "title": "수정된 제목",
+                "content": '<a href="javascript:alert(1)">click me</a>',
+                "scheduled_datetime": "",
+            },
+        )
+
+    assert resp.status_code == 200
+    sent_payload = json.loads(edit_route.calls.last.request.content)
+    assert "javascript:" not in sent_payload["content"]
+
+
+def test_board_detail_renders_content_as_html(client):
+    """정제된 HTML은 그대로(escape 없이) 렌더되어야 한다 — <p> 태그가 실제 문단으로 표시."""
+    post = {**POST1_DETAIL, "content": "<p>사진 추가된 공지</p><img src=\"/static/uploads/board/x.png\" alt=\"img\">"}
+    with respx.mock:
+        log_in(client, discord_id="222")
+        respx.get(POST1_URL).mock(return_value=httpx.Response(200, json=post))
+        resp = client.get("/board/1")
+
+    assert resp.status_code == 200
+    assert '<p>사진 추가된 공지</p>' in resp.text
+    assert '<img src="/static/uploads/board/x.png" alt="img">' in resp.text
+
+
+# ── 이미지 업로드 엔드포인트 ────────────────────────────────
+
+PNG_HEADER = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+def test_upload_image_requires_login(client):
+    resp = client.post("/board/upload-image", files={"file": ("a.png", PNG_HEADER, "image/png")})
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login"
+
+
+def test_upload_image_accepts_valid_png(client, tmp_path, monkeypatch):
+    import webapp.routes.board as board_module
+
+    monkeypatch.setattr(board_module, "UPLOAD_DIR", tmp_path / "board_uploads")
+
+    with respx.mock:
+        log_in(client, discord_id="111")
+        resp = client.post("/board/upload-image", files={"file": ("a.png", PNG_HEADER, "image/png")})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["url"].startswith("/static/uploads/board/")
+    assert body["url"].endswith(".png")
+    saved = list((tmp_path / "board_uploads").iterdir())
+    assert len(saved) == 1
+
+
+def test_upload_image_rejects_non_image_file(client, tmp_path, monkeypatch):
+    import webapp.routes.board as board_module
+
+    monkeypatch.setattr(board_module, "UPLOAD_DIR", tmp_path / "board_uploads")
+
+    with respx.mock:
+        log_in(client, discord_id="111")
+        resp = client.post(
+            "/board/upload-image", files={"file": ("evil.png", b"not an image", "image/png")}
+        )
+
+    assert resp.status_code == 400
+
+
+def test_upload_image_rejects_oversized_file(client, tmp_path, monkeypatch):
+    import webapp.routes.board as board_module
+
+    monkeypatch.setattr(board_module, "UPLOAD_DIR", tmp_path / "board_uploads")
+    oversized = PNG_HEADER + b"\x00" * (5 * 1024 * 1024)
+
+    with respx.mock:
+        log_in(client, discord_id="111")
+        resp = client.post("/board/upload-image", files={"file": ("big.png", oversized, "image/png")})
+
+    assert resp.status_code == 400

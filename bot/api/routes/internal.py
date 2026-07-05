@@ -2,6 +2,8 @@
 웹앱(별도 서버)이 로그인 시 호출하는 내부 전용 API.
 X-Webapp-Key로만 인증하며, 관리자 API(X-API-Key)와는 분리되어 있다.
 """
+import re
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from bot.api.auth import verify_webapp_key
@@ -631,6 +633,13 @@ async def add_account(body: AddAccountBody):
 
 BOARD_CATEGORIES = ("이벤트", "공지", "자유")
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html(html: str) -> str:
+  """게시글 본문(리치 텍스트 HTML)에서 디스코드 알림 요약용 평문만 추출."""
+  return _HTML_TAG_RE.sub("", html)
+
 
 async def _send_board_announcement(post: dict) -> None:
   """이벤트 카테고리 게시글 생성 직후 디스코드 채널에 알림 발송 — 채널 미설정이면
@@ -676,7 +685,8 @@ async def _send_board_announcement(post: dict) -> None:
     except ValueError:
       pass
 
-  summary = post["content"][:200] + ("..." if len(post["content"]) > 200 else "")
+  plain_content = _strip_html(post["content"]).strip()
+  summary = plain_content[:200] + ("..." if len(plain_content) > 200 else "")
 
   lines = [f"📢 {role_mention} 새 이벤트가 등록되었습니다!".strip(), f"**{post['title']}**"]
   if schedule_text:

@@ -1,0 +1,10 @@
+<div class="board-editor">
+  <div class="board-editor-toolbar">
+    <button type="button" class="board-editor-btn" data-cmd="bold" title="굵게"><b>B</b></button>
+    <button type="button" class="board-editor-btn" data-cmd="italic" title="기울임"><i>I</i></button>
+    <button type="button" class="board-editor-btn board-editor-image-btn" title="사진 추가">🖼️ 사진</button>
+    <input type="file" class="board-editor-image-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+  </div>
+  <div class="board-editor-content" contenteditable="true" data-placeholder="내용을 입력하세요...">{{ initial_content | default("") | safe }}</div>
+  <textarea name="content" class="board-editor-hidden-textarea" hidden>{{ initial_content | default("") }}</textarea>
+</div>

@@ -1,15 +1,37 @@
 """길드 커뮤니티 게시판 — 목록/작성/상세/댓글/참여/수정/삭제."""
-from fastapi import APIRouter, Depends, Form, Request
+import secrets
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from starlette.responses import RedirectResponse
 
 from webapp import config
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
+from webapp.sanitize import clean_html
 from webapp.templating import templates
 
 router = APIRouter()
 
 CATEGORIES = ["이벤트", "공지", "자유"]
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "static" / "uploads" / "board"
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+_IMAGE_SIGNATURES = {
+    b"\x89PNG\r\n\x1a\n": ".png",
+    b"\xff\xd8\xff": ".jpg",
+    b"GIF87a": ".gif",
+    b"GIF89a": ".gif",
+}
+
+
+def _detect_image_ext(header: bytes) -> str | None:
+    for signature, ext in _IMAGE_SIGNATURES.items():
+        if header.startswith(signature):
+            return ext
+    if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return ".webp"
+    return None
 
 
 @router.get("/board")
@@ -52,7 +74,7 @@ async def board_create_submit(
 ):
     result = await bot_client.create_board_post(
         user["discord_id"], config.DISCORD_GUILD_ID, title.strip(), category,
-        content.strip(), scheduled_datetime.strip() or None,
+        clean_html(content), scheduled_datetime.strip() or None,
     )
     if not result["success"]:
         return await board_create_form(request, error=result["reason"], user=user)
@@ -121,7 +143,7 @@ async def board_edit(
     user: dict = Depends(get_current_user),
 ):
     action_result = await bot_client.update_board_post(
-        post_id, user["discord_id"], title.strip(), content.strip(), scheduled_datetime.strip() or None
+        post_id, user["discord_id"], title.strip(), clean_html(content), scheduled_datetime.strip() or None
     )
     ctx = await _detail_context(post_id, user["discord_id"])
     return templates.TemplateResponse(
@@ -142,3 +164,20 @@ async def board_delete(request: Request, post_id: int, user: dict = Depends(get_
             {"user": user, "active": "board", "action_result": result, **ctx},
         )
     return RedirectResponse("/board", status_code=303)
+
+
+@router.post("/board/upload-image")
+async def board_upload_image(file: UploadFile, user: dict = Depends(get_current_user)):
+    body = await file.read()
+    if len(body) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="이미지는 5MB 이하만 업로드할 수 있습니다.")
+
+    ext = _detect_image_ext(body[:16])
+    if ext is None:
+        raise HTTPException(status_code=400, detail="지원하지 않는 이미지 형식입니다.")
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{secrets.token_hex(16)}{ext}"
+    (UPLOAD_DIR / filename).write_bytes(body)
+
+    return {"url": f"/static/uploads/board/{filename}"}

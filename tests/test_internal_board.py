@@ -108,6 +108,30 @@ def test_create_event_post_announces_when_channel_configured(client, fake_bot):
     assert post["announced"] == 1
 
 
+def test_announcement_summary_strips_html_tags(client, fake_bot):
+    """웹앱 에디터가 저장한 본문은 HTML(<p>, <img> 등)이라 디스코드 알림 요약은
+    태그를 제거한 평문이어야 한다 — 안 그러면 알림에 태그가 그대로 노출된다."""
+    _, fake_channel = fake_bot
+    asyncio.run(db.set_board_channel("1", "555", None))
+
+    resp = client.post(
+        "/api/internal/board/posts",
+        json=_create_payload(
+            category="이벤트",
+            content='<p>이번 주말에 다같이 모입니다</p><img src="/static/uploads/board/x.png" alt="poster">',
+            scheduled_datetime="2026-08-01T20:00:00+09:00",
+        ),
+        headers=HEADERS,
+    )
+    assert resp.status_code == 200
+
+    fake_channel.send.assert_awaited_once()
+    sent_text = fake_channel.send.call_args[0][0]
+    assert "<p>" not in sent_text
+    assert "<img" not in sent_text
+    assert "이번 주말에 다같이 모입니다" in sent_text
+
+
 def test_create_event_post_skips_announcement_when_channel_not_configured(client, fake_bot):
     """채널 미설정이어도 요청 자체는 실패하면 안 되고, announced는 재시도 방지를 위해 1로 마킹된다."""
     resp = client.post(
