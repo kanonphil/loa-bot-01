@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<link rel="stylesheet" href="/static/flatpickr.min.css">
 {% if not party %}
 <p>공대를 찾을 수 없습니다. <a href="/parties">목록으로</a></p>
 {% else %}
@@ -136,7 +137,7 @@
   {% endif %}
 
   <form method="post" action="/parties/{{ party.message_id }}/reschedule" class="leader-form">
-    <input type="datetime-local" name="scheduled_datetime" required>
+    <input type="text" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" required>
     <input type="text" name="memo" maxlength="150" placeholder="공지/메모 (비우면 삭제)" value="{{ party.memo or '' }}">
     <button type="submit" class="leader-btn">📅 일정 변경</button>
   </form>
@@ -146,6 +147,15 @@
     <button type="submit" class="leader-btn leader-btn-danger">❌ 파티 취소</button>
   </form>
 </div>
+<script src="/static/flatpickr.min.js"></script>
+<script>
+  flatpickr("#reschedule-datetime-input", {
+    enableTime: true,
+    dateFormat: "Y-m-d\\TH:i",
+    time_24hr: true,
+    minDate: "today",
+  });
+</script>
 {% endif %}
 </div>
 {% endif %}

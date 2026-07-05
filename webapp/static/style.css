@@ -1152,3 +1152,54 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: brightness(1.1);
   transform: translateY(-1px);
 }
+
+/* ── Flatpickr 다크 테마 (사이트 색상에 맞춤) ──────────────── */
+
+.flatpickr-calendar {
+  background: var(--panel) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+}
+
+.flatpickr-months,
+.flatpickr-weekdays,
+.flatpickr-time {
+  background: var(--panel) !important;
+}
+
+.flatpickr-current-month,
+.flatpickr-weekday,
+.flatpickr-time input,
+.numInputWrapper span {
+  color: var(--text) !important;
+}
+
+.flatpickr-day {
+  color: var(--text) !important;
+}
+
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay {
+  color: var(--text-muted) !important;
+}
+
+.flatpickr-day:hover {
+  background: var(--sidebar-bg) !important;
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+.flatpickr-day.today {
+  border-color: var(--accent) !important;
+}
+
+.flatpickr-months .flatpickr-prev-month svg,
+.flatpickr-months .flatpickr-next-month svg {
+  fill: var(--text-muted) !important;
+}

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<link rel="stylesheet" href="/static/flatpickr.min.css">
 <div class="page-content">
 <a href="/parties" class="party-back-link">&larr; 목록으로</a>
 <h1>공대 개설</h1>
@@ -34,7 +35,7 @@
 
   <label>
     일정
-    <input type="datetime-local" name="scheduled_datetime" required>
+    <input type="text" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" required>
   </label>
 
   <label>
@@ -58,5 +59,14 @@
 
   raidSelect.addEventListener("change", fillDifficulties);
   fillDifficulties();
+</script>
+<script src="/static/flatpickr.min.js"></script>
+<script>
+  flatpickr("#scheduled-datetime-input", {
+    enableTime: true,
+    dateFormat: "Y-m-d\\TH:i",
+    time_24hr: true,
+    minDate: "today",
+  });
 </script>
 {% endblock %}
