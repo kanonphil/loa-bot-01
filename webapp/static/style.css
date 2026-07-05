@@ -1217,11 +1217,24 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   color: #fff;
 }
 
-/* 시간/분 옆에 명시적 −/+ 버튼 — 기본 화살표는 너무 작고 안 눌려서 대체 */
+/* 시간/분 옆에 명시적 −/+ 버튼 — 기본 화살표는 너무 작고 안 눌려서 대체.
+   시간 묶음과 분 묶음이 각각 하나의 알약처럼 보이도록 감싸고, 두 묶음
+   사이(:)는 넉넉히 띄워서 서로 다른 그룹임을 분명히 한다. */
+.flatpickr-time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
 .flatpickr-time .numInputWrapper {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
 }
 
 .flatpickr-time .numInputWrapper span.arrowUp,
@@ -1232,24 +1245,39 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .flatpickr-time .numInput {
   padding: 0 !important;
   text-align: center;
+  background: transparent !important;
+  /* 네이티브 스핀 버튼 제거 — 저 버튼에 마우스 올리면 흰 배경으로 텍스트가 안 보였음 */
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  appearance: none;
+}
+
+.flatpickr-time .numInput::-webkit-inner-spin-button,
+.flatpickr-time .numInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.flatpickr-time-separator {
+  color: var(--text-muted);
 }
 
 .fp-step-btn {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--sidebar-bg);
-  color: var(--text);
-  font-size: 14px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
   line-height: 1;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .fp-step-btn:hover {
-  border-color: var(--accent);
   background: var(--accent-dim);
+  color: var(--accent);
 }
 
 /* 상단 연/월 헤더 — 월 드롭다운이 왼쪽 정렬로 넓게 차지해 연도와 비율이
