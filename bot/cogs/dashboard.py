@@ -10,6 +10,17 @@ import bot.database.manager as db
 from bot.ui.embeds import character_embed
 
 
+async def _resolve_api_key_for_character(discord_id: str, char_name: str, fallback_key: str) -> str:
+    """캐릭터가 연결된 계정(api_key_id)의 키를 우선 사용 — 부계정 캐릭터도 올바른 키로 조회.
+    api_key_id가 없는(레거시) 캐릭터는 fallback_key(레거시 단일 키)를 그대로 사용."""
+    key_id = await db.get_character_api_key_id(discord_id, char_name)
+    if key_id is not None:
+        resolved = await db.get_user_api_key_by_id(key_id)
+        if resolved:
+            return resolved
+    return fallback_key
+
+
 async def _send_dashboard(
     interaction: discord.Interaction,
     api_key: str,
@@ -64,7 +75,8 @@ class Dashboard(commands.Cog):
 
         if len(chars) == 1:
             await interaction.response.defer(thinking=True, ephemeral=True)
-            await _send_dashboard(interaction, api_key, chars[0], followup=True)
+            resolved_key = await _resolve_api_key_for_character(discord_id, chars[0], api_key)
+            await _send_dashboard(interaction, resolved_key, chars[0], followup=True)
             return
 
         # 캐시 기반 Select 옵션
@@ -87,7 +99,8 @@ class Dashboard(commands.Cog):
             async def _on_select(self, inter: discord.Interaction) -> None:
                 selected = inter.data["values"][0]
                 await inter.response.defer()
-                await _send_dashboard(inter, api_key, selected, followup=True)
+                resolved_key = await _resolve_api_key_for_character(discord_id, selected, api_key)
+                await _send_dashboard(inter, resolved_key, selected, followup=True)
 
         await interaction.response.send_message(
             "조회할 캐릭터를 선택하세요:", view=CharSelect(), ephemeral=True

@@ -138,3 +138,17 @@ def test_get_cached_characters_with_account_legacy_null_label(clean_db):
     asyncio.run(db.add_character("111", "레거시캐릭"))
     rows = asyncio.run(db.get_cached_characters_with_account("111", max_age_hours=99999))
     assert rows[0]["account_label"] is None
+
+
+def test_delete_user_removes_all_registered_accounts(clean_db):
+    """delete_user는 user_api_keys(부계정 포함)도 함께 정리해서 고아 row가 남지 않아야 한다."""
+    asyncio.run(db.add_user_api_key("111", "발키리", "key-a"))
+    asyncio.run(db.add_user_api_key("111", "슬레이어부캐", "key-b"))
+    asyncio.run(db.add_character("111", "발키리"))
+
+    asyncio.run(db.delete_user("111"))
+
+    assert asyncio.run(db.list_user_api_keys("111")) == []
+    assert asyncio.run(db.get_user_api_key("111")) is None
+    assert asyncio.run(db.get_user_characters("111")) == []
+    assert asyncio.run(db.user_exists("111")) is False

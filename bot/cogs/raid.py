@@ -9,6 +9,17 @@ from bot.ui.embeds import raid_checklist_embed
 from bot.ui.views import RaidChecklistView
 
 
+async def _resolve_api_key_for_character(discord_id: str, char_name: str, fallback_key: str) -> str:
+    """캐릭터가 연결된 계정(api_key_id)의 키를 우선 사용 — 부계정 캐릭터도 올바른 키로 조회.
+    api_key_id가 없는(레거시) 캐릭터는 fallback_key(레거시 단일 키)를 그대로 사용."""
+    key_id = await db.get_character_api_key_id(discord_id, char_name)
+    if key_id is not None:
+        resolved = await db.get_user_api_key_by_id(key_id)
+        if resolved:
+            return resolved
+    return fallback_key
+
+
 async def _show_checklist(
     interaction: discord.Interaction,
     discord_id: str,
@@ -24,8 +35,9 @@ async def _show_checklist(
     if cache and cache["item_level"] is not None:
         item_level  = cache["item_level"]
     else:
+        resolved_key = await _resolve_api_key_for_character(discord_id, name, api_key)
         try:
-            char = await loa.get_character_info(api_key, name)
+            char = await loa.get_character_info(resolved_key, name)
         except RuntimeError as e:
             msg = str(e)
             if followup:
@@ -129,8 +141,9 @@ class Raid(commands.Cog):
 
         embeds: list[discord.Embed] = []
         for name in char_names:
+            resolved_key = await _resolve_api_key_for_character(discord_id, name, api_key)
             try:
-                char = await loa.get_character_info(api_key, name)
+                char = await loa.get_character_info(resolved_key, name)
             except RuntimeError:
                 continue
             if not char:
