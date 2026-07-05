@@ -351,15 +351,18 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 
 .raid-card-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   margin-bottom: 10px;
+  min-width: 0;
 }
 
 .raid-card-name {
   font-size: 15px;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .raid-card-meta {
@@ -368,6 +371,38 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 계정(부계정) 필터 탭 */
+.account-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.account-tab {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.account-tab:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.account-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
 }
 
 .raid-card-progress {

@@ -1,6 +1,7 @@
 """레이드 체크 페이지 — 길드원이 본인 캐릭터 전체를 카드 그리드로 보며
 이번 주 레이드 완료 여부를 확인/체크. 캐릭터마다 카드가 하나씩이고,
-체크 토글은 그 카드만 갱신한다(다른 카드에 영향 없음)."""
+체크 토글은 그 카드만 갱신한다(다른 카드에 영향 없음). 부계정이 여러 개면
+로스트아크 계정 단위로 필터링해서 볼 수 있다."""
 import asyncio
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -11,6 +12,10 @@ from webapp.raid_check import applicable_raids, group_by_category
 from webapp.templating import templates
 
 router = APIRouter()
+
+
+def _account_label(character: dict) -> str:
+    return character.get("account_label") or "기타"
 
 
 async def _character_card(discord_id: str, character: dict, raids: dict, categories: list[dict]) -> dict:
@@ -38,23 +43,39 @@ async def _character_card(discord_id: str, character: dict, raids: dict, categor
     }
 
 
-async def _page_context(discord_id: str) -> dict:
-    characters = await bot_client.get_user_characters(discord_id)
+async def _page_context(discord_id: str, account: str | None) -> dict:
+    characters = await bot_client.get_user_characters_grouped(discord_id)
     if not characters:
-        return {"characters": [], "cards": []}
+        return {"characters": [], "cards": [], "account_labels": [], "selected_account": None}
+
+    account_labels: list[str] = []
+    for c in characters:
+        label = _account_label(c)
+        if label not in account_labels:
+            account_labels.append(label)
+
+    selected_account = account if account in account_labels else None
+    visible = [c for c in characters if not selected_account or _account_label(c) == selected_account]
 
     raids, categories = await asyncio.gather(
         bot_client.get_raids(), bot_client.get_raid_categories()
     )
     cards = await asyncio.gather(
-        *[_character_card(discord_id, c, raids, categories) for c in characters]
+        *[_character_card(discord_id, c, raids, categories) for c in visible]
     )
-    return {"characters": characters, "cards": list(cards)}
+    return {
+        "characters": characters,
+        "cards": list(cards),
+        "account_labels": account_labels,
+        "selected_account": selected_account,
+    }
 
 
 @router.get("/raid-check")
-async def raid_check_page(request: Request, user: dict = Depends(get_current_user)):
-    ctx = await _page_context(user["discord_id"])
+async def raid_check_page(
+    request: Request, account: str | None = None, user: dict = Depends(get_current_user)
+):
+    ctx = await _page_context(user["discord_id"], account)
     return templates.TemplateResponse(
         request, "raid_check.html", {"user": user, "active": "raid_check", **ctx}
     )
@@ -69,7 +90,7 @@ async def toggle_raid_check(
     card_index: int = Form(...),
     user: dict = Depends(get_current_user),
 ):
-    characters = await bot_client.get_user_characters(user["discord_id"])
+    characters = await bot_client.get_user_characters_grouped(user["discord_id"])
     character = next((c for c in characters if c["character_name"] == character_name), None)
     if character is None:
         # 본인이 등록한 캐릭터가 아니면 거부 (폼 조작으로 남의 캐릭터 체크 방지)

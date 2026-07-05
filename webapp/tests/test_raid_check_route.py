@@ -8,7 +8,7 @@ RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 CATEGORIES_URL = "http://bot-server.internal/api/internal/raid-categories"
 COMPLETIONS_URL = "http://bot-server.internal/api/internal/completions"
 TOGGLE_URL = "http://bot-server.internal/api/internal/completions/toggle"
-CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters"
+CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters-grouped"
 
 RAIDS = {
     "아르모체(4막)": {
@@ -160,8 +160,14 @@ def test_raid_check_requires_login(client):
 
 
 TWO_CHARACTERS = [
-    {"character_name": "발키리", "character_class": "서포터", "item_level": 1720.0},
-    {"character_name": "워로드부캐", "character_class": "워로드", "item_level": 1700.0},
+    {"character_name": "발키리", "character_class": "서포터", "item_level": 1720.0, "account_label": "발키리"},
+    {"character_name": "워로드부캐", "character_class": "워로드", "item_level": 1700.0, "account_label": "발키리"},
+]
+
+TWO_ACCOUNT_CHARACTERS = [
+    {"character_name": "발키리", "character_class": "서포터", "item_level": 1720.0, "account_label": "발키리"},
+    {"character_name": "워로드부캐", "character_class": "워로드", "item_level": 1700.0, "account_label": "발키리"},
+    {"character_name": "슬레이어", "character_class": "슬레이어", "item_level": 1690.0, "account_label": "슬레이어부계정"},
 ]
 
 
@@ -223,3 +229,54 @@ def test_toggle_only_updates_its_own_card_fragment(client):
     assert 'id="raid-card-1"' in resp.text
     assert "워로드부캐" in resp.text
     assert "발키리" not in resp.text
+
+
+def test_single_account_hides_account_tabs(client):
+    """부계정이 없으면(계정 라벨이 하나뿐이면) 탭을 굳이 보여줄 필요가 없다."""
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_CHARACTERS))
+        respx.get(COMPLETIONS_URL).mock(side_effect=_completions_by_character({}))
+        resp = client.get("/raid-check")
+
+    assert resp.status_code == 200
+    assert "account-tabs" not in resp.text
+
+
+def test_multi_account_shows_tabs_and_defaults_to_all(client):
+    """부계정이 여러 개면 탭이 뜨고, 기본값(쿼리 파라미터 없음)은 전체 표시."""
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_ACCOUNT_CHARACTERS))
+        respx.get(COMPLETIONS_URL).mock(side_effect=_completions_by_character({}))
+        resp = client.get("/raid-check")
+
+    assert resp.status_code == 200
+    assert "account-tabs" in resp.text
+    assert "발키리" in resp.text
+    assert "슬레이어" in resp.text
+    assert "슬레이어부계정" in resp.text
+    assert "워로드부캐" in resp.text
+    # 전체 탭이 활성 상태여야 한다
+    assert '<a href="/raid-check" class="account-tab active">전체</a>' in resp.text
+
+
+def test_selecting_account_filters_cards_to_that_account_only(client):
+    """계정 탭을 골랐으면 그 계정 캐릭터 카드만 보이고 다른 계정 캐릭터는 안 보여야 한다."""
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_ACCOUNT_CHARACTERS))
+        respx.get(COMPLETIONS_URL).mock(side_effect=_completions_by_character({}))
+        resp = client.get("/raid-check", params={"account": "슬레이어부계정"})
+
+    assert resp.status_code == 200
+    assert 'id="raid-card-0"' in resp.text
+    assert 'id="raid-card-1"' not in resp.text  # 카드가 하나만 렌더링돼야 함
+    assert "워로드부캐" not in resp.text  # 다른 계정 캐릭터 이름은 카드에만 나오므로 이걸로 필터링 검증
+    assert 'class="account-tab active">슬레이어부계정</a>' in resp.text

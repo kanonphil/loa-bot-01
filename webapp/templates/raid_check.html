@@ -6,6 +6,16 @@
 {% if not characters %}
 <p>등록된 캐릭터가 없습니다. 디스코드에서 <code>/api등록</code>으로 캐릭터를 먼저 등록해주세요.</p>
 {% else %}
+
+{% if account_labels|length > 1 %}
+<div class="account-tabs">
+  <a href="/raid-check" class="account-tab {% if not selected_account %}active{% endif %}">전체</a>
+  {% for label in account_labels %}
+  <a href="/raid-check?account={{ label }}" class="account-tab {% if selected_account == label %}active{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="raid-card-grid">
   {% for card in cards %}
   {% set card_index = loop.index0 %}
