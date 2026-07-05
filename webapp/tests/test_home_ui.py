@@ -24,7 +24,8 @@ def test_home_renders_sidebar_logo_and_empty_state(client):
     body = resp.text
     # 사이드바 / 로고 / 네비게이션 / 최근 세션 섹션
     assert 'class="sidebar"' in body
-    assert "logo.svg" in body
+    assert "logo.svg" in body  # 봇 서버에서 길드 아이콘을 못 받아오면 기본 로고로 대체
+    assert "동물롱장" in body
     assert "새 채팅" in body
     assert "레이드 체크" in body
     assert "최근" in body

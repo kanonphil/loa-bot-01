@@ -16,6 +16,9 @@ BOT_API_BASE_URL: str = os.environ.get("BOT_API_BASE_URL", "http://localhost:800
 BOT_API_WEBAPP_KEY: str = os.environ["BOT_API_WEBAPP_KEY"]
 # 공대 모집 목록 조회용 — 이 웹앱은 길드 하나만 서비스한다고 가정
 DISCORD_GUILD_ID: str = os.environ["DISCORD_GUILD_ID"]
+# 사이드바에 표시할 길드명 — 실제 아이콘은 봇 서버에서 조회해 오되(webapp/guild_info.py),
+# 봇 서버가 응답 안 해도 이름만큼은 항상 정확히 뜨도록 고정값으로 둔다.
+GUILD_NAME: str = os.environ.get("GUILD_NAME", "동물롱장")
 
 # ── 세션 ──────────────────────────────────────────────────
 SESSION_SECRET: str = os.environ.get("SESSION_SECRET", "dev-secret-change-me")

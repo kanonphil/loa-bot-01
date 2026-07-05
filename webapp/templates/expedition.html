@@ -57,9 +57,13 @@
   <ul class="expedition-list">
     {% for c in group.characters %}
     <li class="expedition-item">
-      <span class="dash-char-name">{{ c.character_name }}</span>
-      <span class="dash-char-class">{{ c.character_class }}</span>
-      <span class="dash-char-level">{{ c.item_level }}</span>
+      <div class="expedition-item-main">
+        <span class="dash-char-name">{{ c.character_name }}</span>
+        <div class="expedition-item-badges">
+          <span class="dash-char-class">{{ c.character_class }}</span>
+          <span class="dash-char-level">{{ c.item_level }}</span>
+        </div>
+      </div>
       <form method="post" action="/expedition/remove" class="expedition-remove-form">
         <input type="hidden" name="character_name" value="{{ c.character_name }}">
         <button type="submit" class="party-leave-btn">삭제</button>

@@ -23,6 +23,19 @@ async def verify_user(discord_id: str):
   return {"discord_id": discord_id, "registered": registered}
 
 
+@router.get("/guild-info")
+async def guild_info(guild_id: str):
+  """웹앱 사이드바에 길드 아이콘을 보여주기 위한 조회. 봇이 그 서버에 없거나
+  준비 전이면 name/icon_url 모두 None — 호출 측(웹앱)에서 기본 로고로 대체한다."""
+  from bot.api import bot_ref
+
+  bot = bot_ref.get_bot()
+  guild = bot.get_guild(int(guild_id)) if bot else None
+  if guild is None:
+    return {"name": None, "icon_url": None}
+  return {"name": guild.name, "icon_url": str(guild.icon.url) if guild.icon else None}
+
+
 @router.get("/user-characters")
 async def user_characters(discord_id: str):
   """AI 상담 프롬프트에 넣을 캐릭터 정보(직업·아이템레벨 등). 캐시된 값 그대로 반환."""

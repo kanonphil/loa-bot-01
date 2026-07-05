@@ -8,9 +8,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
-from webapp import chat_store, config
+from webapp import chat_store, config, guild_info
 from webapp.auth.dependencies import NotAuthenticated
 from webapp.routes import auth_routes, calendar, chat, dashboard, expedition, pages, party, raid_check
+from webapp.templating import templates
 
 logger = logging.getLogger("webapp")
 
@@ -31,6 +32,7 @@ async def _cleanup_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await chat_store.init_db()
+    await guild_info.refresh()
     cleanup_task = asyncio.create_task(_cleanup_loop())
     try:
         yield
@@ -39,6 +41,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="로아봇 웹", lifespan=lifespan)
+
+templates.env.globals["get_guild_name"] = guild_info.get_name
+templates.env.globals["get_guild_icon_url"] = guild_info.get_icon_url
 
 app.add_middleware(
     SessionMiddleware,

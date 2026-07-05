@@ -12,8 +12,8 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <img src="/static/logo.svg" alt="길드 로고">
-        <span>{{ guild_name | default("길드명") }}</span>
+        <img src="{{ get_guild_icon_url() or '/static/logo.svg' }}" alt="길드 로고">
+        <span>{{ get_guild_name() }}</span>
       </div>
       <div class="sidebar-section-label">메인</div>
       <ul class="sidebar-nav">

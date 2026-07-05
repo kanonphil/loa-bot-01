@@ -19,6 +19,17 @@ async def is_registered(discord_id: str) -> bool:
         return resp.json()["registered"]
 
 
+async def get_guild_info(guild_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/guild-info",
+            params={"guild_id": guild_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_user_characters(discord_id: str) -> list[dict]:
     """AI 상담 프롬프트에 넣을 캐릭터 정보. 실패해도 앱이 죽으면 안 되니 호출 측에서 감싸서 씀."""
     async with httpx.AsyncClient(timeout=10) as client:
