@@ -10,14 +10,17 @@
 
 <form method="post" action="/parties/create" class="party-create-form">
   <label>
-    레이드 · 난이도
-    <select name="raid_difficulty" required>
+    레이드
+    <select name="raid_name" id="raid-name-select" required>
       {% for raid_name, raid_info in raids.items() %}
-      {% for diff_name in raid_info.difficulties %}
-      <option value="{{ raid_name }}|{{ diff_name }}">{{ raid_info.icon }} {{ raid_info.short_name }} · {{ diff_name }}</option>
-      {% endfor %}
+      <option value="{{ raid_name }}">{{ raid_info.icon }} {{ raid_info.short_name }}</option>
       {% endfor %}
     </select>
+  </label>
+
+  <label>
+    난이도
+    <select name="difficulty" id="difficulty-select" required></select>
   </label>
 
   <label>
@@ -42,4 +45,18 @@
   <button type="submit">공대 개설</button>
 </form>
 </div>
+
+<script>
+  const difficultiesByRaid = {{ difficulties_by_raid_json | safe }};
+  const raidSelect = document.getElementById("raid-name-select");
+  const diffSelect = document.getElementById("difficulty-select");
+
+  function fillDifficulties() {
+    const diffs = difficultiesByRaid[raidSelect.value] || [];
+    diffSelect.innerHTML = diffs.map((d) => `<option value="${d}">${d}</option>`).join("");
+  }
+
+  raidSelect.addEventListener("change", fillDifficulties);
+  fillDifficulties();
+</script>
 {% endblock %}

@@ -1,4 +1,6 @@
 """공대 모집 페이지 — 목록/상세/참여/나가기/개설/파티장 관리."""
+import json
+
 from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse
 
@@ -25,6 +27,10 @@ async def create_party_form(
     raids = await bot_client.get_raids()
     proficiency_options = await bot_client.get_proficiency_options()
     active_raids = {name: info for name, info in raids.items() if info.get("is_active", True)}
+    # 레이드 선택에 따라 난이도 select를 채우는 용도 (서버 왕복 없이 JS로 처리)
+    difficulties_by_raid = {
+        name: list(info["difficulties"].keys()) for name, info in active_raids.items()
+    }
     return templates.TemplateResponse(
         request,
         "party_create.html",
@@ -32,6 +38,7 @@ async def create_party_form(
             "user": user,
             "active": "parties",
             "raids": active_raids,
+            "difficulties_by_raid_json": json.dumps(difficulties_by_raid, ensure_ascii=False),
             "proficiency_options": proficiency_options,
             "error": error,
         },
@@ -41,13 +48,13 @@ async def create_party_form(
 @router.post("/parties/create")
 async def create_party_submit(
     request: Request,
-    raid_difficulty: str = Form(...),
+    raid_name: str = Form(...),
+    difficulty: str = Form(...),
     proficiency: str = Form(...),
     scheduled_datetime: str = Form(...),
     memo: str = Form(""),
     user: dict = Depends(get_current_user),
 ):
-    raid_name, _, difficulty = raid_difficulty.partition("|")
     result = await bot_client.create_party(
         user["discord_id"], config.DISCORD_GUILD_ID, raid_name, difficulty,
         proficiency, scheduled_datetime, memo.strip() or None,

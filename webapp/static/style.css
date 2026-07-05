@@ -525,19 +525,35 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 }
 
 .party-status {
-  position: absolute;
-  top: 14px;
-  right: 16px;
   font-size: 12px;
   padding: 3px 10px;
   border-radius: 999px;
   background: var(--sidebar-bg);
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 목록 카드에서만 우측 상단에 절대 배치 — 상세 페이지에서는 헤더 안에서 자연스럽게 흐름 */
+.party-card .party-status {
+  position: absolute;
+  top: 14px;
+  right: 16px;
 }
 
 .party-status.status-recruiting {
   background: var(--accent-dim);
   color: var(--accent);
+}
+
+.party-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.party-detail-header h1 {
+  margin: 0;
 }
 
 .party-back-link {
@@ -779,6 +795,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .party-create-form input:focus {
   border-color: var(--accent);
   outline: none;
+}
+
+/* 다크 테마에서 브라우저 기본 달력 아이콘이 검은색이라 안 보이는 문제 수정 */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
 }
 
 .party-create-form button {

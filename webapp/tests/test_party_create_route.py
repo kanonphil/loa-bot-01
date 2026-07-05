@@ -57,7 +57,8 @@ def test_create_submit_redirects_on_success(client):
         resp = client.post(
             "/parties/create",
             data={
-                "raid_difficulty": "아르모체(4막)|노말",
+                "raid_name": "아르모체(4막)",
+                "difficulty": "노말",
                 "proficiency": "숙련",
                 "scheduled_datetime": "2026-05-20T20:00",
                 "memo": "음성 필수",
@@ -81,7 +82,8 @@ def test_create_submit_shows_error_on_failure(client):
         resp = client.post(
             "/parties/create",
             data={
-                "raid_difficulty": "아르모체(4막)|노말",
+                "raid_name": "아르모체(4막)",
+                "difficulty": "노말",
                 "proficiency": "숙련",
                 "scheduled_datetime": "2026-05-20T20:00",
                 "memo": "",

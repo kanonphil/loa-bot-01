@@ -21,13 +21,13 @@
 
 <div class="page-content">
 <a href="/parties" class="party-back-link">&larr; 목록으로</a>
-<h1>{{ party.raid_name }} {{ party.difficulty }} &middot; {{ party.proficiency }}</h1>
-<p class="party-meta">
-  {{ party.scheduled_time }} &middot; 최소 {{ party.min_level }} &middot;
+<div class="party-detail-header">
+  <h1>{{ party.raid_name }} {{ party.difficulty }} &middot; {{ party.proficiency }}</h1>
   <span class="party-status status-{{ party.status }}">
     {% if party.status == "recruiting" %}모집중{% elif party.status == "full" %}파티완성{% elif party.status == "closed" %}마감{% else %}종료{% endif %}
   </span>
-</p>
+</div>
+<p class="party-meta">{{ party.scheduled_time }} &middot; 최소 {{ party.min_level }}</p>
 {% if party.memo %}<p class="party-memo">📌 {{ party.memo }}</p>{% endif %}
 
 {% if action_result and not action_result.success %}
