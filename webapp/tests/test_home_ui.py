@@ -31,3 +31,6 @@ def test_home_renders_sidebar_logo_and_empty_state(client):
     # 빈 상태(참고 화면과 동일한 가운데 정렬 인사말 + 입력 폼)
     assert 'class="empty-state"' in body
     assert 'hx-post="/chat/send"' in body
+    # AI 상담이 아직 상세 작업은 못한다는 공지
+    assert 'class="ai-notice"' in body
+    assert "상세한 분석이나 작업 수행은 아직 지원하지 않습니다" in body

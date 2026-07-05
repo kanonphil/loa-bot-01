@@ -69,7 +69,7 @@ def test_registered_user_full_login_flow(client):
     with respx.mock:
         callback_resp = log_in(client)
         assert callback_resp.status_code in (302, 307)
-        assert callback_resp.headers["location"] == "/home"
+        assert callback_resp.headers["location"] == "/main"  # 로그인 성공 후 메인 대시보드로 이동
 
         home_resp = client.get("/home")
 
@@ -78,3 +78,18 @@ def test_registered_user_full_login_flow(client):
     from webapp.content.greetings import _TEMPLATES
 
     assert any(t.format(username="tester") in home_resp.text for t in _TEMPLATES)
+
+
+def test_root_redirects_logged_in_user_to_main(client):
+    with respx.mock:
+        log_in(client)
+        resp = client.get("/")
+
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/main"
+
+
+def test_root_shows_landing_page_when_not_logged_in(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "디스코드로 로그인" in resp.text

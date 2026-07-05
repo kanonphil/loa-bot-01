@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="empty-state">
+  <p class="ai-notice">⚠️ 현재 AI 상담은 간단한 질문에만 답할 수 있어요. 상세한 분석이나 작업 수행은 아직 지원하지 않습니다.</p>
   <p class="empty-state-greeting">{{ welcome_message }}</p>
   <form class="pill-input-form" hx-post="/chat/send">
     <input type="text" name="message" placeholder="무엇이든 물어보세요" autocomplete="off" required>

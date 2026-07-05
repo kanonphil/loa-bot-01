@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from starlette.responses import RedirectResponse
 
 from webapp import chat_store
 from webapp.auth.dependencies import get_current_user
@@ -10,6 +11,8 @@ router = APIRouter()
 
 @router.get("/")
 async def index(request: Request):
+    if request.session.get("user"):
+        return RedirectResponse("/main")
     return templates.TemplateResponse(request, "index.html", {})
 
 

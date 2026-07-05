@@ -207,6 +207,22 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   max-width: 640px;
 }
 
+.ai-notice {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  max-width: 640px;
+  margin: 0;
+}
+
+.ai-notice-chat {
+  max-width: 760px;
+  margin: 0 auto 12px;
+}
+
 .pill-input-form {
   display: flex;
   align-items: center;
@@ -261,7 +277,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   max-width: 760px;
   width: 100%;
   margin: 0 auto;

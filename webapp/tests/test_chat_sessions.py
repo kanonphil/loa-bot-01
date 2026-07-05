@@ -32,6 +32,8 @@ def test_redirected_thread_shows_first_turn_and_sidebar_entry(client, mock_ai_re
     assert STUB_AI_REPLY in body
     # 사이드바 최근 목록에도 같은 세션이 링크로 떠야 함
     assert session_url in body
+    # 이어지는 대화 화면에도 AI 상담 한계 공지가 보여야 함
+    assert 'class="ai-notice' in body
 
 
 def test_continuing_thread_appends_without_redirect(client, mock_ai_reply):

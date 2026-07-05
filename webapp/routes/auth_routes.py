@@ -33,7 +33,7 @@ async def callback(request: Request, code: str, state: str):
         "discord_id": discord_id,
         "username": discord_user.get("username"),
     }
-    return RedirectResponse("/home")
+    return RedirectResponse("/main")
 
 
 @router.get("/logout")
