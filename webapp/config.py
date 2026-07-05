@@ -21,6 +21,14 @@ DISCORD_GUILD_ID: str = os.environ["DISCORD_GUILD_ID"]
 SESSION_SECRET: str = os.environ.get("SESSION_SECRET", "dev-secret-change-me")
 # 로컬 개발(http)에서는 false, Cloudflare 뒤 실서비스(https)에서는 반드시 true
 SESSION_HTTPS_ONLY: bool = os.environ.get("SESSION_HTTPS_ONLY", "false").lower() == "true"
+# 로그인 유지 기간(일). 이 앱은 매번 재로그인시키기엔 번거로운 내부 도구라
+# 넉넉하게 30일로 설정 — 민감한 결제/개인정보가 아니라 길드 활동 도구라는 점을 감안.
+SESSION_MAX_AGE_DAYS: int = int(os.environ.get("SESSION_MAX_AGE_DAYS", "30"))
+# 세션 쿠키의 Domain 속성. 비워두면(로컬 개발) 접속한 호스트에만 쿠키가 묶인다.
+# 운영에서는 ".dmlj-loa.online"처럼 앞에 점을 붙여 www/루트 도메인이 쿠키를
+# 공유하게 한다 — 안 하면 dmlj-loa.online과 www.dmlj-loa.online을 오갈 때
+# 서로 다른 세션으로 취급돼 로그인이 풀린 것처럼 보인다.
+SESSION_COOKIE_DOMAIN: str | None = os.environ.get("SESSION_COOKIE_DOMAIN") or None
 
 # ── AI 채팅 기록 (webapp 자체 소유, 봇 서버 DB와 분리) ────────
 CHAT_DB_PATH: str = os.environ.get("CHAT_DB_PATH", "webapp_chat_history.db")

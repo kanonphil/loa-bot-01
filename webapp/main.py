@@ -45,6 +45,8 @@ app.add_middleware(
     secret_key=config.SESSION_SECRET,
     same_site="lax",
     https_only=config.SESSION_HTTPS_ONLY,
+    max_age=config.SESSION_MAX_AGE_DAYS * 24 * 60 * 60,
+    domain=config.SESSION_COOKIE_DOMAIN,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
