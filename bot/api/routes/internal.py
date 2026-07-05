@@ -139,14 +139,10 @@ async def parties(guild_id: str):
 @router.get("/parties/calendar")
 async def parties_calendar(guild_id: str, start: str, end: str):
   """일정 캘린더용 — [start, end) 구간에 일정이 잡힌 파티 전체.
-  클리어된 파티(status=disbanded)는 행이 남아있으므로 그대로 포함되고,
-  취소된 파티는 완전 삭제(purge)돼 있으므로 자연히 빠진다."""
-  parties = await db.get_calendar_parties(guild_id, start, end)
-  out = []
-  for party in parties:
-    slots = await db.get_party_slots(party["message_id"])
-    out.append({**party, "slot_count": len(slots)})
-  return out
+  아직 살아있는 파티(parties)와 이미 purge된 지난 이력(party_history)을 합쳐서 반환하며,
+  각 파티의 slot_count는 db.get_calendar_parties가 알맞은 테이블에서 이미 계산해 준다
+  (purge된 파티는 party_slots가 비어 있으므로 여기서 다시 세면 항상 0이 되어버린다)."""
+  return await db.get_calendar_parties(guild_id, start, end)
 
 
 @router.get("/parties/{message_id}")
@@ -384,7 +380,7 @@ async def cancel_party(message_id: str, body: CancelPartyBody):
   raid_title = f"{party['raid_name']} {party['difficulty']}"
   reason_text = (body.reason or "").strip()
 
-  await db.purge_party(message_id)
+  await db.purge_party(message_id, archived_status="cancelled")
 
   bot = bot_ref.get_bot()
   if bot:

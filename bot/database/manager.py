@@ -1,3 +1,4 @@
+import json
 import os
 import aiosqlite
 from datetime import datetime, timezone, timedelta
@@ -84,6 +85,28 @@ CREATE TABLE IF NOT EXISTS party_slots (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_party_user
     ON party_slots(party_message_id, discord_id);
+
+-- 완료(클리어)/취소된 파티가 purge_party로 지워지기 직전에 남기는 이력.
+-- 주간 리셋 때 parties/party_slots에서는 완전히 삭제되지만, 여기는 계속 보관된다
+-- (캘린더/통계에서 지난달 이전 기록도 조회할 수 있어야 하기 때문).
+CREATE TABLE IF NOT EXISTS party_history (
+    message_id          TEXT PRIMARY KEY,
+    guild_id            TEXT,
+    leader_id           TEXT,
+    raid_name           TEXT,
+    difficulty          TEXT,
+    proficiency         TEXT,
+    scheduled_time      TEXT,
+    scheduled_datetime  TEXT,
+    total_slots         INTEGER,
+    min_level           INTEGER,
+    status              TEXT,
+    memo                TEXT,
+    created_at          TIMESTAMP,
+    slot_count          INTEGER,
+    slots_json          TEXT,
+    archived_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS guild_settings (
     guild_id         TEXT PRIMARY KEY,
@@ -1172,9 +1195,37 @@ async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-async def purge_party(message_id: str) -> None:
-    """파티·슬롯·대기열·알림 기록을 완전히 삭제한다."""
+async def purge_party(message_id: str, archived_status: str | None = None) -> None:
+    """파티·슬롯·대기열·알림 기록을 완전히 삭제하기 전에 party_history에 이력을 남긴다.
+    archived_status를 넘기면 그 값으로 기록(예: 취소 흐름에서 "cancelled"), 안 넘기면
+    파티의 현재 status 그대로 남긴다(예: 주간 리셋 때 정리되는 클리어된 파티는 "disbanded")."""
     async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM parties WHERE message_id=?", (message_id,))
+        party = await cur.fetchone()
+        if party is not None:
+            party = dict(party)
+            slots_cur = await db.execute(
+                "SELECT discord_id, character_name, character_class, role "
+                "FROM party_slots WHERE party_message_id=? ORDER BY slot_number",
+                (message_id,),
+            )
+            slots = [dict(r) for r in await slots_cur.fetchall()]
+            await db.execute(
+                "INSERT OR REPLACE INTO party_history "
+                "(message_id, guild_id, leader_id, raid_name, difficulty, proficiency, "
+                " scheduled_time, scheduled_datetime, total_slots, min_level, status, memo, "
+                " created_at, slot_count, slots_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    party["message_id"], party["guild_id"], party["leader_id"],
+                    party["raid_name"], party["difficulty"], party["proficiency"],
+                    party["scheduled_time"], party["scheduled_datetime"],
+                    party["total_slots"], party["min_level"],
+                    archived_status or party["status"], party["memo"],
+                    party["created_at"], len(slots), json.dumps(slots, ensure_ascii=False),
+                ),
+            )
         await db.execute("DELETE FROM party_slots             WHERE party_message_id=?", (message_id,))
         await db.execute("DELETE FROM party_waitlist          WHERE party_message_id=?", (message_id,))
         await db.execute("DELETE FROM party_pre_notifications WHERE message_id=?",       (message_id,))
@@ -1201,30 +1252,54 @@ async def get_prev_week_active_parties(week_start_iso: str) -> list[dict]:
 
 async def get_calendar_parties(guild_id: str, start_iso: str, end_iso: str) -> list[dict]:
     """일정 캘린더용 — [start_iso, end_iso) 구간에 scheduled_datetime이 있는 파티 전체.
-    상태를 가리지 않는다: 클리어된 파티는 status='disbanded'로 행이 남아있어 포함되고,
-    취소된 파티는 purge_party로 완전 삭제되므로 애초에 결과에 없다."""
+    현재 진행 중/최근에 끝난 파티(parties 테이블)와, 주간 리셋 등으로 이미 purge된
+    지난 이력(party_history 테이블)을 합쳐서 반환한다 — 그래야 지난달 이전 기록도 보인다.
+    취소된 파티(status='cancelled')는 party_history에 남지만, 실제 진행되지 않은 일정이라
+    캘린더에는 굳이 보여주지 않는다."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT * FROM parties WHERE guild_id=? AND scheduled_datetime IS NOT NULL "
-            "AND scheduled_datetime >= ? AND scheduled_datetime < ? "
+            "SELECT message_id, raid_name, difficulty, proficiency, scheduled_time, "
+            "scheduled_datetime, total_slots, min_level, status, slot_count FROM ("
+            "  SELECT p.message_id, p.raid_name, p.difficulty, p.proficiency, p.scheduled_time, "
+            "         p.scheduled_datetime, p.total_slots, p.min_level, p.status, "
+            "         (SELECT COUNT(*) FROM party_slots s WHERE s.party_message_id = p.message_id) AS slot_count "
+            "  FROM parties p WHERE p.guild_id = ? "
+            "  UNION ALL "
+            "  SELECT h.message_id, h.raid_name, h.difficulty, h.proficiency, h.scheduled_time, "
+            "         h.scheduled_datetime, h.total_slots, h.min_level, h.status, h.slot_count "
+            "  FROM party_history h WHERE h.guild_id = ? AND h.status != 'cancelled' "
+            ") combined "
+            "WHERE scheduled_datetime IS NOT NULL AND scheduled_datetime >= ? AND scheduled_datetime < ? "
             "ORDER BY scheduled_datetime ASC",
-            (guild_id, start_iso, end_iso),
+            (guild_id, guild_id, start_iso, end_iso),
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
 
 
 async def get_disbanded_parties(guild_id: str, limit: int = 50) -> list[dict]:
-    """disbanded 파티 이력 (최신순)."""
+    """disbanded(클리어) 파티 이력 (최신순). 주간 리셋으로 이미 purge된 지난 이력은
+    party_history에서, 아직 살아있는(이번 주) 것은 parties에서 가져와 합친다."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT p.*, "
-            "(SELECT COUNT(*) FROM party_slots s WHERE s.party_message_id = p.message_id) AS slot_count "
-            "FROM parties p WHERE p.guild_id=? AND p.status='disbanded' "
-            "ORDER BY p.created_at DESC LIMIT ?",
-            (guild_id, limit),
+            "SELECT message_id, channel_id, guild_id, leader_id, raid_name, difficulty, proficiency, "
+            "scheduled_time, scheduled_datetime, total_slots, min_level, status, notified, memo, "
+            "created_at, slot_count FROM ("
+            "  SELECT p.message_id, p.channel_id, p.guild_id, p.leader_id, p.raid_name, p.difficulty, "
+            "         p.proficiency, p.scheduled_time, p.scheduled_datetime, p.total_slots, p.min_level, "
+            "         p.status, p.notified, p.memo, p.created_at, "
+            "         (SELECT COUNT(*) FROM party_slots s WHERE s.party_message_id = p.message_id) AS slot_count "
+            "  FROM parties p WHERE p.guild_id=? AND p.status='disbanded' "
+            "  UNION ALL "
+            "  SELECT h.message_id, NULL, h.guild_id, h.leader_id, h.raid_name, h.difficulty, "
+            "         h.proficiency, h.scheduled_time, h.scheduled_datetime, h.total_slots, h.min_level, "
+            "         h.status, NULL, h.memo, h.created_at, h.slot_count "
+            "  FROM party_history h WHERE h.guild_id=? AND h.status='disbanded'"
+            ") combined "
+            "ORDER BY created_at DESC LIMIT ?",
+            (guild_id, guild_id, limit),
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]

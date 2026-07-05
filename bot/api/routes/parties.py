@@ -145,7 +145,7 @@ async def unlock_thread(message_id: str):
 
 @router.delete("/{message_id}")
 async def cancel_party(message_id: str):
-  await db.purge_party(message_id)
+  await db.purge_party(message_id, archived_status="cancelled")
   return {"success": True}
 
 

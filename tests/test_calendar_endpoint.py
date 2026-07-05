@@ -1,6 +1,7 @@
 """일정 캘린더 내부 API(/api/internal/parties/calendar) 검증.
-클리어된 파티(status=disbanded)는 행이 남아있으니 캘린더에 포함되고,
-취소된 파티(purge)는 완전히 삭제되니 자연히 빠져야 한다."""
+클리어된 파티(status=disbanded)는 parties 테이블에 남아있든, 주간 리셋으로
+purge돼 party_history로 넘어갔든 캘린더에 포함되어야 한다. 취소된(cancelled)
+파티는 party_history에는 남지만 실제 진행되지 않은 일정이라 캘린더에서 뺀다."""
 import os
 
 os.environ.setdefault("DISCORD_TOKEN", "test-token")
@@ -44,7 +45,7 @@ def client(tmp_path, monkeypatch):
             scheduled_time="05/15 20:00", scheduled_datetime="2026-05-15T20:00:00+09:00",
             total_slots=4, min_level=1540,
         )
-        await db.purge_party("cancelled-1")  # 취소 처리 — 완전 삭제
+        await db.purge_party("cancelled-1", archived_status="cancelled")  # 취소 처리 — 실제 취소 흐름과 동일하게 명시
 
         await db.create_party(
             message_id="other-month-1", channel_id="555", guild_id=GUILD_ID, leader_id="111",
@@ -100,3 +101,22 @@ def test_calendar_requires_webapp_key(client):
         params={"guild_id": GUILD_ID, "start": "2026-05-01T00:00:00", "end": "2026-06-01T00:00:00"},
     )
     assert resp.status_code == 401
+
+
+def test_calendar_still_shows_cleared_party_after_weekly_reset_purges_it(client):
+    """주간 리셋(bot.py의 party_notification_task)은 지난 주에 클리어된 파티를
+    한 주 지나면 스레드와 함께 parties 테이블에서도 purge한다. 이 시나리오를
+    재현해도(직접 purge_party 호출) 캘린더에서는 계속 보여야 한다 — 그래야
+    "6월 기록이 아무것도 없다"던 문제가 재발하지 않는다."""
+    asyncio.run(db.purge_party("cleared-1"))  # 실제 주간 리셋과 동일 — status override 없이 그대로 purge
+
+    resp = client.get(
+        "/api/internal/parties/calendar",
+        params={"guild_id": GUILD_ID, "start": "2026-05-01T00:00:00", "end": "2026-06-01T00:00:00"},
+        headers=HEADERS,
+    )
+    assert resp.status_code == 200
+    parties = {p["message_id"]: p for p in resp.json()}
+    assert "cleared-1" in parties
+    assert parties["cleared-1"]["status"] == "disbanded"
+    assert parties["cleared-1"]["slot_count"] == 0  # 이 시나리오에서는 파티원을 안 넣었으므로 0명이 맞음

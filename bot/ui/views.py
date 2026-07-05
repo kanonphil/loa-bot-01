@@ -952,7 +952,7 @@ class CancelModal(Modal, title="공대 취소"):
         raid_title = f"{self.party['raid_name']} {self.party['difficulty']}"
         reason_text = self.reason.value.strip()
 
-        await db.purge_party(message_id)
+        await db.purge_party(message_id, archived_status="cancelled")
         await interaction.response.send_message("❌ 공대가 취소되었습니다.", ephemeral=True)
 
         leader_id = self.party["leader_id"]
