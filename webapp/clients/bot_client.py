@@ -136,6 +136,17 @@ async def list_parties(guild_id: str) -> list[dict]:
         return resp.json()
 
 
+async def get_calendar_parties(guild_id: str, start: str, end: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/calendar",
+            params={"guild_id": guild_id, "start": start, "end": end},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_party(message_id: str) -> dict | None:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(

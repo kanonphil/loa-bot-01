@@ -1199,6 +1199,22 @@ async def get_prev_week_active_parties(week_start_iso: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def get_calendar_parties(guild_id: str, start_iso: str, end_iso: str) -> list[dict]:
+    """일정 캘린더용 — [start_iso, end_iso) 구간에 scheduled_datetime이 있는 파티 전체.
+    상태를 가리지 않는다: 클리어된 파티는 status='disbanded'로 행이 남아있어 포함되고,
+    취소된 파티는 purge_party로 완전 삭제되므로 애초에 결과에 없다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM parties WHERE guild_id=? AND scheduled_datetime IS NOT NULL "
+            "AND scheduled_datetime >= ? AND scheduled_datetime < ? "
+            "ORDER BY scheduled_datetime ASC",
+            (guild_id, start_iso, end_iso),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def get_disbanded_parties(guild_id: str, limit: int = 50) -> list[dict]:
     """disbanded 파티 이력 (최신순)."""
     async with aiosqlite.connect(DB_PATH) as db:

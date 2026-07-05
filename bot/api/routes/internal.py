@@ -136,6 +136,19 @@ async def parties(guild_id: str):
   return out
 
 
+@router.get("/parties/calendar")
+async def parties_calendar(guild_id: str, start: str, end: str):
+  """일정 캘린더용 — [start, end) 구간에 일정이 잡힌 파티 전체.
+  클리어된 파티(status=disbanded)는 행이 남아있으므로 그대로 포함되고,
+  취소된 파티는 완전 삭제(purge)돼 있으므로 자연히 빠진다."""
+  parties = await db.get_calendar_parties(guild_id, start, end)
+  out = []
+  for party in parties:
+    slots = await db.get_party_slots(party["message_id"])
+    out.append({**party, "slot_count": len(slots)})
+  return out
+
+
 @router.get("/parties/{message_id}")
 async def party_detail(message_id: str):
   party = await db.get_party(message_id)

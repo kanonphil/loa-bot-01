@@ -1366,3 +1366,160 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .flatpickr-current-month .numInputWrapper span.arrowDown {
   cursor: pointer;
 }
+
+/* ── 일정 캘린더 ───────────────────────────────────────── */
+
+.calendar-page {
+  max-width: 960px;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.calendar-header h1 {
+  margin: 0;
+  min-width: 140px;
+  text-align: center;
+}
+
+.calendar-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 15px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.calendar-nav-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.calendar-grid {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.calendar-weekday {
+  padding: 8px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.calendar-weekday.sun { color: #e0807a; }
+.calendar-weekday.sat { color: #7aa8e0; }
+
+.calendar-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar-cell {
+  min-height: 96px;
+  padding: 6px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.calendar-week .calendar-cell:last-child {
+  border-right: none;
+}
+
+.calendar-cell.empty {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.calendar-cell.today {
+  background: var(--accent-dim);
+}
+
+.calendar-day-number {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.calendar-cell.today .calendar-day-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.calendar-party {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.calendar-party-time {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.calendar-party-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-party-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.calendar-party.status-recruiting {
+  border-color: rgba(124, 140, 255, 0.4);
+}
+
+.calendar-party.status-recruiting .calendar-party-badge {
+  color: var(--accent);
+}
+
+.calendar-party.status-disbanded {
+  border-color: rgba(122, 208, 138, 0.4);
+  opacity: 0.75;
+}
+
+.calendar-party.status-disbanded .calendar-party-badge {
+  color: #7ad08a;
+}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content calendar-page">
+  <div class="calendar-header">
+    <a href="/calendar?year={{ prev_year }}&month={{ prev_month }}" class="calendar-nav-btn">&larr;</a>
+    <h1>{{ year }}년 {{ month }}월</h1>
+    <a href="/calendar?year={{ next_year }}&month={{ next_month }}" class="calendar-nav-btn">&rarr;</a>
+  </div>
+
+  <div class="calendar-grid">
+    <div class="calendar-weekdays">
+      <span class="calendar-weekday sun">일</span>
+      <span class="calendar-weekday">월</span>
+      <span class="calendar-weekday">화</span>
+      <span class="calendar-weekday">수</span>
+      <span class="calendar-weekday">목</span>
+      <span class="calendar-weekday">금</span>
+      <span class="calendar-weekday sat">토</span>
+    </div>
+
+    {% for week in weeks %}
+    <div class="calendar-week">
+      {% for day in week %}
+      {% if day == 0 %}
+      <div class="calendar-cell empty"></div>
+      {% else %}
+      <div class="calendar-cell{% if day == today_day %} today{% endif %}">
+        <span class="calendar-day-number">{{ day }}</span>
+        {% for p in parties_by_day.get(day, []) %}
+        <div class="calendar-party status-{{ p.status }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">
+          <span class="calendar-party-time">{{ p.scheduled_time.split(' ')[-1] if ' ' in p.scheduled_time else p.scheduled_time }}</span>
+          <span class="calendar-party-name">{{ p.raid_name }} {{ p.difficulty }}</span>
+          <span class="calendar-party-badge">{{ p.status_label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
