@@ -197,6 +197,36 @@ CREATE TABLE IF NOT EXISTS party_pre_notifications (
     discord_id  TEXT,
     PRIMARY KEY (message_id, discord_id)
 );
+
+-- 길드 커뮤니티 게시판 (레이드 공대 모집과는 별개 — 이벤트/공지/자유 게시글).
+CREATE TABLE IF NOT EXISTS board_posts (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id            TEXT NOT NULL,
+    author_discord_id   TEXT NOT NULL,
+    title               TEXT NOT NULL,
+    category            TEXT NOT NULL,   -- '이벤트' | '공지' | '자유'
+    content             TEXT NOT NULL,
+    scheduled_datetime  TEXT,            -- ISO 8601 KST offset 문자열, nullable (공지/자유는 일정 없어도 됨)
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    announced           INTEGER NOT NULL DEFAULT 0,   -- 이벤트 카테고리 디스코드 알림 발송 여부 (중복 발송 방지)
+    reminder_10min_sent INTEGER NOT NULL DEFAULT 0,
+    reminder_start_sent INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS board_comments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id    INTEGER NOT NULL,
+    discord_id TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS board_participants (
+    post_id    INTEGER NOT NULL,
+    discord_id TEXT NOT NULL,
+    joined_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, discord_id)
+);
 """
 
 
@@ -293,6 +323,14 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE parties ADD COLUMN extreme_period_notified INTEGER NOT NULL DEFAULT 0")
         except Exception:
             pass
+        for col, definition in [
+            ("board_channel_id", "TEXT"),
+            ("board_role_id",    "TEXT"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE guild_settings ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
         await db.commit()
     await seed_game_data()
     await _migrate_encrypt_api_keys()
@@ -320,6 +358,30 @@ async def get_forum_channel_id(guild_id: str) -> Optional[str]:
         )
         row = await cur.fetchone()
     return row[0] if row else None
+
+
+async def set_board_channel(guild_id: str, channel_id: str, role_id: str | None) -> None:
+    """게시판 이벤트 알림을 올릴 채널/멘션할 역할 설정. INSERT 시 forum_channel_id는
+    NULL로 두어 기존에 설정된 값이 있어도 UPSERT가 그 값을 건드리지 않게 한다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO guild_settings (guild_id, board_channel_id, board_role_id) VALUES (?, ?, ?) "
+            "ON CONFLICT(guild_id) DO UPDATE SET board_channel_id=excluded.board_channel_id, "
+            "board_role_id=excluded.board_role_id",
+            (guild_id, channel_id, role_id),
+        )
+        await db.commit()
+
+
+async def get_board_settings(guild_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT board_channel_id, board_role_id FROM guild_settings WHERE guild_id=?",
+            (guild_id,),
+        )
+        row = await cur.fetchone()
+    return dict(row) if row else None
 
 
 # ──────────────────────────────────────────────
@@ -1707,7 +1769,7 @@ async def get_raids_dict() -> dict:
         cur = await db.execute(
             "SELECT r.name, r.short_name, r.icon, r.category, "
             "r.is_active, r.available_from, r.available_until, c.is_extreme, "
-            "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates "
+            "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates, d.sort_order "
             "FROM raids_data r "
             "JOIN raid_categories c ON r.category = c.name "
             "LEFT JOIN raid_difficulties d ON r.name = d.raid_name "
@@ -1735,6 +1797,7 @@ async def get_raids_dict() -> dict:
                 "total_slots":r["total_slots"],
                 "party_split":r["party_split"],
                 "gates":      r["gates"],
+                "sort_order": r["sort_order"],
             }
     return result
 
@@ -1857,6 +1920,19 @@ async def mark_extreme_period_notified(message_id: str) -> None:
 
 # ── 난이도 ─────────────────────────────────────
 
+async def get_next_difficulty_sort_order(raid_name: str) -> int:
+    """이 레이드에 다음 난이도를 추가할 때 쓸 sort_order(현재 최댓값+1).
+    관리자 앱처럼 순서를 직접 입력받지 않는 호출부가, 매번 0을 넣어서
+    입력 순서(노말→하드→나이트메어)가 가나다 순으로 뒤섞이는 걸 방지한다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) FROM raid_difficulties WHERE raid_name=?",
+            (raid_name,),
+        )
+        row = await cur.fetchone()
+    return row[0] + 1
+
+
 async def add_difficulty(
     raid_name: str, difficulty: str, min_level: int,
     total_slots: int, party_split: int | None, gates: int, sort_order: int,
@@ -1873,6 +1949,16 @@ async def add_difficulty(
         return True
     except aiosqlite.IntegrityError:
         return False
+
+
+async def update_difficulty_sort(raid_name: str, difficulty: str, sort_order: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raid_difficulties SET sort_order=? WHERE raid_name=? AND difficulty=?",
+            (sort_order, raid_name, difficulty),
+        )
+        await db.commit()
+        return cur.rowcount > 0
 
 
 async def remove_difficulty(raid_name: str, difficulty: str) -> bool:
@@ -1991,6 +2077,198 @@ async def get_raid_subscribers(raid_name: str, difficulty: str) -> list[str]:
         )
         rows = await cur.fetchall()
     return [r[0] for r in rows]
+
+
+# ──────────────────────────────────────────────
+# 길드 커뮤니티 게시판
+# ──────────────────────────────────────────────
+
+async def create_board_post(
+    guild_id: str, author_discord_id: str, title: str, category: str,
+    content: str, scheduled_datetime: str | None,
+) -> int:
+    """새 게시글 생성. 반환: 새로 생성된 post id."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT INTO board_posts (guild_id, author_discord_id, title, category, "
+            "content, scheduled_datetime) VALUES (?, ?, ?, ?, ?, ?)",
+            (guild_id, author_discord_id, title, category, content, scheduled_datetime),
+        )
+        await db.commit()
+    return cur.lastrowid
+
+
+async def get_board_post(post_id: int) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM board_posts WHERE id=?", (post_id,))
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def list_board_posts(guild_id: str, category: str | None = None) -> list[dict]:
+    """게시글 목록 (최신순). category 지정 시 해당 카테고리만.
+    created_at은 초 단위라 같은 초에 여러 개가 생성되면 동점이 날 수 있어 id DESC로 tie-break."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if category:
+            cur = await db.execute(
+                "SELECT * FROM board_posts WHERE guild_id=? AND category=? "
+                "ORDER BY created_at DESC, id DESC",
+                (guild_id, category),
+            )
+        else:
+            cur = await db.execute(
+                "SELECT * FROM board_posts WHERE guild_id=? ORDER BY created_at DESC, id DESC",
+                (guild_id,),
+            )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def update_board_post(
+    post_id: int, title: str, content: str, scheduled_datetime: str | None,
+) -> bool:
+    """게시글 수정. 작성자 본인인지는 라우트 레이어에서 확인한다(여기서는 검사하지 않음)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE board_posts SET title=?, content=?, scheduled_datetime=? WHERE id=?",
+            (title, content, scheduled_datetime, post_id),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def delete_board_post(post_id: int) -> bool:
+    """게시글 삭제 — 댓글/참여자도 함께 정리(이 스키마는 FK cascade가 없어 명시적으로 지운다)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT 1 FROM board_posts WHERE id=?", (post_id,))
+        exists = await cur.fetchone()
+        if not exists:
+            return False
+        await db.execute("DELETE FROM board_comments     WHERE post_id=?", (post_id,))
+        await db.execute("DELETE FROM board_participants WHERE post_id=?", (post_id,))
+        await db.execute("DELETE FROM board_posts         WHERE id=?", (post_id,))
+        await db.commit()
+    return True
+
+
+async def add_board_comment(post_id: int, discord_id: str, content: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT INTO board_comments (post_id, discord_id, content) VALUES (?, ?, ?)",
+            (post_id, discord_id, content),
+        )
+        await db.commit()
+    return cur.lastrowid
+
+
+async def list_board_comments(post_id: int) -> list[dict]:
+    """댓글 목록 (오래된 순)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM board_comments WHERE post_id=? ORDER BY created_at ASC, id ASC",
+            (post_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def join_board_post(post_id: int, discord_id: str) -> bool:
+    """참여 등록 (멱등). 반환: 실제로 새로 등록됐으면 True, 이미 참여 중이면 False."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT OR IGNORE INTO board_participants (post_id, discord_id) VALUES (?, ?)",
+            (post_id, discord_id),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def leave_board_post(post_id: int, discord_id: str) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "DELETE FROM board_participants WHERE post_id=? AND discord_id=?",
+            (post_id, discord_id),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def list_board_participants(post_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM board_participants WHERE post_id=? ORDER BY joined_at ASC",
+            (post_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_posts_due_10min_reminder(now_iso: str) -> list[dict]:
+    """10분 전 리마인더 발송 대상 — 이벤트 카테고리, 아직 미발송, 시작 10분 전 시각이 지난 게시글.
+    get_parties_due_notification처럼 "<=" 비교만 하고, 상한(예: 시작 시각을 이미 지나쳐도
+    상관없이) 두지 않는다 — 봇이 잠깐 멈췄다 재기동해도 놓치지 않고 발송하기 위함.
+    scheduled_datetime/now_iso 둘 다 KST offset(+09:00)이 붙은 ISO 문자열이라 그대로
+    문자열 비교가 가능한 parties 테이블과 달리, 여기서는 "10분 전"을 계산해야 해서
+    SQLite datetime()의 UTC 변환에 기대지 않고 Python에서 직접 파싱해 비교한다."""
+    now = datetime.fromisoformat(now_iso)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM board_posts "
+            "WHERE category = '이벤트' "
+            "AND scheduled_datetime IS NOT NULL "
+            "AND reminder_10min_sent = 0",
+        )
+        rows = await cur.fetchall()
+    due = []
+    for row in rows:
+        r = dict(row)
+        try:
+            scheduled = datetime.fromisoformat(r["scheduled_datetime"])
+        except ValueError:
+            continue
+        if scheduled - timedelta(minutes=10) <= now:
+            due.append(r)
+    return due
+
+
+async def get_posts_due_start_reminder(now_iso: str) -> list[dict]:
+    """시작 시각 리마인더 발송 대상 — 이벤트 카테고리, 아직 미발송, 시작 시각이 지난 게시글."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM board_posts "
+            "WHERE category = '이벤트' "
+            "AND scheduled_datetime IS NOT NULL "
+            "AND scheduled_datetime <= ? "
+            "AND reminder_start_sent = 0",
+            (now_iso,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def mark_board_reminder_sent(post_id: int, which: str) -> None:
+    """which: '10min' | 'start'."""
+    column = "reminder_10min_sent" if which == "10min" else "reminder_start_sent"
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            f"UPDATE board_posts SET {column}=1 WHERE id=?", (post_id,)
+        )
+        await db.commit()
+
+
+async def mark_board_announced(post_id: int) -> None:
+    """이벤트 게시글의 디스코드 공지 발송 처리(성공/설정 미비 여부와 무관하게 1회만 시도)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE board_posts SET announced=1 WHERE id=?", (post_id,)
+        )
+        await db.commit()
 
 
 async def seed_game_data() -> None:

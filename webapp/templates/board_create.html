@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="/static/flatpickr.min.css">
+<div class="page-content">
+<a href="/board" class="party-back-link">&larr; 목록으로</a>
+<h1>게시글 작성</h1>
+
+{% if error %}
+<p class="party-action-error">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="/board/create" class="party-create-form">
+  <label>
+    제목
+    <input type="text" name="title" maxlength="100" required>
+  </label>
+
+  <label>
+    카테고리
+    <select name="category" id="category-select" required>
+      {% for c in categories %}
+      <option value="{{ c }}">{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label id="schedule-field">
+    일정 (선택 — 이벤트는 디스코드 알림에 표시됩니다)
+    <input type="text" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택">
+  </label>
+
+  <label>
+    내용
+    <textarea name="content" rows="8" required></textarea>
+  </label>
+
+  <button type="submit">등록</button>
+</form>
+</div>
+
+<script src="/static/flatpickr.min.js"></script>
+<script src="/static/party-datetime.js"></script>
+<script>
+  initPartyDatetimePicker("#scheduled-datetime-input");
+</script>
+{% endblock %}

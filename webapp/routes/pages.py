@@ -16,7 +16,7 @@ async def index(request: Request):
     return templates.TemplateResponse(request, "index.html", {})
 
 
-@router.get("/home")
+@router.get("/ai-chat")
 async def home(request: Request, user: dict = Depends(get_current_user)):
     recent_sessions = await chat_store.list_sessions(user["discord_id"])
     welcome_message = random_welcome(user["username"])
@@ -26,7 +26,7 @@ async def home(request: Request, user: dict = Depends(get_current_user)):
         {
             "user": user,
             "welcome_message": welcome_message,
-            "active": "home",
+            "active": "ai_chat",
             "recent_sessions": recent_sessions,
             "active_session_id": None,
         },
@@ -51,6 +51,6 @@ async def chat_thread(
             "session_id": session_id,
             "recent_sessions": recent_sessions,
             "active_session_id": session_id,
-            "active": "home",
+            "active": "ai_chat",
         },
     )

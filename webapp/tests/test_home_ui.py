@@ -19,7 +19,7 @@ def test_random_welcome_uses_all_templates_over_many_draws():
 def test_home_renders_sidebar_logo_and_empty_state(client):
     with respx.mock:
         log_in(client)
-        resp = client.get("/home")
+        resp = client.get("/ai-chat")
     assert resp.status_code == 200
     body = resp.text
     # 사이드바 / 로고 / 네비게이션 / 최근 세션 섹션

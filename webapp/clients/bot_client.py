@@ -359,3 +359,112 @@ async def transfer_leader(message_id: str, discord_id: str, new_leader_discord_i
         )
         resp.raise_for_status()
         return resp.json()
+
+
+# ── 길드 커뮤니티 게시판 ─────────────────────────────────────
+
+async def list_board_posts(guild_id: str, category: str | None = None) -> list[dict]:
+    params = {"guild_id": guild_id}
+    if category:
+        params["category"] = category
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts",
+            params=params,
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def create_board_post(
+    discord_id: str, guild_id: str, title: str, category: str,
+    content: str, scheduled_datetime: str | None,
+) -> dict:
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts",
+            json={
+                "discord_id": discord_id,
+                "guild_id": guild_id,
+                "title": title,
+                "category": category,
+                "content": content,
+                "scheduled_datetime": scheduled_datetime,
+            },
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_board_post(post_id: int) -> dict | None:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts/{post_id}", headers=_headers()
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def update_board_post(
+    post_id: int, discord_id: str, title: str, content: str, scheduled_datetime: str | None,
+) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.patch(
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts/{post_id}",
+            json={
+                "discord_id": discord_id,
+                "title": title,
+                "content": content,
+                "scheduled_datetime": scheduled_datetime,
+            },
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def delete_board_post(post_id: int, discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.request(
+            "DELETE",
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts/{post_id}",
+            json={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def add_board_comment(post_id: int, discord_id: str, content: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts/{post_id}/comments",
+            json={"discord_id": discord_id, "content": content},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def join_board_post(post_id: int, discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts/{post_id}/join",
+            json={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def leave_board_post(post_id: int, discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/board/posts/{post_id}/leave",
+            json={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()

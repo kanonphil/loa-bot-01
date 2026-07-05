@@ -23,7 +23,7 @@ def test_login_redirects_to_discord_with_expected_params(client):
 
 
 def test_home_without_session_redirects_to_login(client):
-    resp = client.get("/home")
+    resp = client.get("/ai-chat")
     assert resp.status_code in (302, 307)
     assert resp.headers["location"] == "/login"
 
@@ -60,8 +60,8 @@ def test_unregistered_user_denied_full_flow(client):
         assert callback_resp.status_code in (302, 307)
         assert "error=not_registered" in callback_resp.headers["location"]
 
-        # 세션에 user가 안 심겼으니 /home는 여전히 막혀야 한다
-        home_resp = client.get("/home")
+        # 세션에 user가 안 심겼으니 /ai-chat는 여전히 막혀야 한다
+        home_resp = client.get("/ai-chat")
     assert home_resp.headers["location"] == "/login"
 
 
@@ -71,7 +71,7 @@ def test_registered_user_full_login_flow(client):
         assert callback_resp.status_code in (302, 307)
         assert callback_resp.headers["location"] == "/main"  # 로그인 성공 후 메인 대시보드로 이동
 
-        home_resp = client.get("/home")
+        home_resp = client.get("/ai-chat")
 
     assert home_resp.status_code == 200
     assert "tester" in home_resp.text  # 환영 문구에 username이 들어감

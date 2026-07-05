@@ -26,6 +26,9 @@ class DifficultyBody(BaseModel):
   party_split: int | None = None
   gates: int = 1
 
+class DifficultySortBody(BaseModel):
+  sort_order: int
+
 class PeriodBody(BaseModel):
   available_from: str | None = None
   available_until: str | None = None
@@ -113,12 +116,22 @@ async def get_difficulties(raid_name: str):
 
 @router.post("/{raid_name}/difficulties")
 async def add_difficulty(raid_name: str, body: DifficultyBody):
+  # sort_order를 0으로 고정하면 표시 순서가 전부 동점 처리되어(가나다 순으로 보임)
+  # 노말→하드→나이트메어처럼 입력한 순서가 안 지켜지는 문제가 있었다 —
+  # 추가할 때마다 그 레이드의 현재 마지막 순서 다음 값을 자동으로 매긴다.
+  next_sort = await db.get_next_difficulty_sort_order(raid_name)
   added = await db.add_difficulty(
     raid_name, body.difficulty, body.min_level,
-    body.total_slots, body.party_split, body.gates, 0,
+    body.total_slots, body.party_split, body.gates, next_sort,
   )
   await raids_module.reload()
   return {"success": added}
+
+@router.patch("/{raid_name}/difficulties/{difficulty}/sort")
+async def sort_difficulty(raid_name: str, difficulty: str, body: DifficultySortBody):
+  updated = await db.update_difficulty_sort(raid_name, difficulty, body.sort_order)
+  await raids_module.reload()
+  return {"success": updated}
 
 @router.delete("/{raid_name}/difficulties/{difficulty}")
 async def delete_difficulty(raid_name: str, difficulty: str):

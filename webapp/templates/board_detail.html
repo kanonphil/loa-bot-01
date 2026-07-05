@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="/static/flatpickr.min.css">
+{% if not post %}
+<div class="page-content">
+  <div class="party-empty-card">
+    <p class="party-empty-icon">🔍</p>
+    <h1>게시글을 찾을 수 없습니다</h1>
+    <p class="party-empty-desc">이미 삭제됐거나 잘못된 링크일 수 있습니다.</p>
+    <a href="/board" class="party-empty-link">&larr; 게시판으로</a>
+  </div>
+</div>
+{% else %}
+<div class="page-content">
+<a href="/board" class="party-back-link">&larr; 목록으로</a>
+<div class="party-detail-header">
+  <h1>{{ post.title }}</h1>
+  <span class="board-category-badge board-category-{{ post.category }}">{{ post.category }}</span>
+</div>
+<p class="party-meta">
+  작성자 <@{{ post.author_discord_id }}>
+  {% if post.scheduled_datetime %}&middot; 🕒 {{ post.scheduled_datetime }}{% endif %}
+</p>
+
+{% if action_result and not action_result.success %}
+<p class="party-action-error">{{ action_result.reason }}</p>
+{% endif %}
+
+<div class="board-content">{{ post.content }}</div>
+
+{% if post.category == "이벤트" %}
+<div class="board-participants">
+  <h2 class="leader-panel-title">참여자 ({{ post.participants | length }})</h2>
+  <div class="board-participant-chips">
+    {% for p in post.participants %}
+    <span class="board-participant-chip">&lt;@{{ p.discord_id }}&gt;</span>
+    {% else %}
+    <span class="party-slot-empty">아직 참여자가 없습니다.</span>
+    {% endfor %}
+  </div>
+
+  {% if joined %}
+  <form method="post" action="/board/{{ post.id }}/leave">
+    <button type="submit" class="party-leave-btn">나가기</button>
+  </form>
+  {% else %}
+  <form method="post" action="/board/{{ post.id }}/join">
+    <button type="submit" class="leader-btn">참여하기</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if is_author %}
+<div class="leader-panel">
+  <h2 class="leader-panel-title">✏️ 글 관리</h2>
+  <form method="post" action="/board/{{ post.id }}/edit" class="leader-form board-edit-form">
+    <input type="text" name="title" maxlength="100" value="{{ post.title }}" required>
+    <input type="text" id="board-edit-datetime-input" name="scheduled_datetime" placeholder="일정 (선택)" value="{{ post.scheduled_datetime or '' }}">
+    <textarea name="content" rows="6" required>{{ post.content }}</textarea>
+    <button type="submit" class="leader-btn">수정 저장</button>
+  </form>
+
+  <form method="post" action="/board/{{ post.id }}/delete" class="leader-form">
+    <button type="submit" class="leader-btn leader-btn-danger">🗑️ 삭제</button>
+  </form>
+</div>
+<script src="/static/flatpickr.min.js"></script>
+<script src="/static/party-datetime.js"></script>
+<script>
+  initPartyDatetimePicker("#board-edit-datetime-input");
+</script>
+{% endif %}
+
+<div class="board-comments">
+  <h2 class="leader-panel-title">댓글 ({{ post.comments | length }})</h2>
+  <div class="board-comment-list">
+    {% for c in post.comments %}
+    <div class="board-comment">
+      <span class="board-comment-author">&lt;@{{ c.discord_id }}&gt;</span>
+      <span class="board-comment-content">{{ c.content }}</span>
+    </div>
+    {% else %}
+    <p>아직 댓글이 없습니다.</p>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="/board/{{ post.id }}/comment" class="board-comment-form">
+    <input type="text" name="content" maxlength="500" placeholder="댓글을 입력하세요" required>
+    <button type="submit">등록</button>
+  </form>
+</div>
+</div>
+{% endif %}
+{% endblock %}

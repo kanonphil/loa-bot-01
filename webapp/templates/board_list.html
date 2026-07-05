@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content">
+<div class="party-list-header">
+  <h1>커뮤니티 게시판</h1>
+  <a href="/board/create" class="party-create-link">+ 글쓰기</a>
+</div>
+
+<div class="account-tabs">
+  <a class="account-tab {% if not selected_category %}active{% endif %}" href="/board">전체</a>
+  {% for c in categories %}
+  <a class="account-tab {% if selected_category == c %}active{% endif %}" href="/board?category={{ c }}">{{ c }}</a>
+  {% endfor %}
+</div>
+
+{% if not posts %}
+<p>등록된 게시글이 없습니다.</p>
+{% else %}
+<div class="party-list">
+  {% for p in posts %}
+  <a class="party-card" href="/board/{{ p.id }}">
+    <div class="party-card-title">{{ p.title }}</div>
+    <div class="party-card-meta">
+      {% if p.scheduled_datetime %}{{ p.scheduled_datetime }} &middot; {% endif %}
+      <span class="board-category-badge board-category-{{ p.category }}">{{ p.category }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

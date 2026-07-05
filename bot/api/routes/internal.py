@@ -625,3 +625,205 @@ async def add_account(body: AddAccountBody):
     if name and await db.add_character(body.discord_id, name, api_key_id=api_key_id):
       added += 1
   return {"success": True, "label": body.character_name, "added": added, "total": len(siblings or [])}
+
+
+# ── 길드 커뮤니티 게시판 ─────────────────────────────────────
+
+BOARD_CATEGORIES = ("이벤트", "공지", "자유")
+
+
+async def _send_board_announcement(post: dict) -> None:
+  """이벤트 카테고리 게시글 생성 직후 디스코드 채널에 알림 발송 — 채널 미설정이면
+  조용히 건너뛰고(경고 로그만), 발송 성공 여부와 무관하게 announced=1로 마킹해
+  재시도를 반복하지 않는다(파티의 notified 플래그와 동일한 1회성 시도 원칙)."""
+  import logging
+  from bot.api import bot_ref
+  from bot.ui.views import _format_schedule
+
+  logger = logging.getLogger("bot.board")
+
+  settings = await db.get_board_settings(post["guild_id"])
+  channel_id = settings.get("board_channel_id") if settings else None
+  if not channel_id:
+    logger.warning("게시판 채널 미설정 — 길드 %s의 이벤트 게시글 알림을 건너뜁니다.", post["guild_id"])
+    await db.mark_board_announced(post["id"])
+    return
+
+  bot = bot_ref.get_bot()
+  if not bot:
+    logger.warning("봇이 아직 준비되지 않아 게시판 알림을 건너뜁니다.")
+    await db.mark_board_announced(post["id"])
+    return
+
+  try:
+    channel = bot.get_channel(int(channel_id)) or await bot.fetch_channel(int(channel_id))
+  except Exception:
+    logger.warning("게시판 채널(%s)을 찾을 수 없어 알림을 건너뜁니다.", channel_id)
+    await db.mark_board_announced(post["id"])
+    return
+
+  role_mention = f"<@&{settings['board_role_id']}>" if settings.get("board_role_id") else ""
+
+  schedule_text = ""
+  if post.get("scheduled_datetime"):
+    try:
+      from bot.ui.views import KST
+      from datetime import datetime as _dt
+      dt = _dt.fromisoformat(post["scheduled_datetime"])
+      if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=KST)
+      schedule_text = f"\n🕒 일정: {_format_schedule(dt)}"
+    except ValueError:
+      pass
+
+  summary = post["content"][:200] + ("..." if len(post["content"]) > 200 else "")
+
+  lines = [f"📢 {role_mention} 새 이벤트가 등록되었습니다!".strip(), f"**{post['title']}**"]
+  if schedule_text:
+    lines.append(schedule_text.strip())
+  lines.append(summary)
+  lines.append("웹사이트 게시판에서 확인하세요.")
+
+  try:
+    await channel.send("\n".join(lines))
+  except Exception:
+    logger.warning("게시판 알림 전송 실패 (channel_id=%s)", channel_id)
+
+  await db.mark_board_announced(post["id"])
+
+
+@router.get("/board/posts")
+async def board_posts(guild_id: str, category: str | None = None):
+  return await db.list_board_posts(guild_id, category=category)
+
+
+class CreateBoardPostBody(BaseModel):
+  discord_id: str
+  guild_id: str
+  title: str
+  category: str
+  content: str
+  scheduled_datetime: str | None = None
+
+
+@router.post("/board/posts")
+async def create_board_post(body: CreateBoardPostBody):
+  if body.category not in BOARD_CATEGORIES:
+    return {"success": False, "reason": "존재하지 않는 카테고리입니다."}
+  if not body.title.strip():
+    return {"success": False, "reason": "제목을 입력해주세요."}
+  if not body.content.strip():
+    return {"success": False, "reason": "내용을 입력해주세요."}
+
+  post_id = await db.create_board_post(
+    body.guild_id, body.discord_id, body.title.strip(), body.category,
+    body.content.strip(), body.scheduled_datetime,
+  )
+
+  if body.category == "이벤트":
+    post = await db.get_board_post(post_id)
+    await _send_board_announcement(post)
+
+  return {"success": True, "post_id": post_id}
+
+
+@router.get("/board/posts/{post_id}")
+async def board_post_detail(post_id: int):
+  post = await db.get_board_post(post_id)
+  if not post:
+    return None
+  comments = await db.list_board_comments(post_id)
+  participants = await db.list_board_participants(post_id)
+  return {**post, "comments": comments, "participants": participants}
+
+
+class UpdateBoardPostBody(BaseModel):
+  discord_id: str
+  title: str
+  content: str
+  scheduled_datetime: str | None = None
+
+
+@router.patch("/board/posts/{post_id}")
+async def update_board_post(post_id: int, body: UpdateBoardPostBody):
+  post = await db.get_board_post(post_id)
+  if not post:
+    return {"success": False, "reason": "게시글을 찾을 수 없습니다."}
+  if post["author_discord_id"] != body.discord_id:
+    return {"success": False, "reason": "작성자만 수정할 수 있습니다."}
+  if not body.title.strip():
+    return {"success": False, "reason": "제목을 입력해주세요."}
+  if not body.content.strip():
+    return {"success": False, "reason": "내용을 입력해주세요."}
+
+  await db.update_board_post(post_id, body.title.strip(), body.content.strip(), body.scheduled_datetime)
+  return {"success": True}
+
+
+class DeleteBoardPostBody(BaseModel):
+  discord_id: str
+
+
+@router.delete("/board/posts/{post_id}")
+async def delete_board_post(post_id: int, body: DeleteBoardPostBody):
+  post = await db.get_board_post(post_id)
+  if not post:
+    return {"success": False, "reason": "게시글을 찾을 수 없습니다."}
+  if post["author_discord_id"] != body.discord_id:
+    return {"success": False, "reason": "작성자만 삭제할 수 있습니다."}
+
+  await db.delete_board_post(post_id)
+  return {"success": True}
+
+
+class AddBoardCommentBody(BaseModel):
+  discord_id: str
+  content: str
+
+
+@router.post("/board/posts/{post_id}/comments")
+async def add_board_comment(post_id: int, body: AddBoardCommentBody):
+  post = await db.get_board_post(post_id)
+  if not post:
+    return {"success": False, "reason": "게시글을 찾을 수 없습니다."}
+  if not body.content.strip():
+    return {"success": False, "reason": "댓글 내용을 입력해주세요."}
+
+  comment_id = await db.add_board_comment(post_id, body.discord_id, body.content.strip())
+  return {"success": True, "comment_id": comment_id}
+
+
+class BoardParticipantBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/board/posts/{post_id}/join")
+async def join_board_post(post_id: int, body: BoardParticipantBody):
+  post = await db.get_board_post(post_id)
+  if not post:
+    return {"success": False, "reason": "게시글을 찾을 수 없습니다."}
+
+  await db.join_board_post(post_id, body.discord_id)
+  return {"success": True}
+
+
+@router.post("/board/posts/{post_id}/leave")
+async def leave_board_post(post_id: int, body: BoardParticipantBody):
+  post = await db.get_board_post(post_id)
+  if not post:
+    return {"success": False, "reason": "게시글을 찾을 수 없습니다."}
+
+  await db.leave_board_post(post_id, body.discord_id)
+  return {"success": True}
+
+
+class BoardSettingsBody(BaseModel):
+  guild_id: str
+  channel_id: str
+  role_id: str | None = None
+
+
+@router.post("/board/settings")
+async def set_board_settings(body: BoardSettingsBody):
+  await db.set_board_channel(body.guild_id, body.channel_id, body.role_id)
+  return {"success": True}

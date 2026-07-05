@@ -1729,3 +1729,147 @@ a.calendar-party:hover {
 .calendar-party.status-disbanded .calendar-party-badge {
   color: #7ad08a;
 }
+
+/* ── 커뮤니티 게시판 ───────────────────────────────────── */
+
+.board-category-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--sidebar-bg);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.board-category-badge.board-category-이벤트 {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.board-category-badge.board-category-공지 {
+  background: rgba(224, 92, 92, 0.15);
+  color: #e0807a;
+}
+
+.board-category-badge.board-category-자유 {
+  background: rgba(122, 208, 138, 0.15);
+  color: #7ad08a;
+}
+
+.board-content {
+  margin: 16px 0;
+  padding: 16px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.board-participants {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.board-participant-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.board-participant-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.board-edit-form {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.board-edit-form textarea {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.board-comments {
+  margin-top: 24px;
+}
+
+.board-comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.board-comment {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.board-comment-author {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.board-comment-content {
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.board-comment-form {
+  display: flex;
+  gap: 8px;
+}
+
+.board-comment-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.board-comment-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.board-comment-form button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.board-comment-form button:hover {
+  border-color: var(--accent);
+}

@@ -10,7 +10,7 @@ from starlette.staticfiles import StaticFiles
 
 from webapp import chat_store, config, guild_info
 from webapp.auth.dependencies import NotAuthenticated
-from webapp.routes import auth_routes, calendar, chat, dashboard, expedition, pages, party, raid_check
+from webapp.routes import auth_routes, board, calendar, chat, dashboard, expedition, pages, party, raid_check
 from webapp.templating import templates
 
 logger = logging.getLogger("webapp")
@@ -65,6 +65,7 @@ app.include_router(expedition.router)
 app.include_router(raid_check.router)
 app.include_router(party.router)
 app.include_router(calendar.router)
+app.include_router(board.router)
 
 
 @app.exception_handler(NotAuthenticated)

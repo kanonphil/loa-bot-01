@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import bot.database.manager as db
 import bot.api.lostark as loa
 from bot.services.expedition import sync_all_accounts_daily
-from bot.ui.views import PartyView
+from bot.ui.views import PartyView, _send_dm
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
 
@@ -22,6 +22,7 @@ COGS = [
     "bot.cogs.expedition",
     "bot.cogs.raid",
     "bot.cogs.party",
+    "bot.cogs.board",
     "bot.cogs.admin",
     "bot.cogs.subscription",
     "bot.cogs.invite",
@@ -105,6 +106,32 @@ class LoABot(commands.Bot):
                 f"{mentions or leader_mention}"
             )
             await db.mark_notified(party["message_id"])
+
+        # 게시판 이벤트 참여자 리마인더 (10분 전 / 시작 시각) — DM 발송.
+        # 파티 하나 실패가 나머지 게시글 처리를 막지 않도록 개별로 감싼다.
+        for post in await db.get_posts_due_10min_reminder(now_iso):
+            try:
+                participants = await db.list_board_participants(post["id"])
+                for p in participants:
+                    await _send_dm(
+                        self, p["discord_id"],
+                        f"⏰ **{post['title']}** 이벤트 시작 10분 전입니다!",
+                    )
+                await db.mark_board_reminder_sent(post["id"], "10min")
+            except Exception as e:
+                print(f"[게시판 리마인더] 10분 전 알림 처리 실패 (post_id={post.get('id')}): {type(e).__name__}: {e}")
+
+        for post in await db.get_posts_due_start_reminder(now_iso):
+            try:
+                participants = await db.list_board_participants(post["id"])
+                for p in participants:
+                    await _send_dm(
+                        self, p["discord_id"],
+                        f"🔔 **{post['title']}** 이벤트가 시작되었습니다!",
+                    )
+                await db.mark_board_reminder_sent(post["id"], "start")
+            except Exception as e:
+                print(f"[게시판 리마인더] 시작 알림 처리 실패 (post_id={post.get('id')}): {type(e).__name__}: {e}")
 
         # 익스트림 레이드 운영 기간 만료 → 알림만 발송, 파티는 유지
         # embed/버튼/스레드 잠금 없음 — 공대장이 직접 클리어/해체 처리하도록
