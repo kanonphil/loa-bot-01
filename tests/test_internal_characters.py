@@ -26,7 +26,9 @@ SIBLINGS = [
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
     asyncio.run(db.init_db())
-    asyncio.run(db.set_user_api_key("111", "dummy-loa-key"))
+    # add_user_api_key로 등록해야 user_api_keys에도 row가 생겨 다중 계정 기반
+    # 캐릭터 등록/동기화 로직(register_character_auto_detect 등)이 정상 동작한다.
+    asyncio.run(db.add_user_api_key("111", "발키리", "dummy-loa-key"))
 
     from bot.api.server import app
 
@@ -98,23 +100,25 @@ def test_add_character_rejects_character_not_found(client, monkeypatch):
 
 
 def test_add_character_rejects_other_expedition(client, monkeypatch):
-    """이미 등록된 캐릭터가 있는데, 새로 추가하려는 캐릭터의 원정대(siblings)에
-    그 등록된 캐릭터가 없으면 — 다른 사람 원정대를 등록하려는 시도로 보고 거부."""
+    """등록된 계정(API 키)으로 조회했을 때 그 원정대(siblings)에 해당 캐릭터가 없으면
+    — 남의 캐릭터를 등록하려는 시도로 보고 거부. 등록된 모든 계정을 다 시도해도
+    못 찾으면 실패해야 한다."""
     asyncio.run(db.add_character("111", "이미등록된캐릭"))
 
     async def other_expedition_siblings(api_key, name):
+        # 등록된 계정(dummy-loa-key)의 원정대에는 "다른사람캐릭"이 없다.
         return [{"CharacterName": "발키리", "CharacterClassName": "홀리나이트", "ItemMaxLevel": "1,720.00"}]
 
     monkeypatch.setattr(internal.loa, "get_siblings", other_expedition_siblings)
 
     resp = client.post(
         "/api/internal/characters/add",
-        json={"discord_id": "111", "character_name": "발키리"},
+        json={"discord_id": "111", "character_name": "다른사람캐릭"},
         headers=HEADERS,
     )
     body = resp.json()
     assert body["success"] is False
-    assert "본인 원정대" in body["reason"]
+    assert "찾을 수 없습니다" in body["reason"]
 
 
 def test_remove_character_success(client):

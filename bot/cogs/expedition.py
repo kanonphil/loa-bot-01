@@ -2,8 +2,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import bot.api.lostark as loa
 import bot.database.manager as db
+from bot.services.expedition import sync_characters_for_discord_id
 from bot.ui.embeds import expedition_embed, no_characters_embed
 from bot.ui.views import ExpeditionView, AddCharacterModal
 
@@ -18,8 +18,8 @@ class Expedition(commands.Cog):
         await interaction.response.defer(thinking=True, ephemeral=True)
 
         discord_id = str(interaction.user.id)
-        api_key = await db.get_user_api_key(discord_id)
-        if not api_key:
+        accounts = await db.list_user_api_keys(discord_id)
+        if not accounts:
             await interaction.followup.send(
                 "먼저 `/api등록` 명령어로 API 키를 등록해주세요.", ephemeral=True
             )
@@ -34,23 +34,20 @@ class Expedition(commands.Cog):
             )
             return
 
-        characters: list[dict] = []
-        for name in char_names:
-            try:
-                char = await loa.get_character_info(api_key, name)
-            except RuntimeError:
-                char = None
-            if char:
-                lv  = loa.parse_item_level(char)
-                cls = char.get("CharacterClassName", "?")
-                if lv > 0:
-                    await db.update_character_cache(discord_id, name, lv, cls)
-                characters.append(char)
-            else:
-                characters.append({
-                    "CharacterName": name, "CharacterClassName": "조회 실패",
-                    "ItemMaxLevel": "0", "ServerName": "?",
-                })
+        # 등록된 모든 계정(부계정 포함)을 그룹핑해서 조회하는 공용 로직 —
+        # sync_btn/웹 동기화 API/일일 자동 동기화와 동일한 코드.
+        await sync_characters_for_discord_id(discord_id)
+
+        cached = await db.get_cached_characters(discord_id, max_age_hours=99999)
+        characters = [
+            {
+                "CharacterName": c["character_name"],
+                "CharacterClassName": c["character_class"] or "조회 실패",
+                "ItemMaxLevel": str(c["item_level"] or 0),
+                "ServerName": "?",
+            }
+            for c in cached
+        ]
 
         await interaction.followup.send(
             embed=expedition_embed(interaction.user, characters), view=view, ephemeral=True
@@ -59,13 +56,14 @@ class Expedition(commands.Cog):
     @app_commands.command(name="캐릭터등록", description="원정대에 캐릭터를 등록합니다.")
     async def register_char(self, interaction: discord.Interaction) -> None:
         discord_id = str(interaction.user.id)
-        api_key = await db.get_user_api_key(discord_id)
-        if not api_key:
+        accounts = await db.list_user_api_keys(discord_id)
+        if not accounts:
             await interaction.response.send_message(
                 "먼저 `/api등록`으로 API 키를 등록해주세요.", ephemeral=True
             )
             return
-        await interaction.response.send_modal(AddCharacterModal(discord_id, api_key))
+        # 어느 계정(부계정 포함) 소속인지는 AddCharacterModal 제출 시 자동 판별된다.
+        await interaction.response.send_modal(AddCharacterModal(discord_id))
 
     @app_commands.command(name="캐릭터삭제", description="원정대에서 캐릭터를 삭제합니다.")
     @app_commands.describe(char_name="삭제할 캐릭터 이름")

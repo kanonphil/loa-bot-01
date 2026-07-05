@@ -446,6 +446,17 @@ async def get_characters_by_api_key_id(api_key_id: int) -> list[str]:
     return [r[0] for r in rows]
 
 
+async def get_character_api_key_id(discord_id: str, character_name: str) -> Optional[int]:
+    """단일 캐릭터가 연결된 api_key_id 조회. 없으면(레거시 데이터) None."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT api_key_id FROM user_characters WHERE discord_id=? AND character_name=?",
+            (discord_id, character_name),
+        )
+        row = await cur.fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
 # ──────────────────────────────────────────────
 # 캐릭터 등록
 # ──────────────────────────────────────────────

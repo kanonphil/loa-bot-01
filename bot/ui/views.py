@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from bot.data.raids import RAIDS, get_applicable_raids, get_difficulty_info, SUPPORT_CLASSES, PROFICIENCY
 import bot.database.manager as db
 import bot.api.lostark as loa
+from bot.services.expedition import register_character_auto_detect, sync_characters_for_discord_id
 
 KST = timezone(timedelta(hours=9))
 
@@ -540,13 +541,13 @@ class ExpeditionView(View):
         if str(interaction.user.id) != self.discord_id:
             await interaction.response.send_message("본인만 수정할 수 있습니다.", ephemeral=True)
             return
-        key = await db.get_user_api_key(self.discord_id)
-        if not key:
+        accounts = await db.list_user_api_keys(self.discord_id)
+        if not accounts:
             await interaction.response.send_message(
                 "먼저 `/api등록`으로 API 키를 등록해주세요.", ephemeral=True
             )
             return
-        await interaction.response.send_modal(AddCharacterModal(self.discord_id, key, interaction.message))
+        await interaction.response.send_modal(AddCharacterModal(self.discord_id, interaction.message))
 
     @discord.ui.button(label="캐릭터 삭제", emoji="➖", style=discord.ButtonStyle.danger)
     async def remove_btn(self, interaction: discord.Interaction, button: Button) -> None:
@@ -565,8 +566,8 @@ class ExpeditionView(View):
         if str(interaction.user.id) != self.discord_id:
             await interaction.response.send_message("본인만 동기화할 수 있습니다.", ephemeral=True)
             return
-        api_key = await db.get_user_api_key(self.discord_id)
-        if not api_key:
+        accounts = await db.list_user_api_keys(self.discord_id)
+        if not accounts:
             await interaction.response.send_message(
                 "먼저 `/api등록`으로 API 키를 등록해주세요.", ephemeral=True
             )
@@ -574,31 +575,20 @@ class ExpeditionView(View):
 
         await interaction.response.defer(thinking=True, ephemeral=True)
 
-        char_names = await db.get_user_characters(self.discord_id)
-        characters: list[dict] = []
-        updated = 0
+        # 계정(부계정 포함)별로 그룹핑해서 동기화하는 공용 로직 — 웹 동기화 API, 일일 자동
+        # 동기화 태스크와 동일한 코드를 사용한다.
+        updated, total = await sync_characters_for_discord_id(self.discord_id)
 
-        # 원정대 목록 1회만 호출 (캐릭터 수만큼 반복 호출 → 단건 호출)
-        try:
-            siblings = await loa.get_siblings(api_key, char_names[0]) if char_names else None
-            siblings_map = {c["CharacterName"]: c for c in siblings} if siblings else {}
-        except Exception:
-            siblings_map = {}
-
-        for name in char_names:
-            char = siblings_map.get(name)
-            if char:
-                lv  = loa.parse_item_level(char)
-                cls = char.get("CharacterClassName", "?")
-                if lv > 0:
-                    await db.update_character_cache(self.discord_id, name, lv, cls)
-                    updated += 1
-                characters.append(char)
-            else:
-                characters.append({
-                    "CharacterName": name, "CharacterClassName": "조회 실패",
-                    "ItemMaxLevel": "0", "ServerName": "?",
-                })
+        cached = await db.get_cached_characters(self.discord_id, max_age_hours=99999)
+        characters = [
+            {
+                "CharacterName": c["character_name"],
+                "CharacterClassName": c["character_class"] or "조회 실패",
+                "ItemMaxLevel": str(c["item_level"] or 0),
+                "ServerName": "?",
+            }
+            for c in cached
+        ]
 
         from bot.ui.embeds import expedition_embed
         try:
@@ -609,60 +599,32 @@ class ExpeditionView(View):
             pass
 
         await interaction.followup.send(
-            f"🔄 **{updated}/{len(char_names)}**개 캐릭터 동기화 완료!", ephemeral=True
+            f"🔄 **{updated}/{total}**개 캐릭터 동기화 완료!", ephemeral=True
         )
 
 
 class AddCharacterModal(Modal, title="캐릭터 등록"):
     char_name = TextInput(label="캐릭터 이름", placeholder="정확한 캐릭터 이름", min_length=2, max_length=12)
 
-    def __init__(self, discord_id: str, api_key: str, expedition_message: discord.Message | None = None) -> None:
+    def __init__(self, discord_id: str, expedition_message: discord.Message | None = None) -> None:
         super().__init__()
         self.discord_id = discord_id
-        self.api_key = api_key
         self.expedition_message = expedition_message
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         name = self.char_name.value.strip()
         await interaction.response.defer(ephemeral=True, thinking=True)
-        try:
-            siblings = await loa.get_siblings(self.api_key, name)
-        except RuntimeError as e:
-            await interaction.followup.send(str(e), ephemeral=True)
-            return
-        if siblings is None:
-            await interaction.followup.send(
-                f"**{name}** 캐릭터를 찾을 수 없습니다.\n이름과 API 키를 확인해주세요.", ephemeral=True
-            )
+
+        # 등록된 계정(부계정 포함)들을 순서대로 시도해서 이 캐릭터가 속한 계정을 자동 판별.
+        result = await register_character_auto_detect(self.discord_id, name)
+        if not result["success"]:
+            await interaction.followup.send(result["reason"], ephemeral=True)
             return
 
-        # 본인 원정대 캐릭터인지 확인
-        sibling_names = {c["CharacterName"] for c in siblings}
-        registered = await db.get_user_characters(self.discord_id)
-        if registered and not any(r in sibling_names for r in registered):
-            await interaction.followup.send(
-                "본인 원정대의 캐릭터만 등록할 수 있습니다.", ephemeral=True
-            )
-            return
-
-        char = next((c for c in siblings if c["CharacterName"] == name), None)
-        if char is None:
-            await interaction.followup.send(
-                f"**{name}** 캐릭터를 찾을 수 없습니다.\n이름과 API 키를 확인해주세요.", ephemeral=True
-            )
-            return
-
-        added = await db.add_character(self.discord_id, name)
-        if not added:
-            await interaction.followup.send(f"**{name}**은(는) 이미 등록된 캐릭터입니다.", ephemeral=True)
-            return
-        level      = loa.parse_item_level(char)
-        char_class = char.get("CharacterClassName", "?")
-        if level > 0:
-            await db.update_character_cache(self.discord_id, name, level, char_class)
+        level = result["item_level"]
         level_str = f"{level:,.2f}" if level > 0 else "?"
         await interaction.followup.send(
-            f"✅ **{name}** ({char_class} / {level_str}) 등록 완료!",
+            f"✅ **{name}** ({result['character_class']} / {level_str}) 등록 완료!",
             ephemeral=True,
         )
         if self.expedition_message:

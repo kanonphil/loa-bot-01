@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from bot.api.auth import verify_webapp_key
 import bot.api.lostark as loa
 import bot.database.manager as db
+from bot.services.expedition import register_character_auto_detect, sync_characters_for_discord_id
 
 router = APIRouter(dependencies=[Depends(verify_webapp_key)])
 
@@ -515,37 +516,9 @@ class AddCharacterBody(BaseModel):
 
 @router.post("/characters/add")
 async def add_character(body: AddCharacterBody):
-  name = body.character_name.strip()
-  api_key = await db.get_user_api_key(body.discord_id)
-  if not api_key:
-    return {"success": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."}
-
-  try:
-    siblings = await loa.get_siblings(api_key, name)
-  except RuntimeError as e:
-    return {"success": False, "reason": str(e)}
-  if siblings is None:
-    return {"success": False, "reason": f"{name} 캐릭터를 찾을 수 없습니다. 이름과 API 키를 확인해주세요."}
-
-  sibling_names = {c["CharacterName"] for c in siblings}
-  registered = await db.get_user_characters(body.discord_id)
-  if registered and not any(r in sibling_names for r in registered):
-    return {"success": False, "reason": "본인 원정대의 캐릭터만 등록할 수 있습니다."}
-
-  char = next((c for c in siblings if c["CharacterName"] == name), None)
-  if char is None:
-    return {"success": False, "reason": f"{name} 캐릭터를 찾을 수 없습니다. 이름과 API 키를 확인해주세요."}
-
-  added = await db.add_character(body.discord_id, name)
-  if not added:
-    return {"success": False, "reason": f"{name}은(는) 이미 등록된 캐릭터입니다."}
-
-  level = loa.parse_item_level(char)
-  char_class = char.get("CharacterClassName", "?")
-  if level > 0:
-    await db.update_character_cache(body.discord_id, name, level, char_class)
-
-  return {"success": True, "character_name": name, "character_class": char_class, "item_level": level}
+  # 등록된 계정(부계정 포함)을 순서대로 시도해 이 캐릭터가 속한 계정을 자동 판별 —
+  # Discord /캐릭터등록(AddCharacterModal)과 동일한 공용 로직.
+  return await register_character_auto_detect(body.discord_id, body.character_name)
 
 
 class RemoveCharacterBody(BaseModel):
@@ -571,25 +544,7 @@ async def sync_characters(body: SyncCharactersBody):
   if not api_key:
     return {"success": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."}
 
-  char_names = await db.get_user_characters(body.discord_id)
-  if not char_names:
-    return {"success": True, "updated": 0, "total": 0}
-
-  try:
-    siblings = await loa.get_siblings(api_key, char_names[0])
-    siblings_map = {c["CharacterName"]: c for c in siblings} if siblings else {}
-  except Exception:
-    siblings_map = {}
-
-  updated = 0
-  for name in char_names:
-    char = siblings_map.get(name)
-    if not char:
-      continue
-    level = loa.parse_item_level(char)
-    char_class = char.get("CharacterClassName", "?")
-    if level > 0:
-      await db.update_character_cache(body.discord_id, name, level, char_class)
-      updated += 1
-
-  return {"success": True, "updated": updated, "total": len(char_names)}
+  # 계정(부계정 포함)별로 그룹핑해서 동기화 — Discord "동기화" 버튼, 일일 자동 동기화와
+  # 동일한 공용 로직.
+  updated, total = await sync_characters_for_discord_id(body.discord_id)
+  return {"success": True, "updated": updated, "total": total}
