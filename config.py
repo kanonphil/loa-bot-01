@@ -9,6 +9,10 @@ ADMIN_API_KEY: str = os.environ.get("ADMIN_API_KEY", "changeme")
 # ADMIN_API_KEY와 분리해 웹앱이 관리자 권한을 갖지 않도록 함.
 WEBAPP_API_KEY: str = os.environ.get("WEBAPP_API_KEY", "changeme-webapp")
 
+# /api등록 시 검증용 캐릭터가 이 길드 소속이어야만 등록을 허용.
+# 빈 문자열이면 길드 확인을 건너뜀 (다른 서버에서 재사용할 때 대비).
+REQUIRED_GUILD_NAME: str = os.environ.get("REQUIRED_GUILD_NAME", "동물롱장")
+
 # ── API 키 암호화 ─────────────────────────────────────────
 # .env에 ENCRYPTION_KEY가 없으면 평문 저장 (미설정 환경 호환)
 # 키 생성: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
