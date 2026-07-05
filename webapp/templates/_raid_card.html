@@ -1,7 +1,10 @@
 {% set pct = ((card.done_count / card.total_slots * 100) | round(0) | int) if card.total_slots else 0 %}
 <div class="raid-card" id="raid-card-{{ card_index }}">
   <div class="raid-card-header">
-    <span class="raid-card-name">{{ card.character_name }}</span>
+    <div class="raid-card-header-top">
+      <span class="raid-card-name">{{ card.character_name }}</span>
+      <a class="raid-card-select-link" href="/raid-check/select/{{ card.character_name }}">⚙️ 레이드 선택</a>
+    </div>
     <span class="raid-card-meta">{{ card.character_class }} &middot; {{ card.item_level }}</span>
   </div>
 

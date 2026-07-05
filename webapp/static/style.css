@@ -374,6 +374,24 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   min-width: 0;
 }
 
+.raid-card-header-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.raid-card-select-link {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.raid-card-select-link:hover {
+  color: var(--accent);
+}
+
 .raid-card-name {
   font-size: 15px;
   font-weight: 700;
@@ -519,6 +537,64 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 }
 
 .raid-card-diff-toggle.done:hover {
+  filter: brightness(1.1);
+}
+
+/* ── 레이드 체크 — 레이드 선택 화면 ─────────────────────── */
+
+.raid-select-page h1 {
+  margin-top: 8px;
+}
+
+.raid-select-form {
+  margin-top: 16px;
+}
+
+.raid-select-category {
+  margin-bottom: 20px;
+}
+
+.raid-select-category h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 8px;
+}
+
+.raid-select-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.raid-select-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.raid-select-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.raid-select-save-btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.raid-select-save-btn:hover {
   filter: brightness(1.1);
 }
 

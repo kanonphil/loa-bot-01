@@ -72,6 +72,26 @@ async def toggle_completion(body: ToggleCompletionBody):
   return {"completed": completed}
 
 
+@router.get("/raid-selection")
+async def raid_selection(discord_id: str, character_name: str):
+  """캐릭터별로 레이드 체크 화면에 표시할 레이드를 고른 상태.
+  한 번도 고른 적 없으면(customized=False) 입장 가능한 레이드 전체를 보여줘야 한다."""
+  selected = await db.get_selected_raids(discord_id, character_name)
+  return {"customized": selected is not None, "selected_raids": selected or []}
+
+
+class SetRaidSelectionBody(BaseModel):
+  discord_id: str
+  character_name: str
+  raid_names: list[str]
+
+
+@router.post("/raid-selection")
+async def set_raid_selection(body: SetRaidSelectionBody):
+  await db.set_selected_raids(body.discord_id, body.character_name, body.raid_names)
+  return {"success": True}
+
+
 # ── 공대 모집 (길드원 셀프서비스) ────────────────────────────
 
 @router.get("/parties/proficiency-options")

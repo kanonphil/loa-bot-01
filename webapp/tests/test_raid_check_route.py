@@ -9,6 +9,13 @@ CATEGORIES_URL = "http://bot-server.internal/api/internal/raid-categories"
 COMPLETIONS_URL = "http://bot-server.internal/api/internal/completions"
 TOGGLE_URL = "http://bot-server.internal/api/internal/completions/toggle"
 CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters-grouped"
+RAID_SELECTION_URL = "http://bot-server.internal/api/internal/raid-selection"
+
+NOT_CUSTOMIZED = {"customized": False, "selected_raids": []}
+
+
+def _mock_not_customized():
+    respx.get(RAID_SELECTION_URL).mock(return_value=httpx.Response(200, json=NOT_CUSTOMIZED))
 
 RAIDS = {
     "아르모체(4막)": {
@@ -50,6 +57,7 @@ def _mock_common(completions=None):
             200, json={"week_key": "2026-01-07", "completions": completions or []}
         )
     )
+    _mock_not_customized()
 
 
 def test_no_characters_shows_registration_notice(client):
@@ -147,6 +155,7 @@ def test_progress_counts_by_raid_not_difficulty(client):
                 200, json={"week_key": "2026-01-07", "completions": ["종막_하드"]}
             )
         )
+        _mock_not_customized()
         resp = client.get("/raid-check")
 
     assert resp.status_code == 200
@@ -192,6 +201,7 @@ def test_raid_check_shows_a_separate_card_per_character(client):
         respx.get(COMPLETIONS_URL).mock(
             side_effect=_completions_by_character({"발키리": ["아르모체(4막)_노말"]})
         )
+        _mock_not_customized()
         resp = client.get("/raid-check")
 
     assert resp.status_code == 200
@@ -216,6 +226,7 @@ def test_toggle_only_updates_its_own_card_fragment(client):
         respx.get(COMPLETIONS_URL).mock(
             side_effect=_completions_by_character({"워로드부캐": ["아르모체(4막)_노말"]})
         )
+        _mock_not_customized()
 
         resp = client.post(
             "/raid-check/toggle",
@@ -239,6 +250,7 @@ def test_single_account_hides_account_tabs(client):
         respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_CHARACTERS))
         respx.get(COMPLETIONS_URL).mock(side_effect=_completions_by_character({}))
+        _mock_not_customized()
         resp = client.get("/raid-check")
 
     assert resp.status_code == 200
@@ -253,6 +265,7 @@ def test_multi_account_shows_tabs_and_defaults_to_all(client):
         respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_ACCOUNT_CHARACTERS))
         respx.get(COMPLETIONS_URL).mock(side_effect=_completions_by_character({}))
+        _mock_not_customized()
         resp = client.get("/raid-check")
 
     assert resp.status_code == 200
@@ -273,6 +286,7 @@ def test_selecting_account_filters_cards_to_that_account_only(client):
         respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_ACCOUNT_CHARACTERS))
         respx.get(COMPLETIONS_URL).mock(side_effect=_completions_by_character({}))
+        _mock_not_customized()
         resp = client.get("/raid-check", params={"account": "슬레이어부계정"})
 
     assert resp.status_code == 200
@@ -280,3 +294,132 @@ def test_selecting_account_filters_cards_to_that_account_only(client):
     assert 'id="raid-card-1"' not in resp.text  # 카드가 하나만 렌더링돼야 함
     assert "워로드부캐" not in resp.text  # 다른 계정 캐릭터 이름은 카드에만 나오므로 이걸로 필터링 검증
     assert 'class="account-tab active">슬레이어부계정</a>' in resp.text
+
+
+# 레이드가 늘어날 때를 대비한 "캐릭터별 레이드 선택" 검증용 — 같은 카테고리에 레이드 2개.
+RAIDS_TWO = {
+    "아르모체(4막)": {
+        "short_name": "4막", "icon": "🗡️", "category": "카제로스",
+        "is_extreme": False, "is_active": True, "available_from": None, "available_until": None,
+        "difficulties": {"노말": {"min_level": 1700, "total_slots": 8, "party_split": 4, "gates": 2}},
+    },
+    "카멘": {
+        "short_name": "카멘", "icon": "🔥", "category": "카제로스",
+        "is_extreme": False, "is_active": True, "available_from": None, "available_until": None,
+        "difficulties": {"노말": {"min_level": 1580, "total_slots": 8, "party_split": 4, "gates": 3}},
+    },
+}
+
+
+def test_card_shows_only_selected_raids_when_customized(client):
+    """레이드 선택을 한 번이라도 저장했으면, 카드에는 그 레이드만 보여야 한다."""
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS_TWO))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        respx.get(COMPLETIONS_URL).mock(
+            return_value=httpx.Response(200, json={"week_key": "2026-01-07", "completions": []})
+        )
+        respx.get(RAID_SELECTION_URL).mock(
+            return_value=httpx.Response(200, json={"customized": True, "selected_raids": ["카멘"]})
+        )
+        resp = client.get("/raid-check")
+
+    assert resp.status_code == 200
+    assert "카멘" in resp.text
+    assert "4막" not in resp.text  # 선택 안 한 아르모체(4막)는 카드에서 빠져야 함
+    assert "0 / 1 완료" in resp.text  # 진행률도 선택된 1개 기준
+
+
+def test_card_shows_all_applicable_raids_when_never_customized(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS_TWO))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        respx.get(COMPLETIONS_URL).mock(
+            return_value=httpx.Response(200, json={"week_key": "2026-01-07", "completions": []})
+        )
+        _mock_not_customized()
+        resp = client.get("/raid-check")
+
+    assert resp.status_code == 200
+    assert "카멘" in resp.text
+    assert "4막" in resp.text
+    assert "0 / 2 완료" in resp.text
+
+
+def test_raid_select_page_defaults_all_checked_when_never_customized(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS_TWO))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_not_customized()
+        resp = client.get("/raid-check/select/발키리")
+
+    assert resp.status_code == 200
+    assert 'value="아르모체(4막)" checked' in resp.text
+    assert 'value="카멘" checked' in resp.text
+
+
+def test_raid_select_page_prechecks_saved_selection(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS_TWO))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        respx.get(RAID_SELECTION_URL).mock(
+            return_value=httpx.Response(200, json={"customized": True, "selected_raids": ["카멘"]})
+        )
+        resp = client.get("/raid-check/select/발키리")
+
+    assert resp.status_code == 200
+    assert 'value="카멘" checked' in resp.text
+    assert 'value="아르모체(4막)"' in resp.text  # 체크박스 자체는 여전히 목록에 있어야 함
+    assert 'value="아르모체(4막)" checked' not in resp.text  # 다만 선택 안 됐으니 체크는 안 되어 있어야 함
+
+
+def test_raid_select_page_rejects_other_users_character(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        resp = client.get("/raid-check/select/남의캐릭터")
+
+    assert resp.status_code == 403
+
+
+def test_raid_select_save_calls_bot_and_redirects(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        save_route = respx.post(RAID_SELECTION_URL).mock(
+            return_value=httpx.Response(200, json={"success": True})
+        )
+
+        resp = client.post(
+            "/raid-check/select/발키리",
+            data={"raid_names": ["카멘"]},
+        )
+
+    assert resp.status_code in (302, 303, 307)
+    assert resp.headers["location"] == "/raid-check"
+    assert save_route.called
+
+
+def test_raid_select_save_rejects_other_users_character(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        save_route = respx.post(RAID_SELECTION_URL).mock(
+            return_value=httpx.Response(200, json={"success": True})
+        )
+
+        resp = client.post(
+            "/raid-check/select/남의캐릭터",
+            data={"raid_names": ["카멘"]},
+        )
+
+    assert resp.status_code == 403
+    assert not save_route.called

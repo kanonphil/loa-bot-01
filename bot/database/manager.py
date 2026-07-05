@@ -145,6 +145,23 @@ CREATE TABLE IF NOT EXISTS job_classes (
     is_support INTEGER NOT NULL DEFAULT 0
 );
 
+-- 레이드 체크에서 캐릭터별로 "이 레이드만 보이게" 고른 선택 상태.
+-- _state에 행이 없으면 "커스터마이즈 안 함"(입장 가능한 레이드 전체 표시, 기존 동작),
+-- _state에 행이 있으면 character_raid_selection에 담긴 레이드만 표시한다
+-- (전부 해제해서 0개를 선택한 상태와, 애초에 선택한 적이 없는 상태를 구분하기 위해 테이블을 분리).
+CREATE TABLE IF NOT EXISTS character_raid_selection_state (
+    discord_id      TEXT,
+    character_name  TEXT,
+    PRIMARY KEY (discord_id, character_name)
+);
+
+CREATE TABLE IF NOT EXISTS character_raid_selection (
+    discord_id      TEXT,
+    character_name  TEXT,
+    raid_name       TEXT,
+    PRIMARY KEY (discord_id, character_name, raid_name)
+);
+
 CREATE TABLE IF NOT EXISTS raid_subscriptions (
     discord_id  TEXT,
     raid_name   TEXT,
@@ -668,6 +685,42 @@ async def toggle_completion(
             )
             await db.commit()
             return True
+
+
+async def get_selected_raids(discord_id: str, character_name: str) -> list[str] | None:
+    """캐릭터별로 저장된 "표시할 레이드" 선택 목록. 커스터마이즈한 적이 없으면 None
+    (호출 측에서 입장 가능한 레이드 전체를 보여주면 됨), 있으면 선택된 raid_name 목록
+    (전부 해제했으면 빈 리스트)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT 1 FROM character_raid_selection_state WHERE discord_id=? AND character_name=?",
+            (discord_id, character_name),
+        )
+        if await cur.fetchone() is None:
+            return None
+        cur2 = await db.execute(
+            "SELECT raid_name FROM character_raid_selection WHERE discord_id=? AND character_name=?",
+            (discord_id, character_name),
+        )
+        rows = await cur2.fetchall()
+    return [r[0] for r in rows]
+
+
+async def set_selected_raids(discord_id: str, character_name: str, raid_names: list[str]) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO character_raid_selection_state (discord_id, character_name) VALUES (?, ?)",
+            (discord_id, character_name),
+        )
+        await db.execute(
+            "DELETE FROM character_raid_selection WHERE discord_id=? AND character_name=?",
+            (discord_id, character_name),
+        )
+        await db.executemany(
+            "INSERT INTO character_raid_selection (discord_id, character_name, raid_name) VALUES (?, ?, ?)",
+            [(discord_id, character_name, raid_name) for raid_name in raid_names],
+        )
+        await db.commit()
 
 
 # ──────────────────────────────────────────────

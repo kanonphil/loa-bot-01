@@ -72,6 +72,28 @@ async def get_completions(discord_id: str, character_name: str) -> dict:
         return resp.json()
 
 
+async def get_raid_selection(discord_id: str, character_name: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/raid-selection",
+            params={"discord_id": discord_id, "character_name": character_name},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def set_raid_selection(discord_id: str, character_name: str, raid_names: list[str]) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/raid-selection",
+            json={"discord_id": discord_id, "character_name": character_name, "raid_names": raid_names},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def add_character(discord_id: str, character_name: str) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(

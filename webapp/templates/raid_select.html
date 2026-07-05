@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content raid-select-page">
+  <a href="/raid-check" class="party-back-link">&larr; 레이드 체크로</a>
+  <h1>{{ character_name }} · 레이드 선택</h1>
+  <p class="expedition-section-desc">체크한 레이드만 카드에 표시됩니다. 입장 가능한 레이드만 고를 수 있어요.</p>
+
+  <form method="post" action="/raid-check/select/{{ character_name }}" class="raid-select-form">
+    {% for group in groups %}
+    <div class="raid-select-category">
+      <h3>{{ group.category }}</h3>
+      {% for r in group.raids %}
+      <label class="raid-select-row">
+        <input type="checkbox" name="raid_names" value="{{ r.raid_name }}" {% if r.raid_name in selected_raids %}checked{% endif %}>
+        <span class="raid-card-icon">{{ r.icon }}</span>
+        <span>{{ r.short_name }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="raid-select-save-btn">저장</button>
+  </form>
+</div>
+{% endblock %}
