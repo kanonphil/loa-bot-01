@@ -531,6 +531,24 @@ async def get_cached_characters(discord_id: str, max_age_hours: int = 6) -> list
     return [dict(r) for r in rows]
 
 
+async def get_cached_characters_with_account(discord_id: str, max_age_hours: int = 6) -> list[dict]:
+    """캐시된 캐릭터 목록 + 소속 계정 라벨(account_label). 웹 원정대 페이지에서
+    계정별로 묶어 보여주는 용도. 계정 정보가 없는(레거시) 캐릭터는 account_label=None."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT uc.character_name, uc.character_class, "
+            "CASE WHEN uc.cached_at >= datetime('now', ?) THEN uc.item_level ELSE NULL END AS item_level, "
+            "uc.api_key_id, k.label AS account_label "
+            "FROM user_characters uc "
+            "LEFT JOIN user_api_keys k ON k.id = uc.api_key_id "
+            "WHERE uc.discord_id=? ORDER BY uc.added_at",
+            (f"-{max_age_hours} hours", discord_id),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 # ──────────────────────────────────────────────
 # 레이드 체크
 # ──────────────────────────────────────────────

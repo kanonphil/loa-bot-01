@@ -31,19 +31,26 @@
   <button type="submit">🔄 전체 동기화</button>
 </form>
 
-<ul class="expedition-list">
-  {% for c in characters %}
-  <li class="expedition-item">
-    <span class="dash-char-name">{{ c.character_name }}</span>
-    <span class="dash-char-class">{{ c.character_class }}</span>
-    <span class="dash-char-level">{{ c.item_level }}</span>
-    <form method="post" action="/expedition/remove" class="expedition-remove-form">
-      <input type="hidden" name="character_name" value="{{ c.character_name }}">
-      <button type="submit" class="party-leave-btn">삭제</button>
-    </form>
-  </li>
-  {% endfor %}
-</ul>
+{% for group in character_groups %}
+<div class="expedition-account-group">
+  {% if character_groups|length > 1 %}
+  <h2 class="expedition-account-title">{{ group.label }}</h2>
+  {% endif %}
+  <ul class="expedition-list">
+    {% for c in group.characters %}
+    <li class="expedition-item">
+      <span class="dash-char-name">{{ c.character_name }}</span>
+      <span class="dash-char-class">{{ c.character_class }}</span>
+      <span class="dash-char-level">{{ c.item_level }}</span>
+      <form method="post" action="/expedition/remove" class="expedition-remove-form">
+        <input type="hidden" name="character_name" value="{{ c.character_name }}">
+        <button type="submit" class="party-leave-btn">삭제</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endfor %}
 {% endif %}
 </div>
 {% endblock %}

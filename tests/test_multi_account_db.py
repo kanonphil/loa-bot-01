@@ -116,3 +116,25 @@ def test_get_characters_by_api_key_id(clean_db):
 
     assert asyncio.run(db.get_characters_by_api_key_id(id1)) == ["발키리"]
     assert asyncio.run(db.get_characters_by_api_key_id(id2)) == ["슬레이어"]
+
+
+def test_get_cached_characters_with_account_includes_label(clean_db):
+    id1 = asyncio.run(db.add_user_api_key("111", "발키리", "key-a"))
+    id2 = asyncio.run(db.add_user_api_key("111", "슬레이어부캐", "key-b"))
+    asyncio.run(db.add_character("111", "발키리", api_key_id=id1))
+    asyncio.run(db.add_character("111", "슬레이어", api_key_id=id2))
+    asyncio.run(db.update_character_cache("111", "발키리", 1720.0, "홀리나이트", api_key_id=id1))
+    asyncio.run(db.update_character_cache("111", "슬레이어", 1690.0, "슬레이어", api_key_id=id2))
+
+    rows = asyncio.run(db.get_cached_characters_with_account("111", max_age_hours=99999))
+    by_name = {r["character_name"]: r for r in rows}
+    assert by_name["발키리"]["account_label"] == "발키리"
+    assert by_name["슬레이어"]["account_label"] == "슬레이어부캐"
+    assert by_name["발키리"]["item_level"] == 1720.0
+
+
+def test_get_cached_characters_with_account_legacy_null_label(clean_db):
+    """api_key_id가 없는(레거시) 캐릭터는 account_label이 None이어야 한다."""
+    asyncio.run(db.add_character("111", "레거시캐릭"))
+    rows = asyncio.run(db.get_cached_characters_with_account("111", max_age_hours=99999))
+    assert rows[0]["account_label"] is None

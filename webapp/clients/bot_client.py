@@ -31,6 +31,18 @@ async def get_user_characters(discord_id: str) -> list[dict]:
         return resp.json()
 
 
+async def get_user_characters_grouped(discord_id: str) -> list[dict]:
+    """원정대 관리 페이지용 — 캐릭터 목록 + 소속 계정 라벨(account_label)."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/user-characters-grouped",
+            params={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_raids() -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(

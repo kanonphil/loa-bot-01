@@ -25,6 +25,13 @@ async def user_characters(discord_id: str):
   return await db.get_cached_characters(discord_id, max_age_hours=99999)
 
 
+@router.get("/user-characters-grouped")
+async def user_characters_grouped(discord_id: str):
+  """웹 원정대 페이지용 — 캐릭터 목록 + 소속 계정 라벨(account_label).
+  부계정이 있으면 페이지에서 계정별로 묶어 보여준다."""
+  return await db.get_cached_characters_with_account(discord_id, max_age_hours=99999)
+
+
 # ── 레이드 체크 (길드원 셀프서비스) ──────────────────────────
 
 @router.get("/raids")

@@ -10,8 +10,19 @@ router = APIRouter()
 
 
 async def _page_context(discord_id: str) -> dict:
-    characters = await bot_client.get_user_characters(discord_id)
-    return {"characters": characters}
+    characters = await bot_client.get_user_characters_grouped(discord_id)
+    groups: list[dict] = []
+    seen_labels: dict[str, dict] = {}
+    for c in characters:
+        label = c.get("account_label") or "기타"
+        group = seen_labels.get(label)
+        if group is None:
+            group = {"label": label, "characters": []}
+            seen_labels[label] = group
+            groups.append(group)
+        group["characters"].append(c)
+    # 캐릭터 카드 자체는 기존과 동일하게 평탄화된 목록으로도 노출 (기존 템플릿/테스트 호환)
+    return {"characters": characters, "character_groups": groups}
 
 
 @router.get("/expedition")
