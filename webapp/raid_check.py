@@ -28,6 +28,22 @@ def applicable_raids(raids: dict, item_level: float) -> list[tuple[str, str, dic
     return result
 
 
+def filter_groups_by_selection(groups: list[dict], selection: dict) -> list[dict]:
+    """캐릭터가 "레이드 선택"에서 고른 레이드만 남긴다. 한 번도 커스터마이즈
+    안 했으면(selection["customized"] == False) 그대로 전체를 반환 — 레이드 체크
+    카드와 메인 대시보드 진행률이 항상 같은 기준으로 계산되도록 공용으로 쓴다.
+    선택된 레이드가 하나도 없는(빈) 카테고리는 통째로 뺀다."""
+    if not selection["customized"]:
+        return groups
+    selected = set(selection["selected_raids"])
+    filtered = []
+    for g in groups:
+        raids = [r for r in g["raids"] if r["raid_name"] in selected]
+        if raids:
+            filtered.append({**g, "raids": raids})
+    return filtered
+
+
 def group_by_category(
     raids: dict, categories: list[dict], applicable: list[tuple[str, str, dict]]
 ) -> list[dict]:

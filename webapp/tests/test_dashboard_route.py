@@ -9,6 +9,9 @@ CATEGORIES_URL = "http://bot-server.internal/api/internal/raid-categories"
 COMPLETIONS_URL = "http://bot-server.internal/api/internal/completions"
 CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters"
 PARTIES_URL = "http://bot-server.internal/api/internal/parties"
+RAID_SELECTION_URL = "http://bot-server.internal/api/internal/raid-selection"
+
+NOT_CUSTOMIZED = {"customized": False, "selected_raids": []}
 
 RAIDS = {
     "아르모체(4막)": {
@@ -40,7 +43,7 @@ PARTY_RECRUITING = {
 PARTY_CLOSED = {**PARTY_RECRUITING, "message_id": "p2", "status": "closed"}
 
 
-def _mock_common(completions=None, parties=None):
+def _mock_common(completions=None, parties=None, raid_selection=None):
     respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
     respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
     respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
@@ -48,6 +51,7 @@ def _mock_common(completions=None, parties=None):
         return_value=httpx.Response(200, json={"week_key": "2026-01-07", "completions": completions or []})
     )
     respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=parties or []))
+    respx.get(RAID_SELECTION_URL).mock(return_value=httpx.Response(200, json=raid_selection or NOT_CUSTOMIZED))
 
 
 def test_dashboard_requires_login(client):
@@ -79,6 +83,24 @@ def test_dashboard_progress_counts_by_raid_not_difficulty(client):
 
     assert resp.status_code == 200
     assert "2/2" in resp.text
+
+
+def test_dashboard_progress_respects_raid_check_selection(client):
+    """레이드 체크에서 캐릭터별로 표시 레이드를 골라뒀으면, 메인 대시보드
+    진행률도 그 선택 기준으로 계산돼야 한다(레이드 체크 카드와 항상 같은 숫자)."""
+    with respx.mock:
+        log_in(client)
+        _mock_common(
+            completions=["아르모체(4막)_노말", "종막_하드"],
+            raid_selection={"customized": True, "selected_raids": ["아르모체(4막)"]},
+        )
+        resp = client.get("/main")
+
+    assert resp.status_code == 200
+    # 종막을 선택에서 뺐으니 분모는 1, 아르모체(4막)만 완료했으니 분자도 1
+    assert "1/1" in resp.text
+    assert "1/2" not in resp.text
+    assert "2/2" not in resp.text
 
 
 def test_dashboard_only_shows_recruiting_parties(client):

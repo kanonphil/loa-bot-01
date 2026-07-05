@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from webapp import config
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
-from webapp.raid_check import applicable_raids, group_by_category
+from webapp.raid_check import applicable_raids, filter_groups_by_selection, group_by_category
 from webapp.templating import templates
 
 router = APIRouter()
@@ -14,13 +14,17 @@ router = APIRouter()
 
 async def _character_progress(character: dict, raids: dict, categories: list[dict]) -> dict:
     item_level = character.get("item_level") or 0
-    groups = group_by_category(raids, categories, applicable_raids(raids, item_level))
+    all_groups = group_by_category(raids, categories, applicable_raids(raids, item_level))
+    completion_data, selection = await asyncio.gather(
+        bot_client.get_completions(character["discord_id"], character["character_name"]),
+        bot_client.get_raid_selection(character["discord_id"], character["character_name"]),
+    )
+    # 레이드 체크 페이지에서 캐릭터별로 고른 "표시할 레이드" 선택을 여기서도 그대로 적용 —
+    # 대시보드 진행률과 레이드 체크 카드가 항상 같은 기준으로 보여야 한다.
+    groups = filter_groups_by_selection(all_groups, selection)
     # 레이드 하나당 난이도는 여러 개지만, 진행률은 "레이드 단위"로 센다 —
     # 한 레이드에서 어느 난이도든 하나만 완료하면 그 레이드는 끝난 것으로 취급.
     total_raids = sum(len(g["raids"]) for g in groups)
-    completion_data = await bot_client.get_completions(
-        character["discord_id"], character["character_name"]
-    )
     done = set(completion_data["completions"])
     done_count = sum(
         1

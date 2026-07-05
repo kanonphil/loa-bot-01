@@ -13,7 +13,7 @@ from starlette.responses import RedirectResponse
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
-from webapp.raid_check import applicable_raids, group_by_category
+from webapp.raid_check import applicable_raids, filter_groups_by_selection, group_by_category
 from webapp.templating import templates
 
 router = APIRouter()
@@ -28,20 +28,6 @@ async def _find_own_character(discord_id: str, character_name: str) -> dict | No
     return next((c for c in characters if c["character_name"] == character_name), None)
 
 
-def _filter_groups_by_selection(groups: list[dict], selection: dict) -> list[dict]:
-    """한 번도 커스터마이즈 안 했으면 그대로, 했으면 선택된 레이드만 남기고
-    (선택된 레이드가 하나도 없는) 빈 카테고리는 통째로 뺀다."""
-    if not selection["customized"]:
-        return groups
-    selected = set(selection["selected_raids"])
-    filtered = []
-    for g in groups:
-        raids = [r for r in g["raids"] if r["raid_name"] in selected]
-        if raids:
-            filtered.append({**g, "raids": raids})
-    return filtered
-
-
 async def _character_card(discord_id: str, character: dict, raids: dict, categories: list[dict]) -> dict:
     item_level = character.get("item_level") or 0
     completion_data, selection = await asyncio.gather(
@@ -49,7 +35,7 @@ async def _character_card(discord_id: str, character: dict, raids: dict, categor
         bot_client.get_raid_selection(discord_id, character["character_name"]),
     )
     all_groups = group_by_category(raids, categories, applicable_raids(raids, item_level))
-    groups = _filter_groups_by_selection(all_groups, selection)
+    groups = filter_groups_by_selection(all_groups, selection)
     done = set(completion_data["completions"])
     # 레이드 하나당 난이도는 여러 개지만, 진행률은 "레이드 단위"로 센다 —
     # 한 레이드에서 어느 난이도든 하나만 완료하면 그 레이드는 끝난 것으로 취급.
