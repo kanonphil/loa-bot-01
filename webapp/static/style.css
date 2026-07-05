@@ -1203,3 +1203,51 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .flatpickr-months .flatpickr-next-month svg {
   fill: var(--text-muted) !important;
 }
+
+.flatpickr-day,
+.flatpickr-prev-month,
+.flatpickr-next-month,
+.flatpickr-monthDropdown-months,
+.fp-step-btn {
+  cursor: pointer;
+}
+
+.flatpickr-calendar ::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 시간/분 옆에 명시적 −/+ 버튼 — 기본 화살표는 너무 작고 안 눌려서 대체 */
+.flatpickr-time .numInputWrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.flatpickr-time .numInputWrapper span.arrowUp,
+.flatpickr-time .numInputWrapper span.arrowDown {
+  display: none;
+}
+
+.flatpickr-time .numInput {
+  padding: 0 !important;
+  text-align: center;
+}
+
+.fp-step-btn {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--sidebar-bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.fp-step-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}

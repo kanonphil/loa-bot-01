@@ -61,12 +61,8 @@
   fillDifficulties();
 </script>
 <script src="/static/flatpickr.min.js"></script>
+<script src="/static/party-datetime.js"></script>
 <script>
-  flatpickr("#scheduled-datetime-input", {
-    enableTime: true,
-    dateFormat: "Y-m-d\\TH:i",
-    time_24hr: true,
-    minDate: "today",
-  });
+  initPartyDatetimePicker("#scheduled-datetime-input");
 </script>
 {% endblock %}

@@ -148,13 +148,9 @@
   </form>
 </div>
 <script src="/static/flatpickr.min.js"></script>
+<script src="/static/party-datetime.js"></script>
 <script>
-  flatpickr("#reschedule-datetime-input", {
-    enableTime: true,
-    dateFormat: "Y-m-d\\TH:i",
-    time_24hr: true,
-    minDate: "today",
-  });
+  initPartyDatetimePicker("#reschedule-datetime-input");
 </script>
 {% endif %}
 </div>
