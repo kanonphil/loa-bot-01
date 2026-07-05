@@ -548,7 +548,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .party-detail-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
 }
 

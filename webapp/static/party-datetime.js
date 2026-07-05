@@ -14,7 +14,9 @@ const KOREAN_LOCALE = {
 function initPartyDatetimePicker(selector) {
   flatpickr(selector, {
     enableTime: true,
-    dateFormat: "Y-m-d\\TH:i",
+    dateFormat: "Y-m-d\\TH:i", // 실제 폼 제출값 — 서버가 파싱하는 형식, 화면엔 안 보임
+    altInput: true,
+    altFormat: "Y-m-d (D) H:i", // 화면에 보여주는 값만 사람이 읽기 편하게
     time_24hr: true,
     minDate: "today",
     hourIncrement: 1,
