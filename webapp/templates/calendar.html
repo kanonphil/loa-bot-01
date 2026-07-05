@@ -24,15 +24,26 @@
       {% if day == 0 %}
       <div class="calendar-cell empty"></div>
       {% else %}
+      {% set day_parties = parties_by_day.get(day, []) %}
       <div class="calendar-cell{% if day == today_day %} today{% endif %}">
         <span class="calendar-day-number">{{ day }}</span>
-        {% for p in parties_by_day.get(day, []) %}
-        <div class="calendar-party status-{{ p.status }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">
-          <span class="calendar-party-time">{{ p.scheduled_time.split(' ')[-1] if ' ' in p.scheduled_time else p.scheduled_time }}</span>
-          <span class="calendar-party-name">{{ p.raid_name }} {{ p.difficulty }}</span>
-          <span class="calendar-party-badge">{{ p.status_label }}</span>
+        <div class="calendar-party-list">
+          {% for p in day_parties[:3] %}
+          {% set inner %}
+            <span class="calendar-party-time">{{ p.time_label }}</span>
+            <span class="calendar-party-name">{{ p.raid_name }} {{ p.difficulty }}</span>
+            <span class="calendar-party-badge">{{ p.status_label }}</span>
+          {% endset %}
+          {% if p.is_active %}
+          <a class="calendar-party status-{{ p.status }}" href="/parties/{{ p.message_id }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</a>
+          {% else %}
+          <div class="calendar-party status-{{ p.status }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</div>
+          {% endif %}
+          {% endfor %}
+          {% if day_parties | length > 3 %}
+          <div class="calendar-party-more">+{{ day_parties | length - 3 }}개 더</div>
+          {% endif %}
         </div>
-        {% endfor %}
       </div>
       {% endif %}
       {% endfor %}

@@ -71,7 +71,12 @@ async def calendar_view(
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=KST)
         parties_by_day.setdefault(dt.day, []).append(
-            {**p, "status_label": STATUS_LABELS.get(p["status"], p["status"])}
+            {
+                **p,
+                "status_label": STATUS_LABELS.get(p["status"], p["status"]),
+                "time_label": dt.strftime("%H:%M"),
+                "is_active": p["status"] != "disbanded",
+            }
         )
 
     prev_last = first - timedelta(days=1)

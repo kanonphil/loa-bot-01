@@ -94,3 +94,62 @@ def test_calendar_month_navigation_links(client, monkeypatch):
 
     assert "/calendar?year=2026&month=4" in resp.text
     assert "/calendar?year=2026&month=6" in resp.text
+
+
+def test_calendar_time_shown_is_derived_from_datetime_not_scheduled_time_text(client, monkeypatch):
+    """scheduled_time은 "2026/07/05 오후 9시 정각"처럼 사람이 읽는 문자열이라 공백 기준으로
+    자르면 "정각"/"30분" 같은 조각이 시간처럼 잘못 표시됐던 버그 — scheduled_datetime에서
+    직접 시:분을 뽑아야 한다."""
+    party = {
+        "message_id": "p3", "raid_name": "세르카", "difficulty": "하드", "proficiency": "숙련",
+        "scheduled_time": "2026/05/15 오후 9시 정각", "scheduled_datetime": "2026-05-15T21:00:00+09:00",
+        "status": "recruiting", "total_slots": 8, "slot_count": 1,
+    }
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[party]))
+        resp = client.get("/calendar")
+
+    assert '<span class="calendar-party-time">21:00</span>' in resp.text
+
+
+def test_calendar_active_party_links_to_detail_page(client, monkeypatch):
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=PARTIES))
+        resp = client.get("/calendar")
+
+    assert 'href="/parties/p1"' in resp.text
+
+
+def test_calendar_cleared_party_is_not_clickable(client, monkeypatch):
+    """클리어된(disbanded) 파티는 이미 종료된 이력이라 모집글로 이동하는 링크를 만들지 않는다."""
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=PARTIES))
+        resp = client.get("/calendar")
+
+    assert 'href="/parties/p2"' not in resp.text
+
+
+def test_calendar_caps_visible_parties_per_day_and_shows_more_count(client, monkeypatch):
+    """한 칸에 일정이 몰려도 칸 높이가 안 밀리도록 최대 3개까지만 보여주고 나머지는 "+N개 더"로 표시."""
+    many_parties = [
+        {
+            "message_id": f"day-{i}", "raid_name": f"레이드{i}", "difficulty": "노말", "proficiency": "숙련",
+            "scheduled_time": "2026/05/15 오후 9시 정각", "scheduled_datetime": "2026-05-15T21:00:00+09:00",
+            "status": "recruiting", "total_slots": 8, "slot_count": 1,
+        }
+        for i in range(4)
+    ]
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=many_parties))
+        resp = client.get("/calendar")
+
+    assert resp.text.count("calendar-party-name") == 3
+    assert "+1개 더" in resp.text

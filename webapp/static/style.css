@@ -1437,13 +1437,22 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 .calendar-cell {
-  min-height: 96px;
+  height: 112px;
   padding: 6px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 3px;
+  overflow: hidden;
+}
+
+.calendar-party-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .calendar-week .calendar-cell:last-child {
@@ -1487,6 +1496,21 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   background: var(--sidebar-bg);
   border: 1px solid var(--border);
   overflow: hidden;
+  flex-shrink: 0;
+  text-decoration: none;
+  color: var(--text);
+}
+
+a.calendar-party:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.calendar-party-more {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 0 5px;
 }
 
 .calendar-party-time {
