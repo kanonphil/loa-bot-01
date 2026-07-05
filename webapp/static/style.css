@@ -1309,9 +1309,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   flex: 1;
 }
 
-.expedition-item-badges {
-  display: flex;
-  gap: 6px;
+.expedition-item-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .expedition-remove-form .party-leave-btn {

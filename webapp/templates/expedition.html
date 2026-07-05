@@ -59,10 +59,7 @@
     <li class="expedition-item">
       <div class="expedition-item-main">
         <span class="dash-char-name">{{ c.character_name }}</span>
-        <div class="expedition-item-badges">
-          <span class="dash-char-class">{{ c.character_class }}</span>
-          <span class="dash-char-level">{{ c.item_level }}</span>
-        </div>
+        <span class="expedition-item-meta">{{ c.character_class }} &middot; {{ c.item_level }}</span>
       </div>
       <form method="post" action="/expedition/remove" class="expedition-remove-form">
         <input type="hidden" name="character_name" value="{{ c.character_name }}">
