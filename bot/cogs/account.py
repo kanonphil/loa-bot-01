@@ -15,11 +15,15 @@ from bot.cogs.guide import send_guide
 class CharRegisterView(View):
     """API 등록 완료 후 캐릭터 등록 방식 선택."""
 
-    def __init__(self, discord_id: str, verified_name: str, siblings: list[dict]) -> None:
+    def __init__(
+        self, discord_id: str, verified_name: str, siblings: list[dict],
+        api_key_id: int | None = None,
+    ) -> None:
         super().__init__(timeout=60)
         self.discord_id    = discord_id
         self.verified_name = verified_name
         self.siblings      = siblings
+        self.api_key_id    = api_key_id
 
     async def _finish(self, interaction: discord.Interaction, header: str) -> None:
         await interaction.response.edit_message(content=header, view=None)
@@ -30,7 +34,7 @@ class CharRegisterView(View):
         if str(interaction.user.id) != self.discord_id:
             await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
             return
-        await db.add_character(self.discord_id, self.verified_name)
+        await db.add_character(self.discord_id, self.verified_name, api_key_id=self.api_key_id)
         self.stop()
         await self._finish(
             interaction,
@@ -46,7 +50,8 @@ class CharRegisterView(View):
             return
         added = sum(
             1 for char in self.siblings
-            if char.get("CharacterName") and await db.add_character(self.discord_id, char["CharacterName"])
+            if char.get("CharacterName")
+            and await db.add_character(self.discord_id, char["CharacterName"], api_key_id=self.api_key_id)
         )
         self.stop()
         await self._finish(
@@ -57,19 +62,20 @@ class CharRegisterView(View):
 
     async def on_timeout(self) -> None:
         # 타임아웃 시 검증 캐릭터만 등록
-        await db.add_character(self.discord_id, self.verified_name)
+        await db.add_character(self.discord_id, self.verified_name, api_key_id=self.api_key_id)
 
 
 async def verify_and_register_api_key(
     discord_id: str, key: str, name: str
-) -> tuple[bool, str, list[dict] | None]:
-    """API 키 검증 + 길드 확인 + 저장까지 처리.
-    (성공 여부, 유저에게 보낼 메시지, 원정대 캐릭터 목록) 반환.
+) -> tuple[bool, str, list[dict] | None, int | None]:
+    """API 키 검증 + 길드 확인 + 저장까지 처리. 매번 새 계정(부계정)으로 추가된다 — 몇 번을 호출해도
+    기존에 등록된 다른 계정은 그대로 유지된다.
+    (성공 여부, 유저에게 보낼 메시지, 원정대 캐릭터 목록, 새로 등록된 api_key_id) 반환.
     discord.Interaction 없이 동작해서 단위 테스트하기 쉽다."""
     try:
         siblings = await loa.get_siblings(key, name)
     except RuntimeError as e:
-        return False, f"❌ API 키 검증 실패: {e}", None
+        return False, f"❌ API 키 검증 실패: {e}", None, None
 
     if siblings is None:
         # 캐릭터를 못 찾았지만 API 키는 유효할 수 있음 (404)
@@ -78,14 +84,15 @@ async def verify_and_register_api_key(
             f"⚠️ API 키는 유효하지만 **{name}** 캐릭터를 찾을 수 없습니다.\n"
             "캐릭터 이름을 다시 확인한 뒤 재시도해주세요.\n\n"
             "API 키는 저장되지 않았습니다."
-        ), None
+        ), None, None
 
     # 길드 확인 — 실제 "동물롱장" 소속만 등록 허용 (디스코드 서버엔 길드원 아닌 인원도 있음)
+    # 부계정을 추가로 등록할 때도 매번 동일하게 확인한다.
     if config.REQUIRED_GUILD_NAME:
         try:
             armory = await loa.get_armory(key, name)
         except RuntimeError as e:
-            return False, f"❌ 길드 확인 중 오류: {e}", None
+            return False, f"❌ 길드 확인 중 오류: {e}", None, None
         profile = (armory or {}).get("ArmoryProfile") or {}
         guild_name = profile.get("GuildName") or ""
         if guild_name != config.REQUIRED_GUILD_NAME:
@@ -93,13 +100,13 @@ async def verify_and_register_api_key(
             return False, (
                 f"❌ **{name}** 캐릭터는 **{config.REQUIRED_GUILD_NAME}** 길드 소속이 아닙니다{detail}.\n"
                 "API 키는 저장되지 않았습니다."
-            ), None
+            ), None, None
 
-    await db.set_user_api_key(discord_id, key)
+    api_key_id = await db.add_user_api_key(discord_id, name, key)
     return True, (
         f"✅ **API 키 등록 완료!** (원정대 캐릭터 **{len(siblings)}개** 확인)\n\n"
         f"원정대에 등록할 캐릭터를 선택하세요:"
-    ), siblings
+    ), siblings, api_key_id
 
 
 class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
@@ -127,50 +134,92 @@ class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        success, message, siblings = await verify_and_register_api_key(self.discord_id, key, name)
+        success, message, siblings, api_key_id = await verify_and_register_api_key(
+            self.discord_id, key, name
+        )
         if not success:
             await interaction.followup.send(message, ephemeral=True)
             return
 
         # 캐릭터 등록 방식 선택 (1개 vs 전체)
-        view = CharRegisterView(self.discord_id, name, siblings)
+        view = CharRegisterView(self.discord_id, name, siblings, api_key_id=api_key_id)
         await interaction.followup.send(message, view=view, ephemeral=True)
+
+
+def _mask_key(key: str) -> str:
+    return key[:8] + "****" + key[-4:] if len(key) > 12 else "****"
+
+
+class RemoveApiKeySelectView(View):
+    """등록된 계정이 여러 개일 때 삭제할 계정을 고르는 선택 메뉴."""
+
+    def __init__(self, discord_id: str, accounts: list[dict]) -> None:
+        super().__init__(timeout=60)
+        self.discord_id = discord_id
+        options = [
+            discord.SelectOption(label=acc["label"], value=str(acc["id"]))
+            for acc in accounts[:25]
+        ]
+        sel = Select(placeholder="삭제할 계정을 선택하세요", options=options)
+        sel.callback = self._on_select
+        self.add_item(sel)
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+            return
+        key_id = int(interaction.data["values"][0])
+        removed = await db.remove_user_api_key(self.discord_id, key_id)
+        msg = "🗑️ 선택한 계정이 삭제되었습니다." if removed else "계정을 찾을 수 없습니다."
+        await interaction.response.edit_message(content=msg, view=None)
+        self.stop()
 
 
 class Account(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="api등록", description="로스트아크 API 키를 등록합니다. 캐릭터 조회에 사용됩니다.")
+    @app_commands.command(name="api등록", description="로스트아크 API 키를 등록합니다. 이미 등록되어 있다면 부계정으로 추가 등록됩니다.")
     async def register_api(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(ApiKeyModal(str(interaction.user.id)))
 
-    @app_commands.command(name="api확인", description="현재 등록된 API 키 상태를 확인합니다.")
+    @app_commands.command(name="api확인", description="현재 등록된 API 키(계정) 목록을 확인합니다.")
     async def check_api(self, interaction: discord.Interaction) -> None:
-        key = await db.get_user_api_key(str(interaction.user.id))
-        if not key:
+        discord_id = str(interaction.user.id)
+        accounts = await db.list_user_api_keys(discord_id)
+        if not accounts:
             await interaction.response.send_message(
                 "등록된 API 키가 없습니다.\n`/api등록` 명령어로 등록해주세요.\n\n"
                 "🔗 API 키 발급: https://developer-lostark.game.onstove.com",
                 ephemeral=True,
             )
-        else:
-            # 키 일부 마스킹
-            masked = key[:8] + "****" + key[-4:] if len(key) > 12 else "****"
-            await interaction.response.send_message(
-                f"✅ API 키가 등록되어 있습니다.\n`{masked}`",
-                ephemeral=True,
-            )
+            return
 
-    @app_commands.command(name="api삭제", description="등록된 API 키를 삭제합니다.")
+        lines = ["✅ 등록된 계정 목록:"]
+        for acc in accounts:
+            key = await db.get_user_api_key_by_id(acc["id"])
+            masked = _mask_key(key) if key else "****"
+            lines.append(f"- **{acc['label']}** — `{masked}`")
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @app_commands.command(name="api삭제", description="등록된 API 키(계정)를 삭제합니다.")
     async def delete_api(self, interaction: discord.Interaction) -> None:
-        key = await db.get_user_api_key(str(interaction.user.id))
-        if not key:
+        discord_id = str(interaction.user.id)
+        accounts = await db.list_user_api_keys(discord_id)
+        if not accounts:
             await interaction.response.send_message("등록된 API 키가 없습니다.", ephemeral=True)
             return
 
-        await db.delete_user(str(interaction.user.id))
-        await interaction.response.send_message("🗑️ API 키가 삭제되었습니다.", ephemeral=True)
+        if len(accounts) == 1:
+            # 계정이 하나뿐이면 기존과 동일하게 바로 삭제 (선택 메뉴로 번거롭게 하지 않음)
+            await db.remove_user_api_key(discord_id, accounts[0]["id"])
+            await interaction.response.send_message("🗑️ API 키가 삭제되었습니다.", ephemeral=True)
+            return
+
+        view = RemoveApiKeySelectView(discord_id, accounts)
+        await interaction.response.send_message(
+            "삭제할 계정을 선택해주세요.", view=view, ephemeral=True
+        )
 
 
 async def setup(bot: commands.Bot) -> None:
