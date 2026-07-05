@@ -25,6 +25,17 @@ CREATE TABLE IF NOT EXISTS user_characters (
     PRIMARY KEY (discord_id, character_name)
 );
 
+CREATE TABLE IF NOT EXISTS user_api_keys (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id  TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    api_key     TEXT NOT NULL,
+    added_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_api_keys_discord_id
+    ON user_api_keys(discord_id);
+
 CREATE TABLE IF NOT EXISTS raid_completions (
     discord_id     TEXT,
     character_name TEXT,
@@ -224,6 +235,7 @@ async def init_db() -> None:
             ("item_level",      "REAL"),
             ("character_class", "TEXT"),
             ("cached_at",       "TIMESTAMP"),
+            ("api_key_id",      "INTEGER"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE user_characters ADD COLUMN {col} {definition}")
@@ -329,15 +341,121 @@ async def user_exists(discord_id: str) -> bool:
 
 
 # ──────────────────────────────────────────────
+# 유저별 다중 API 키 (부계정 지원)
+# ──────────────────────────────────────────────
+
+async def add_user_api_key(discord_id: str, label: str, api_key: str) -> int:
+    """새 계정(API 키)을 등록. 이 discord_id의 첫 계정이면 레거시 users.loa_api_key에도 미러링.
+    반환: 새로 생성된 user_api_keys.id"""
+    now = datetime.now(KST).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT INTO user_api_keys (discord_id, label, api_key, added_at) VALUES (?, ?, ?, ?)",
+            (discord_id, label, encrypt_api_key(api_key), now),
+        )
+        new_id = cur.lastrowid
+        await db.commit()
+
+    existing = await list_user_api_keys(discord_id)
+    if len(existing) == 1:
+        # 이 discord_id의 첫 계정 — 레거시 단일 키 컬럼도 함께 채워 기존 호출부 호환 유지
+        await set_user_api_key(discord_id, api_key)
+
+    return new_id
+
+
+async def list_user_api_keys(discord_id: str) -> list[dict]:
+    """등록된 계정 목록 (복호화된 키는 포함하지 않음)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT id, label, added_at FROM user_api_keys WHERE discord_id=? ORDER BY added_at",
+            (discord_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_user_api_key_by_id(key_id: int) -> Optional[str]:
+    """복호화된 API 키 반환 — 로스트아크 API 호출용 (내부 전용)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT api_key FROM user_api_keys WHERE id=?", (key_id,)
+        )
+        row = await cur.fetchone()
+    return decrypt_api_key(row[0]) if row else None
+
+
+async def remove_user_api_key(discord_id: str, key_id: int) -> bool:
+    """계정(API 키) 삭제. 해당 키를 쓰던 캐릭터의 api_key_id는 NULL로 남긴다(캐릭터 자체는 삭제하지 않음).
+    삭제한 키가 레거시 users.loa_api_key로 미러링돼 있었다면, 남은 키 중 하나로 승격하거나(없으면) 비운다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT api_key FROM user_api_keys WHERE id=? AND discord_id=?",
+            (key_id, discord_id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return False
+        removed_key_encrypted = row[0]
+
+        await db.execute(
+            "UPDATE user_characters SET api_key_id=NULL WHERE api_key_id=?", (key_id,)
+        )
+        await db.execute(
+            "DELETE FROM user_api_keys WHERE id=? AND discord_id=?", (key_id, discord_id)
+        )
+        await db.commit()
+
+    # 레거시 컬럼이 방금 삭제한 키를 가리키고 있었다면 다른 키로 승격하거나 비운다
+    current_legacy = await get_user_api_key(discord_id)
+    removed_key = decrypt_api_key(removed_key_encrypted)
+    if current_legacy == removed_key:
+        remaining = await list_user_api_keys(discord_id)
+        if remaining:
+            promoted_key = await get_user_api_key_by_id(remaining[0]["id"])
+            if promoted_key:
+                await set_user_api_key(discord_id, promoted_key)
+        else:
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute("DELETE FROM users WHERE discord_id=?", (discord_id,))
+                await db.commit()
+
+    return True
+
+
+async def get_all_api_keys() -> list[dict]:
+    """모든 유저의 모든 등록 계정 — 일일 자동 동기화용. {id, discord_id, label} 목록 반환."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT id, discord_id, label FROM user_api_keys ORDER BY discord_id, added_at"
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_characters_by_api_key_id(api_key_id: int) -> list[str]:
+    """특정 계정(api_key_id)에 연결된 캐릭터 이름 목록."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT character_name FROM user_characters WHERE api_key_id=? ORDER BY added_at",
+            (api_key_id,),
+        )
+        rows = await cur.fetchall()
+    return [r[0] for r in rows]
+
+
+# ──────────────────────────────────────────────
 # 캐릭터 등록
 # ──────────────────────────────────────────────
 
-async def add_character(discord_id: str, character_name: str) -> bool:
+async def add_character(discord_id: str, character_name: str, api_key_id: int | None = None) -> bool:
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(
-                "INSERT INTO user_characters (discord_id, character_name) VALUES (?, ?)",
-                (discord_id, character_name),
+                "INSERT INTO user_characters (discord_id, character_name, api_key_id) VALUES (?, ?, ?)",
+                (discord_id, character_name, api_key_id),
             )
             await db.commit()
         return True
@@ -366,14 +484,25 @@ async def get_user_characters(discord_id: str) -> list[str]:
 
 
 async def update_character_cache(
-    discord_id: str, character_name: str, item_level: float, character_class: str
+    discord_id: str, character_name: str, item_level: float, character_class: str,
+    api_key_id: int | None = None,
 ) -> None:
+    """캐릭터 캐시 갱신. api_key_id를 넘기면 해당 캐릭터가 어느 계정 소속인지도 함께 기록한다
+    (None이면 기존 값 유지 — 매번 새로 조회하지 않는 호출부와 호환)."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE user_characters SET item_level=?, character_class=?, cached_at=CURRENT_TIMESTAMP "
-            "WHERE discord_id=? AND character_name=?",
-            (item_level, character_class, discord_id, character_name),
-        )
+        if api_key_id is not None:
+            await db.execute(
+                "UPDATE user_characters SET item_level=?, character_class=?, "
+                "cached_at=CURRENT_TIMESTAMP, api_key_id=? "
+                "WHERE discord_id=? AND character_name=?",
+                (item_level, character_class, api_key_id, discord_id, character_name),
+            )
+        else:
+            await db.execute(
+                "UPDATE user_characters SET item_level=?, character_class=?, cached_at=CURRENT_TIMESTAMP "
+                "WHERE discord_id=? AND character_name=?",
+                (item_level, character_class, discord_id, character_name),
+            )
         await db.commit()
 
 
