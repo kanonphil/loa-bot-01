@@ -1,0 +1,48 @@
+{% set pct = ((card.done_count / card.total_slots * 100) | round(0) | int) if card.total_slots else 0 %}
+<div class="raid-card" id="raid-card-{{ card_index }}">
+  <div class="raid-card-header">
+    <span class="raid-card-name">{{ card.character_name }}</span>
+    <span class="raid-card-meta">{{ card.character_class }} &middot; {{ card.item_level }}</span>
+  </div>
+
+  <div class="raid-card-progress">
+    <span class="raid-card-progress-count">{{ card.done_count }} / {{ card.total_slots }} 완료</span>
+    <div class="raid-progress-bar">
+      <div class="raid-progress-fill" style="width: {{ pct }}%"></div>
+    </div>
+  </div>
+
+  <div class="raid-card-checklist">
+    {% for group in card.groups %}
+    <div class="raid-card-category">
+      <h3>{{ group.category }}</h3>
+      {% for r in group.raids %}
+      <div class="raid-card-row">
+        <div class="raid-card-row-top">
+          <span class="raid-card-icon">{{ r.icon }}</span>
+          <span class="raid-card-raid-name">{{ r.short_name }}</span>
+        </div>
+        <div class="raid-card-diffs">
+          {% for diff_name, diff_info in r.difficulties %}
+          <form
+            class="diff-toggle-form"
+            hx-post="/raid-check/toggle"
+            hx-target="#raid-card-{{ card_index }}"
+            hx-swap="outerHTML"
+          >
+            <input type="hidden" name="raid_name" value="{{ r.raid_name }}">
+            <input type="hidden" name="difficulty" value="{{ diff_name }}">
+            <input type="hidden" name="character_name" value="{{ card.character_name }}">
+            <input type="hidden" name="card_index" value="{{ card_index }}">
+            <button type="submit" class="raid-card-diff-toggle {% if (r.raid_name ~ '_' ~ diff_name) in card.done %}done{% endif %}">
+              {{ diff_name }}
+            </button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>

@@ -1,4 +1,6 @@
-"""레이드 체크 페이지 — 길드원이 본인 캐릭터의 이번 주 레이드 완료 여부를 확인/체크."""
+"""레이드 체크 페이지 — 길드원이 본인 캐릭터 전체를 카드 그리드로 보며
+이번 주 레이드 완료 여부를 확인/체크. 캐릭터마다 카드가 하나씩이고,
+체크 토글은 그 카드만 갱신한다(다른 카드에 영향 없음)."""
 import asyncio
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -11,29 +13,9 @@ from webapp.templating import templates
 router = APIRouter()
 
 
-async def _page_context(discord_id: str, character_name: str | None) -> dict:
-    characters = await bot_client.get_user_characters(discord_id)
-    if not characters:
-        return {
-            "characters": [],
-            "selected_character": None,
-            "groups": [],
-            "done": set(),
-            "done_count": 0,
-            "total_slots": 0,
-        }
-
-    names = [c["character_name"] for c in characters]
-    selected_character = character_name if character_name in names else names[0]
-    selected_info = next(c for c in characters if c["character_name"] == selected_character)
-
-    raids, categories, completion_data = await asyncio.gather(
-        bot_client.get_raids(),
-        bot_client.get_raid_categories(),
-        bot_client.get_completions(discord_id, selected_character),
-    )
-
-    item_level = selected_info.get("item_level") or 0
+async def _character_card(discord_id: str, character: dict, raids: dict, categories: list[dict]) -> dict:
+    item_level = character.get("item_level") or 0
+    completion_data = await bot_client.get_completions(discord_id, character["character_name"])
     groups = group_by_category(raids, categories, applicable_raids(raids, item_level))
     done = set(completion_data["completions"])
     # 레이드 하나당 난이도는 여러 개지만, 진행률은 "레이드 단위"로 센다 —
@@ -45,10 +27,10 @@ async def _page_context(discord_id: str, character_name: str | None) -> dict:
         for r in g["raids"]
         if any(f"{r['raid_name']}_{diff_name}" in done for diff_name, _ in r["difficulties"])
     )
-
     return {
-        "characters": characters,
-        "selected_character": selected_character,
+        "character_name": character["character_name"],
+        "character_class": character["character_class"],
+        "item_level": character.get("item_level"),
         "groups": groups,
         "done": done,
         "done_count": done_count,
@@ -56,11 +38,23 @@ async def _page_context(discord_id: str, character_name: str | None) -> dict:
     }
 
 
+async def _page_context(discord_id: str) -> dict:
+    characters = await bot_client.get_user_characters(discord_id)
+    if not characters:
+        return {"characters": [], "cards": []}
+
+    raids, categories = await asyncio.gather(
+        bot_client.get_raids(), bot_client.get_raid_categories()
+    )
+    cards = await asyncio.gather(
+        *[_character_card(discord_id, c, raids, categories) for c in characters]
+    )
+    return {"characters": characters, "cards": list(cards)}
+
+
 @router.get("/raid-check")
-async def raid_check_page(
-    request: Request, character: str | None = None, user: dict = Depends(get_current_user)
-):
-    ctx = await _page_context(user["discord_id"], character)
+async def raid_check_page(request: Request, user: dict = Depends(get_current_user)):
+    ctx = await _page_context(user["discord_id"])
     return templates.TemplateResponse(
         request, "raid_check.html", {"user": user, "active": "raid_check", **ctx}
     )
@@ -72,10 +66,12 @@ async def toggle_raid_check(
     raid_name: str = Form(...),
     difficulty: str = Form(...),
     character_name: str = Form(...),
+    card_index: int = Form(...),
     user: dict = Depends(get_current_user),
 ):
     characters = await bot_client.get_user_characters(user["discord_id"])
-    if character_name not in [c["character_name"] for c in characters]:
+    character = next((c for c in characters if c["character_name"] == character_name), None)
+    if character is None:
         # 본인이 등록한 캐릭터가 아니면 거부 (폼 조작으로 남의 캐릭터 체크 방지)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="본인 캐릭터만 체크할 수 있습니다."
@@ -83,5 +79,10 @@ async def toggle_raid_check(
 
     await bot_client.toggle_completion(user["discord_id"], character_name, raid_name, difficulty)
 
-    ctx = await _page_context(user["discord_id"], character_name)
-    return templates.TemplateResponse(request, "_raid_checklist.html", ctx)
+    raids, categories = await asyncio.gather(
+        bot_client.get_raids(), bot_client.get_raid_categories()
+    )
+    card = await _character_card(user["discord_id"], character, raids, categories)
+    return templates.TemplateResponse(
+        request, "_raid_card.html", {"card": card, "card_index": card_index}
+    )

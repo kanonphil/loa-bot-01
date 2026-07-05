@@ -334,52 +334,55 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   filter: brightness(1.1);
 }
 
-/* ── 레이드 체크 ───────────────────────────────────────── */
+/* ── 레이드 체크 (캐릭터 카드 그리드) ───────────────────── */
 
-.character-select-form select {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 14px;
-  margin-bottom: 16px;
-  transition: border-color 0.15s ease;
+.raid-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
 }
 
-.character-select-form select:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
-.raid-progress-card {
+.raid-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
+  padding: 16px 18px;
 }
 
-.raid-progress-header {
+.raid-card-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
-.raid-progress-label {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.raid-progress-count {
+.raid-card-name {
   font-size: 15px;
   font-weight: 700;
-  color: var(--accent);
+}
+
+.raid-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.raid-card-progress {
+  margin-bottom: 14px;
+}
+
+.raid-card-progress-count {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
 }
 
 .raid-progress-bar {
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
   background: var(--sidebar-bg);
   overflow: hidden;
@@ -392,96 +395,78 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   transition: width 0.3s ease;
 }
 
-.raid-checklist-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 18px 20px 6px;
+.raid-card-category {
+  margin-bottom: 14px;
 }
 
-.raid-category {
-  margin-bottom: 18px;
-}
-
-.raid-category h3 {
-  font-size: 12px;
+.raid-card-category h3 {
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
-.raid-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 8px;
-  border-radius: 8px;
-  transition: background-color 0.15s ease;
+.raid-card-row {
+  padding: 6px 0;
 }
 
-.raid-row:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.raid-row + .raid-row {
+.raid-card-row + .raid-card-row {
   border-top: 1px solid var(--border);
 }
 
-.raid-icon {
+.raid-card-row-top {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--sidebar-bg);
-  font-size: 14px;
-  flex-shrink: 0;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
-.raid-name {
-  min-width: 100px;
-  font-size: 14px;
+.raid-card-icon {
+  font-size: 13px;
+}
+
+.raid-card-raid-name {
+  font-size: 13px;
   font-weight: 500;
 }
 
-.raid-diffs {
+.raid-card-diffs {
   display: flex;
-  gap: 8px;
-  margin-left: auto;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .diff-toggle-form {
   display: inline-block;
 }
 
-.diff-toggle {
-  padding: 6px 16px;
+.raid-card-diff-toggle {
+  padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--sidebar-bg);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, filter 0.15s ease;
 }
 
-.diff-toggle:hover {
+.raid-card-diff-toggle:hover {
   border-color: var(--accent);
   color: var(--text);
 }
 
-.diff-toggle.done {
+.raid-card-diff-toggle.done {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
   font-weight: 600;
 }
 
-.diff-toggle.done:hover {
+.raid-card-diff-toggle.done:hover {
   filter: brightness(1.1);
 }
 

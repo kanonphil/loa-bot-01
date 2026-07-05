@@ -102,12 +102,16 @@ def test_toggle_calls_bot_and_returns_updated_fragment(client):
 
         resp = client.post(
             "/raid-check/toggle",
-            data={"raid_name": "아르모체(4막)", "difficulty": "노말", "character_name": "발키리"},
+            data={
+                "raid_name": "아르모체(4막)", "difficulty": "노말",
+                "character_name": "발키리", "card_index": "0",
+            },
         )
 
     assert resp.status_code == 200
     assert toggle_route.called
     assert "1 / 1 완료" in resp.text
+    assert 'id="raid-card-0"' in resp.text  # 토글 응답은 그 카드 하나만 다시 그려서 반환
 
 
 def test_toggle_rejects_character_not_owned_by_user(client):
@@ -120,7 +124,10 @@ def test_toggle_rejects_character_not_owned_by_user(client):
 
         resp = client.post(
             "/raid-check/toggle",
-            data={"raid_name": "아르모체(4막)", "difficulty": "노말", "character_name": "남의캐릭터"},
+            data={
+                "raid_name": "아르모체(4막)", "difficulty": "노말",
+                "character_name": "남의캐릭터", "card_index": "0",
+            },
         )
 
     assert resp.status_code == 403
@@ -150,3 +157,69 @@ def test_raid_check_requires_login(client):
     resp = client.get("/raid-check")
     assert resp.status_code in (302, 307)
     assert resp.headers["location"] == "/login"
+
+
+TWO_CHARACTERS = [
+    {"character_name": "발키리", "character_class": "서포터", "item_level": 1720.0},
+    {"character_name": "워로드부캐", "character_class": "워로드", "item_level": 1700.0},
+]
+
+
+def _completions_by_character(character_completions: dict[str, list[str]]):
+    def _side_effect(request):
+        character_name = request.url.params["character_name"]
+        return httpx.Response(
+            200,
+            json={"week_key": "2026-01-07", "completions": character_completions.get(character_name, [])},
+        )
+
+    return _side_effect
+
+
+def test_raid_check_shows_a_separate_card_per_character(client):
+    """카드 그리드니까 캐릭터마다 카드가 하나씩, 각자 자기 완료 상태로 따로 보여야 한다."""
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_CHARACTERS))
+        respx.get(COMPLETIONS_URL).mock(
+            side_effect=_completions_by_character({"발키리": ["아르모체(4막)_노말"]})
+        )
+        resp = client.get("/raid-check")
+
+    assert resp.status_code == 200
+    assert "raid-card-grid" in resp.text
+    assert 'id="raid-card-0"' in resp.text
+    assert 'id="raid-card-1"' in resp.text
+    assert "발키리" in resp.text
+    assert "워로드부캐" in resp.text
+    # 카드가 각자 다른 완료 상태를 가져야 한다 — 발키리는 1/1, 워로드부캐는 0/1
+    assert "1 / 1 완료" in resp.text
+    assert "0 / 1 완료" in resp.text
+
+
+def test_toggle_only_updates_its_own_card_fragment(client):
+    """토글 응답은 해당 캐릭터의 카드 하나만 담아야 하고, 다른 캐릭터 이름이 섞여 나오면 안 된다."""
+    with respx.mock:
+        log_in(client)
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(CATEGORIES_URL).mock(return_value=httpx.Response(200, json=CATEGORIES))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_CHARACTERS))
+        respx.post(TOGGLE_URL).mock(return_value=httpx.Response(200, json={"completed": True}))
+        respx.get(COMPLETIONS_URL).mock(
+            side_effect=_completions_by_character({"워로드부캐": ["아르모체(4막)_노말"]})
+        )
+
+        resp = client.post(
+            "/raid-check/toggle",
+            data={
+                "raid_name": "아르모체(4막)", "difficulty": "노말",
+                "character_name": "워로드부캐", "card_index": "1",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert 'id="raid-card-1"' in resp.text
+    assert "워로드부캐" in resp.text
+    assert "발키리" not in resp.text
