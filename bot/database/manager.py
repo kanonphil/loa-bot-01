@@ -279,6 +279,7 @@ async def init_db() -> None:
         await db.commit()
     await seed_game_data()
     await _migrate_encrypt_api_keys()
+    await _migrate_backfill_user_api_keys()
 
 
 # ──────────────────────────────────────────────
@@ -324,6 +325,46 @@ async def _migrate_encrypt_api_keys() -> None:
         if migrated > 0:
             await db.commit()
             print(f"[DB] API 키 암호화 마이그레이션 완료: {migrated}개")
+
+
+async def _migrate_backfill_user_api_keys() -> None:
+    """부계정 기능 배포 이전에 등록한 유저는 키가 users.loa_api_key에만 있고
+    user_api_keys에는 없어서, list_user_api_keys가 빈 목록을 반환해 /원정대 등에서
+    "등록 안 됨"으로 잘못 처리되던 문제. user_api_keys가 하나도 없는 유저만
+    레거시 키를 그대로 옮겨 채운다(1회성, 이미 있으면 건드리지 않아 새 가입자와 무관)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT discord_id, loa_api_key, registered_at FROM users")
+        users_rows = await cur.fetchall()
+
+        migrated = 0
+        for row in users_rows:
+            discord_id = row["discord_id"]
+            existing = await (await db.execute(
+                "SELECT 1 FROM user_api_keys WHERE discord_id=? LIMIT 1", (discord_id,)
+            )).fetchone()
+            if existing:
+                continue  # 이미 부계정 테이블에 있음 — 새 가입자거나 이미 마이그레이션됨
+
+            char_row = await (await db.execute(
+                "SELECT character_name FROM user_characters WHERE discord_id=? ORDER BY added_at LIMIT 1",
+                (discord_id,),
+            )).fetchone()
+            label = char_row["character_name"] if char_row else "기본 계정"
+
+            insert_cur = await db.execute(
+                "INSERT INTO user_api_keys (discord_id, label, api_key, added_at) VALUES (?, ?, ?, ?)",
+                (discord_id, label, row["loa_api_key"], row["registered_at"]),
+            )
+            await db.execute(
+                "UPDATE user_characters SET api_key_id=? WHERE discord_id=? AND api_key_id IS NULL",
+                (insert_cur.lastrowid, discord_id),
+            )
+            migrated += 1
+
+        if migrated > 0:
+            await db.commit()
+            print(f"[DB] user_api_keys 백필 마이그레이션 완료: {migrated}명")
 
 
 async def delete_user(discord_id: str) -> None:
