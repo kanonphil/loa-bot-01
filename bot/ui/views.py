@@ -1107,26 +1107,29 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
                 )
 
 
-async def _post_party(
-    interaction: discord.Interaction,
+async def _create_party_core(
+    bot,
+    guild_id: str,
+    leader_id: str,
+    forum_channel_id: str,
     raid_name: str,
     difficulty: str,
     proficiency: str,
     scheduled_time: str,
     scheduled_datetime: str | None = None,
-    forum_channel_id: str | None = None,
     memo: str | None = None,
-) -> None:
+) -> dict:
+    """공대 생성 핵심 로직 — 디스코드 명령어(/공대모집)와 웹 API가 공유.
+    interaction 없이 bot 인스턴스만으로 동작해서 웹에서 트리거해도 그대로 쓸 수 있다."""
     diff_info   = get_difficulty_info(raid_name, difficulty)
     total_slots = diff_info["total_slots"]
     min_level   = diff_info["min_level"]
-    leader_id   = str(interaction.user.id)
 
     raid_info  = RAIDS.get(raid_name, {})
     short_name = raid_info.get("short_name", raid_name)
 
     tmp_party = {
-        "message_id": "0", "channel_id": "0", "guild_id": "0",
+        "message_id": "0", "channel_id": "0", "guild_id": guild_id,
         "leader_id": leader_id, "raid_name": raid_name,
         "difficulty": difficulty, "proficiency": proficiency,
         "scheduled_time": scheduled_time, "total_slots": total_slots,
@@ -1137,15 +1140,15 @@ async def _post_party(
     embed = party_embed(tmp_party, [])
     view  = PartyView(total_slots=total_slots)
 
-    await interaction.response.edit_message(content="✅ 공대 모집 게시물을 생성합니다.", view=None)
-
-    forum = interaction.client.get_channel(int(forum_channel_id))
+    forum = bot.get_channel(int(forum_channel_id))
+    if forum is None:
+        forum = await bot.fetch_channel(int(forum_channel_id))
     thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
     thread, starter_msg = await forum.create_thread(name=thread_name, embed=embed, view=view)
 
     await db.create_party(
         message_id=str(starter_msg.id), channel_id=str(thread.id),
-        guild_id=str(interaction.guild_id), leader_id=leader_id,
+        guild_id=guild_id, leader_id=leader_id,
         raid_name=raid_name, difficulty=difficulty, proficiency=proficiency,
         scheduled_time=scheduled_time, scheduled_datetime=scheduled_datetime,
         total_slots=total_slots, min_level=min_level, memo=memo,
@@ -1169,18 +1172,38 @@ async def _post_party(
 
         dm_embed = discord.Embed(
             title=f"🔔 {raid_name} {difficulty} 새 공대가 모집을 시작했습니다!",
-            url=f"https://discord.com/channels/{interaction.guild_id}/{thread.id}/{starter_msg.id}",
+            url=f"https://discord.com/channels/{guild_id}/{thread.id}/{starter_msg.id}",
             description=f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**",
             color=0x3498DB,
         )
         for sub_id in subscribers:
             if sub_id != leader_id and sub_id not in already_in:
                 try:
-                    user = await interaction.client.fetch_user(int(sub_id))
+                    user = await bot.fetch_user(int(sub_id))
                     await user.send(embed=dm_embed)
                 except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                     pass
                 await db.log_notification(sub_id, raid_name, difficulty, new_msg_id)
+
+    return party
+
+
+async def _post_party(
+    interaction: discord.Interaction,
+    raid_name: str,
+    difficulty: str,
+    proficiency: str,
+    scheduled_time: str,
+    scheduled_datetime: str | None = None,
+    forum_channel_id: str | None = None,
+    memo: str | None = None,
+) -> None:
+    leader_id = str(interaction.user.id)
+    await interaction.response.edit_message(content="✅ 공대 모집 게시물을 생성합니다.", view=None)
+    await _create_party_core(
+        interaction.client, str(interaction.guild_id), leader_id, forum_channel_id,
+        raid_name, difficulty, proficiency, scheduled_time, scheduled_datetime, memo,
+    )
 
 
 async def _auto_join_dps(

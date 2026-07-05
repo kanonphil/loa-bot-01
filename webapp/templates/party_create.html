@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content">
+<a href="/parties" class="party-back-link">&larr; 목록으로</a>
+<h1>공대 개설</h1>
+
+{% if error %}
+<p class="party-action-error">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="/parties/create" class="party-create-form">
+  <label>
+    레이드 · 난이도
+    <select name="raid_difficulty" required>
+      {% for raid_name, raid_info in raids.items() %}
+      {% for diff_name in raid_info.difficulties %}
+      <option value="{{ raid_name }}|{{ diff_name }}">{{ raid_info.icon }} {{ raid_info.short_name }} · {{ diff_name }}</option>
+      {% endfor %}
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    숙련도
+    <select name="proficiency" required>
+      {% for p in proficiency_options %}
+      <option value="{{ p.value }}" title="{{ p.description }}">{{ p.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    일정
+    <input type="datetime-local" name="scheduled_datetime" required>
+  </label>
+
+  <label>
+    공지/메모 (선택)
+    <input type="text" name="memo" maxlength="150" placeholder="예) 음성 채널 필수">
+  </label>
+
+  <button type="submit">공대 개설</button>
+</form>
+</div>
+{% endblock %}

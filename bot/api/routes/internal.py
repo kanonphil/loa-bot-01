@@ -62,6 +62,62 @@ async def toggle_completion(body: ToggleCompletionBody):
 
 # ── 공대 모집 (길드원 셀프서비스) ────────────────────────────
 
+@router.get("/parties/proficiency-options")
+async def proficiency_options():
+  from bot.data.raids import PROFICIENCY
+  return [{"value": k, "label": k, "description": v} for k, v in PROFICIENCY.items()]
+
+
+class CreatePartyBody(BaseModel):
+  discord_id: str
+  guild_id: str
+  raid_name: str
+  difficulty: str
+  proficiency: str
+  scheduled_datetime: str  # KST 기준 "YYYY-MM-DDTHH:MM" (datetime-local 입력값)
+  memo: str | None = None
+
+
+@router.post("/parties/create")
+async def create_party(body: CreatePartyBody):
+  from datetime import datetime
+  from bot.api import bot_ref
+  from bot.data.raids import RAIDS, PROFICIENCY, get_difficulty_info
+  from bot.ui.views import KST, _create_party_core, _format_schedule
+
+  api_key = await db.get_user_api_key(body.discord_id)
+  if not api_key:
+    return {"success": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."}
+
+  if body.raid_name not in RAIDS:
+    return {"success": False, "reason": "존재하지 않는 레이드입니다."}
+  diff_info = get_difficulty_info(body.raid_name, body.difficulty)
+  if not diff_info:
+    return {"success": False, "reason": "존재하지 않는 난이도입니다."}
+  if body.proficiency not in PROFICIENCY:
+    return {"success": False, "reason": "존재하지 않는 숙련도입니다."}
+
+  forum_id = await db.get_forum_channel_id(body.guild_id)
+  if not forum_id:
+    return {"success": False, "reason": "공대 모집 포럼 채널이 아직 설정되지 않았습니다. 디스코드에서 /공대채널설정으로 먼저 지정해주세요."}
+
+  try:
+    dt = datetime.fromisoformat(body.scheduled_datetime).replace(tzinfo=KST)
+  except ValueError:
+    return {"success": False, "reason": "일정 형식이 올바르지 않습니다."}
+
+  bot = bot_ref.get_bot()
+  if not bot:
+    return {"success": False, "reason": "봇이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요."}
+
+  party = await _create_party_core(
+    bot, body.guild_id, body.discord_id, forum_id,
+    body.raid_name, body.difficulty, body.proficiency,
+    _format_schedule(dt), dt.isoformat(), body.memo,
+  )
+  return {"success": True, "message_id": party["message_id"]}
+
+
 @router.get("/parties")
 async def parties(guild_id: str):
   result = await db.get_guild_parties(guild_id)
@@ -183,6 +239,268 @@ async def leave_party(message_id: str, body: LeavePartyBody):
         pass
     else:
       await _refresh_party_embed_with_reserved(bot, updated_party)
+
+  return {"success": True}
+
+
+# ── 파티장 관리 (마감/재개/클리어/취소/강제퇴장/일정변경/위임) ─────
+# 디스코드 ⚙️관리 패널(ManageView)과 동일한 로직 — 웹에서도 파티장만 사용 가능.
+
+def _require_leader(party: dict | None, discord_id: str) -> str | None:
+  """파티가 없거나 리더가 아니면 에러 사유 문자열, 문제없으면 None."""
+  if not party:
+    return "파티를 찾을 수 없습니다."
+  if party["leader_id"] != discord_id:
+    return "파티장만 사용할 수 있습니다."
+  return None
+
+
+class LeaderActionBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/parties/{message_id}/close")
+async def close_party(message_id: str, body: LeaderActionBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _refresh_party_embed_with_reserved
+
+  party = await db.get_party(message_id)
+  err = _require_leader(party, body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  if party["status"] in ("closed", "disbanded"):
+    return {"success": False, "reason": "처리할 수 없는 상태입니다."}
+
+  await db.close_party(message_id)
+  updated = await db.get_party(message_id)
+  bot = bot_ref.get_bot()
+  if bot:
+    await _refresh_party_embed_with_reserved(bot, updated)
+  return {"success": True}
+
+
+@router.post("/parties/{message_id}/reopen")
+async def reopen_party(message_id: str, body: LeaderActionBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _notify_waitlist, _refresh_party_embed_with_reserved
+
+  party = await db.get_party(message_id)
+  err = _require_leader(party, body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  if party["status"] != "closed":
+    return {"success": False, "reason": "처리할 수 없는 상태입니다."}
+
+  await db.reopen_party(message_id)
+  updated = await db.get_party(message_id)
+  bot = bot_ref.get_bot()
+  if bot:
+    await _refresh_party_embed_with_reserved(bot, updated)
+    await _notify_waitlist(bot, updated)
+  return {"success": True}
+
+
+@router.post("/parties/{message_id}/clear")
+async def clear_party(message_id: str, body: LeaderActionBody):
+  import discord as _discord
+  from bot.api import bot_ref
+  from bot.ui.embeds import party_embed
+
+  party = await db.get_party(message_id)
+  err = _require_leader(party, body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  if party["status"] == "disbanded":
+    return {"success": False, "reason": "이미 종료된 파티입니다."}
+
+  slots = await db.get_party_slots(message_id)
+  if not slots:
+    return {"success": False, "reason": "파티원이 없어 클리어 처리할 수 없습니다."}
+
+  count = await db.complete_raid_for_party(message_id)
+  await db.disband_party(message_id)
+  disbanded_party = {**party, "status": "disbanded"}
+
+  bot = bot_ref.get_bot()
+  if bot:
+    try:
+      channel = bot.get_channel(int(party["channel_id"])) or await bot.fetch_channel(int(party["channel_id"]))
+      msg = await channel.fetch_message(int(message_id))
+      await msg.edit(embed=party_embed(disbanded_party, slots), view=None)
+      raid_title = f"{party['raid_name']} {party['difficulty']}"
+      mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
+      await channel.send(
+        f"🏆 **{raid_title}** 클리어!\n{mentions}\n"
+        f"파티원 **{count}명**의 레이드 체크가 자동 완료되었습니다."
+      )
+      await channel.edit(archived=True, locked=True)
+    except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
+      pass
+
+  return {"success": True, "cleared_count": count}
+
+
+class CancelPartyBody(BaseModel):
+  discord_id: str
+  reason: str | None = None
+
+
+@router.post("/parties/{message_id}/cancel")
+async def cancel_party(message_id: str, body: CancelPartyBody):
+  import discord as _discord
+  from bot.api import bot_ref
+  from bot.ui.embeds import party_embed
+  from bot.ui.views import _send_dm
+
+  party = await db.get_party(message_id)
+  err = _require_leader(party, body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  if party["status"] == "disbanded":
+    return {"success": False, "reason": "이미 종료된 파티입니다."}
+
+  slots = await db.get_party_slots(message_id)
+  raid_title = f"{party['raid_name']} {party['difficulty']}"
+  reason_text = (body.reason or "").strip()
+
+  await db.purge_party(message_id)
+
+  bot = bot_ref.get_bot()
+  if bot:
+    dm_content = f"❌ **{raid_title}** 공대가 파티장에 의해 취소되었습니다."
+    if reason_text:
+      dm_content += f"\n📌 사유: {reason_text}"
+    for s in slots:
+      if s["discord_id"] != party["leader_id"]:
+        await _send_dm(bot, s["discord_id"], dm_content)
+    try:
+      channel = bot.get_channel(int(party["channel_id"])) or await bot.fetch_channel(int(party["channel_id"]))
+      cancelled_party = {**party, "status": "disbanded"}
+      msg = await channel.fetch_message(int(message_id))
+      await msg.edit(embed=party_embed(cancelled_party, slots), view=None)
+      await channel.delete()
+    except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
+      pass
+
+  return {"success": True}
+
+
+class KickMemberBody(BaseModel):
+  discord_id: str
+  target_discord_id: str
+
+
+@router.post("/parties/{message_id}/kick")
+async def kick_member(message_id: str, body: KickMemberBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _refresh_party_embed_with_reserved, _send_dm
+
+  party = await db.get_party(message_id)
+  err = _require_leader(party, body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  if body.target_discord_id == body.discord_id:
+    return {"success": False, "reason": "본인은 강제 퇴장시킬 수 없습니다."}
+
+  removed = await db.leave_slot(message_id, body.target_discord_id)
+  if not removed:
+    return {"success": False, "reason": "파티원을 찾을 수 없습니다."}
+
+  bot = bot_ref.get_bot()
+  if bot:
+    raid_title = f"{party['raid_name']} {party['difficulty']}"
+    await _send_dm(
+      bot, body.target_discord_id,
+      f"⚠️ **{raid_title}** 공대에서 파티장에 의해 퇴장되었습니다.",
+    )
+    updated = await db.get_party(message_id)
+    await _refresh_party_embed_with_reserved(bot, updated)
+
+  return {"success": True}
+
+
+class ReschedulePartyBody(BaseModel):
+  discord_id: str
+  scheduled_datetime: str
+  memo: str | None = None
+
+
+@router.post("/parties/{message_id}/reschedule")
+async def reschedule_party(message_id: str, body: ReschedulePartyBody):
+  from datetime import datetime
+  from bot.api import bot_ref
+  from bot.data.raids import RAIDS
+  from bot.ui.views import KST, _format_schedule, _refresh_party_embed_with_reserved
+
+  party = await db.get_party(message_id)
+  err = _require_leader(party, body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  if party["status"] == "disbanded":
+    return {"success": False, "reason": "이미 종료된 파티입니다."}
+
+  try:
+    dt_kst = datetime.fromisoformat(body.scheduled_datetime).replace(tzinfo=KST)
+  except ValueError:
+    return {"success": False, "reason": "일정 형식이 올바르지 않습니다."}
+  if dt_kst < datetime.now(KST):
+    return {"success": False, "reason": "과거 날짜로는 변경할 수 없습니다."}
+
+  scheduled_time = _format_schedule(dt_kst)
+  await db.update_party_schedule(message_id, scheduled_time, dt_kst.isoformat())
+  await db.update_party_memo(message_id, body.memo)
+  updated = await db.get_party(message_id)
+
+  bot = bot_ref.get_bot()
+  if bot:
+    await _refresh_party_embed_with_reserved(bot, updated)
+    try:
+      channel = bot.get_channel(int(updated["channel_id"])) or await bot.fetch_channel(int(updated["channel_id"]))
+      raid_info = RAIDS.get(updated["raid_name"], {})
+      short_name = raid_info.get("short_name", updated["raid_name"])
+      new_name = f"{short_name} {updated['difficulty']} {updated['proficiency']} — {scheduled_time}"
+      await channel.edit(name=new_name)
+      await channel.send(f"📅 일정이 **{scheduled_time}**으로 변경되었습니다.")
+    except Exception:
+      pass
+
+  return {"success": True, "scheduled_time": scheduled_time}
+
+
+class TransferLeaderBody(BaseModel):
+  discord_id: str
+  new_leader_discord_id: str
+
+
+@router.post("/parties/{message_id}/transfer-leader")
+async def transfer_leader_route(message_id: str, body: TransferLeaderBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _party_url, _refresh_party_embed_with_reserved, _send_dm
+
+  party = await db.get_party(message_id)
+  err = _require_leader(party, body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+
+  slots = await db.get_party_slots(message_id)
+  if body.new_leader_discord_id not in {s["discord_id"] for s in slots}:
+    return {"success": False, "reason": "파티에 참여 중인 인원만 파티장으로 위임할 수 있습니다."}
+
+  await db.transfer_leader(message_id, body.new_leader_discord_id)
+  updated = await db.get_party(message_id)
+
+  bot = bot_ref.get_bot()
+  if bot:
+    await _refresh_party_embed_with_reserved(bot, updated)
+    try:
+      channel = bot.get_channel(int(updated["channel_id"])) or await bot.fetch_channel(int(updated["channel_id"]))
+      await channel.send(f"👑 **파티장 변경** — <@{body.new_leader_discord_id}>님이 새 파티장이 되었습니다.")
+    except Exception:
+      pass
+    await _send_dm(
+      bot, body.new_leader_discord_id,
+      f"👑 **{updated['raid_name']} {updated['difficulty']}** 공대의 파티장이 되었습니다!\n{_party_url(updated)}",
+    )
 
   return {"success": True}
 

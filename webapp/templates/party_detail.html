@@ -94,6 +94,59 @@
 {% elif eligibility %}
 <p class="party-cannot-join">{{ eligibility.reason }}</p>
 {% endif %}
+
+{% if is_leader and party.status != "disbanded" %}
+<div class="leader-panel">
+  <h2 class="leader-panel-title">👑 파티장 관리</h2>
+
+  <div class="leader-actions-row">
+    {% if party.status == "closed" %}
+    <form method="post" action="/parties/{{ party.message_id }}/reopen">
+      <button type="submit" class="leader-btn">🔓 모집 재개</button>
+    </form>
+    {% else %}
+    <form method="post" action="/parties/{{ party.message_id }}/close">
+      <button type="submit" class="leader-btn">🔒 모집 마감</button>
+    </form>
+    {% endif %}
+
+    <form method="post" action="/parties/{{ party.message_id }}/clear">
+      <button type="submit" class="leader-btn leader-btn-success">🏆 클리어</button>
+    </form>
+  </div>
+
+  {% if other_members %}
+  <form method="post" action="/parties/{{ party.message_id }}/kick" class="leader-form">
+    <select name="target_discord_id">
+      {% for m in other_members %}
+      <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="leader-btn leader-btn-danger">🚫 강제 퇴장</button>
+  </form>
+
+  <form method="post" action="/parties/{{ party.message_id }}/transfer-leader" class="leader-form">
+    <select name="new_leader_discord_id">
+      {% for m in other_members %}
+      <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="leader-btn">👑 파티장 위임</button>
+  </form>
+  {% endif %}
+
+  <form method="post" action="/parties/{{ party.message_id }}/reschedule" class="leader-form">
+    <input type="datetime-local" name="scheduled_datetime" required>
+    <input type="text" name="memo" maxlength="150" placeholder="공지/메모 (비우면 삭제)" value="{{ party.memo or '' }}">
+    <button type="submit" class="leader-btn">📅 일정 변경</button>
+  </form>
+
+  <form method="post" action="/parties/{{ party.message_id }}/cancel" class="leader-form">
+    <input type="text" name="reason" maxlength="200" placeholder="취소 사유 (선택)">
+    <button type="submit" class="leader-btn leader-btn-danger">❌ 파티 취소</button>
+  </form>
+</div>
+{% endif %}
 </div>
 {% endif %}
 {% endblock %}

@@ -1,5 +1,6 @@
-"""공대 모집 페이지 — 목록/상세/참여/나가기."""
+"""공대 모집 페이지 — 목록/상세/참여/나가기/개설/파티장 관리."""
 from fastapi import APIRouter, Depends, Form, Request
+from starlette.responses import RedirectResponse
 
 from webapp import config
 from webapp.auth.dependencies import get_current_user
@@ -17,12 +18,53 @@ async def party_list(request: Request, user: dict = Depends(get_current_user)):
     )
 
 
+@router.get("/parties/create")
+async def create_party_form(
+    request: Request, error: str | None = None, user: dict = Depends(get_current_user)
+):
+    raids = await bot_client.get_raids()
+    proficiency_options = await bot_client.get_proficiency_options()
+    active_raids = {name: info for name, info in raids.items() if info.get("is_active", True)}
+    return templates.TemplateResponse(
+        request,
+        "party_create.html",
+        {
+            "user": user,
+            "active": "parties",
+            "raids": active_raids,
+            "proficiency_options": proficiency_options,
+            "error": error,
+        },
+    )
+
+
+@router.post("/parties/create")
+async def create_party_submit(
+    request: Request,
+    raid_difficulty: str = Form(...),
+    proficiency: str = Form(...),
+    scheduled_datetime: str = Form(...),
+    memo: str = Form(""),
+    user: dict = Depends(get_current_user),
+):
+    raid_name, _, difficulty = raid_difficulty.partition("|")
+    result = await bot_client.create_party(
+        user["discord_id"], config.DISCORD_GUILD_ID, raid_name, difficulty,
+        proficiency, scheduled_datetime, memo.strip() or None,
+    )
+    if not result["success"]:
+        return await create_party_form(request, error=result["reason"], user=user)
+    return RedirectResponse(f"/parties/{result['message_id']}", status_code=303)
+
+
 async def _detail_context(message_id: str, discord_id: str) -> dict:
     party = await bot_client.get_party(message_id)
     if not party:
         return {"party": None}
 
     joined = any(s["discord_id"] == discord_id for s in party["slots"])
+    is_leader = party["leader_id"] == discord_id
+    other_members = [s for s in party["slots"] if s["discord_id"] != discord_id]
     eligibility = None
     if not joined and party["status"] != "disbanded":
         eligibility = await bot_client.get_party_eligibility(message_id, discord_id)
@@ -71,6 +113,8 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
     return {
         "party": party,
         "joined": joined,
+        "is_leader": is_leader,
+        "other_members": other_members,
         "eligibility": eligibility,
         "sub_parties": sub_parties,
         "party_groups": party_groups,
@@ -119,3 +163,85 @@ async def leave(
         "party_detail.html",
         {"user": user, "active": "parties", "action_result": action_result, **ctx},
     )
+
+
+async def _manage_response(request, message_id, user, action_result):
+    ctx = await _detail_context(message_id, user["discord_id"])
+    return templates.TemplateResponse(
+        request,
+        "party_detail.html",
+        {"user": user, "active": "parties", "action_result": action_result, **ctx},
+    )
+
+
+@router.post("/parties/{message_id}/close")
+async def close_party(
+    request: Request, message_id: str, user: dict = Depends(get_current_user)
+):
+    result = await bot_client.close_party(message_id, user["discord_id"])
+    return await _manage_response(request, message_id, user, result)
+
+
+@router.post("/parties/{message_id}/reopen")
+async def reopen_party(
+    request: Request, message_id: str, user: dict = Depends(get_current_user)
+):
+    result = await bot_client.reopen_party(message_id, user["discord_id"])
+    return await _manage_response(request, message_id, user, result)
+
+
+@router.post("/parties/{message_id}/clear")
+async def clear_party(
+    request: Request, message_id: str, user: dict = Depends(get_current_user)
+):
+    result = await bot_client.clear_party(message_id, user["discord_id"])
+    return await _manage_response(request, message_id, user, result)
+
+
+@router.post("/parties/{message_id}/cancel")
+async def cancel_party(
+    request: Request,
+    message_id: str,
+    reason: str = Form(""),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.cancel_party(message_id, user["discord_id"], reason.strip() or None)
+    return await _manage_response(request, message_id, user, result)
+
+
+@router.post("/parties/{message_id}/kick")
+async def kick_member(
+    request: Request,
+    message_id: str,
+    target_discord_id: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.kick_member(message_id, user["discord_id"], target_discord_id)
+    return await _manage_response(request, message_id, user, result)
+
+
+@router.post("/parties/{message_id}/reschedule")
+async def reschedule_party(
+    request: Request,
+    message_id: str,
+    scheduled_datetime: str = Form(...),
+    memo: str = Form(""),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.reschedule_party(
+        message_id, user["discord_id"], scheduled_datetime, memo.strip() or None
+    )
+    return await _manage_response(request, message_id, user, result)
+
+
+@router.post("/parties/{message_id}/transfer-leader")
+async def transfer_leader(
+    request: Request,
+    message_id: str,
+    new_leader_discord_id: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.transfer_leader(
+        message_id, user["discord_id"], new_leader_discord_id
+    )
+    return await _manage_response(request, message_id, user, result)

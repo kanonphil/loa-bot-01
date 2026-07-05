@@ -719,6 +719,165 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   font-size: 14px;
 }
 
+/* ── 공대 목록 헤더 + 개설 버튼 ────────────────────────── */
+
+.party-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.party-list-header h1 {
+  margin: 0;
+}
+
+.party-create-link {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: filter 0.15s ease;
+}
+
+.party-create-link:hover {
+  filter: brightness(1.1);
+}
+
+/* ── 공대 개설 폼 ──────────────────────────────────────── */
+
+.party-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 420px;
+}
+
+.party-create-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.party-create-form select,
+.party-create-form input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s ease;
+}
+
+.party-create-form select:focus,
+.party-create-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.party-create-form button {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.party-create-form button:hover {
+  filter: brightness(1.1);
+}
+
+/* ── 파티장 관리 패널 ──────────────────────────────────── */
+
+.leader-panel {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.leader-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--text-muted);
+}
+
+.leader-actions-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.leader-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.leader-form select,
+.leader-form input {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.leader-form select:focus,
+.leader-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.leader-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, filter 0.15s ease;
+}
+
+.leader-btn:hover {
+  border-color: var(--accent);
+  filter: brightness(1.1);
+}
+
+.leader-btn-success {
+  background: rgba(122, 208, 138, 0.15);
+  border-color: rgba(122, 208, 138, 0.4);
+  color: #7ad08a;
+}
+
+.leader-btn-danger {
+  background: rgba(224, 92, 92, 0.15);
+  border-color: rgba(224, 92, 92, 0.4);
+  color: #e0807a;
+}
+
 /* ── 메인 대시보드 ─────────────────────────────────────── */
 
 .dashboard-grid {

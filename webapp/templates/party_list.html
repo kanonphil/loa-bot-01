@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-content">
-<h1>공대 모집</h1>
+<div class="party-list-header">
+  <h1>공대 모집</h1>
+  <a href="/parties/create" class="party-create-link">+ 공대 개설</a>
+</div>
 
 {% if not parties %}
 <p>진행 중인 공대가 없습니다.</p>

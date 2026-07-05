@@ -173,3 +173,121 @@ async def leave_party(message_id: str, discord_id: str) -> dict:
         )
         resp.raise_for_status()
         return resp.json()
+
+
+async def get_proficiency_options() -> list[dict]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/proficiency-options",
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def create_party(
+    discord_id: str,
+    guild_id: str,
+    raid_name: str,
+    difficulty: str,
+    proficiency: str,
+    scheduled_datetime: str,
+    memo: str | None,
+) -> dict:
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/create",
+            json={
+                "discord_id": discord_id,
+                "guild_id": guild_id,
+                "raid_name": raid_name,
+                "difficulty": difficulty,
+                "proficiency": proficiency,
+                "scheduled_datetime": scheduled_datetime,
+                "memo": memo,
+            },
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+# ── 파티장 관리 ───────────────────────────────────────────
+
+async def close_party(message_id: str, discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/close",
+            json={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def reopen_party(message_id: str, discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reopen",
+            json={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def clear_party(message_id: str, discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/clear",
+            json={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def cancel_party(message_id: str, discord_id: str, reason: str | None) -> dict:
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/cancel",
+            json={"discord_id": discord_id, "reason": reason},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def kick_member(message_id: str, discord_id: str, target_discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/kick",
+            json={"discord_id": discord_id, "target_discord_id": target_discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def reschedule_party(
+    message_id: str, discord_id: str, scheduled_datetime: str, memo: str | None
+) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reschedule",
+            json={"discord_id": discord_id, "scheduled_datetime": scheduled_datetime, "memo": memo},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def transfer_leader(message_id: str, discord_id: str, new_leader_discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/transfer-leader",
+            json={"discord_id": discord_id, "new_leader_discord_id": new_leader_discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
