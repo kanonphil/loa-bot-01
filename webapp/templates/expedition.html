@@ -19,10 +19,28 @@
   {% endif %}
 {% endif %}
 
+{% if account_result %}
+  {% if account_result.success %}
+  <p class="expedition-success">✅ "{{ account_result.label }}" 계정 등록 완료! (원정대 캐릭터 {{ account_result.added }}/{{ account_result.total }}개 추가)</p>
+  {% else %}
+  <p class="party-action-error">{{ account_result.reason }}</p>
+  {% endif %}
+{% endif %}
+
 <form method="post" action="/expedition/add" class="expedition-add-form">
   <input type="text" name="character_name" placeholder="캐릭터 이름 (정확히 입력)" maxlength="12" required>
   <button type="submit">캐릭터 추가</button>
 </form>
+
+<div class="expedition-account-add">
+  <h2 class="expedition-section-title">부계정 추가</h2>
+  <p class="expedition-section-desc">다른 로스트아크 계정의 API 키를 등록하면, 그 계정의 원정대 캐릭터가 전부 자동으로 추가됩니다.</p>
+  <form method="post" action="/expedition/add-account" class="expedition-account-form">
+    <input type="text" name="api_key" placeholder="로스트아크 API 키" required>
+    <input type="text" name="character_name" placeholder="검증용 캐릭터 이름" maxlength="12" required>
+    <button type="submit">계정 추가</button>
+  </form>
+</div>
 
 {% if not characters %}
 <p class="dash-empty">등록된 캐릭터가 없습니다.</p>

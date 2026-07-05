@@ -1,4 +1,4 @@
-"""bot/cogs/account.py의 /api등록 길드 확인 로직 검증.
+"""bot/services/expedition.py의 /api등록 길드 확인 로직 검증.
 실제 로스트아크 API 호출(bot.api.lostark)은 monkeypatch로 대체."""
 import os
 
@@ -13,7 +13,7 @@ import pytest
 
 import bot.database.manager as db
 import config
-from bot.cogs.account import verify_and_register_api_key
+from bot.services.expedition import verify_and_register_api_key
 
 SIBLINGS = [{"CharacterName": "발키리", "CharacterClassName": "홀리나이트", "ItemMaxLevel": "1,720.00"}]
 
@@ -33,8 +33,8 @@ def test_registration_succeeds_when_guild_matches(clean_db, monkeypatch):
     async def fake_get_armory(api_key, name):
         return {"ArmoryProfile": {"GuildName": "동물롱장"}}
 
-    monkeypatch.setattr("bot.cogs.account.loa.get_siblings", fake_get_siblings)
-    monkeypatch.setattr("bot.cogs.account.loa.get_armory", fake_get_armory)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings)
+    monkeypatch.setattr("bot.services.expedition.loa.get_armory", fake_get_armory)
 
     success, message, siblings, api_key_id = asyncio.run(
         verify_and_register_api_key("111", "dummy-key", "발키리")
@@ -59,8 +59,8 @@ def test_registration_rejected_when_guild_mismatches(clean_db, monkeypatch):
     async def fake_get_armory(api_key, name):
         return {"ArmoryProfile": {"GuildName": "다른길드"}}
 
-    monkeypatch.setattr("bot.cogs.account.loa.get_siblings", fake_get_siblings)
-    monkeypatch.setattr("bot.cogs.account.loa.get_armory", fake_get_armory)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings)
+    monkeypatch.setattr("bot.services.expedition.loa.get_armory", fake_get_armory)
 
     success, message, siblings, api_key_id = asyncio.run(
         verify_and_register_api_key("111", "dummy-key", "발키리")
@@ -83,8 +83,8 @@ def test_registration_rejected_when_no_guild(clean_db, monkeypatch):
     async def fake_get_armory(api_key, name):
         return {"ArmoryProfile": {"GuildName": ""}}
 
-    monkeypatch.setattr("bot.cogs.account.loa.get_siblings", fake_get_siblings)
-    monkeypatch.setattr("bot.cogs.account.loa.get_armory", fake_get_armory)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings)
+    monkeypatch.setattr("bot.services.expedition.loa.get_armory", fake_get_armory)
 
     success, message, siblings, api_key_id = asyncio.run(
         verify_and_register_api_key("111", "dummy-key", "발키리")
@@ -103,8 +103,8 @@ def test_guild_check_skipped_when_required_guild_name_empty(clean_db, monkeypatc
         return SIBLINGS
 
     get_armory_mock = AsyncMock()
-    monkeypatch.setattr("bot.cogs.account.loa.get_siblings", fake_get_siblings)
-    monkeypatch.setattr("bot.cogs.account.loa.get_armory", get_armory_mock)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings)
+    monkeypatch.setattr("bot.services.expedition.loa.get_armory", get_armory_mock)
 
     success, message, siblings, api_key_id = asyncio.run(
         verify_and_register_api_key("111", "dummy-key", "발키리")
@@ -121,7 +121,7 @@ def test_registration_rejected_when_character_not_found(clean_db, monkeypatch):
     async def fake_get_siblings(api_key, name):
         return None
 
-    monkeypatch.setattr("bot.cogs.account.loa.get_siblings", fake_get_siblings)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings)
 
     success, message, siblings, api_key_id = asyncio.run(
         verify_and_register_api_key("111", "dummy-key", "없는캐릭터")
@@ -147,8 +147,8 @@ def test_second_account_registration_adds_without_replacing_first(clean_db, monk
     async def fake_get_siblings_first(api_key, name):
         return first_siblings
 
-    monkeypatch.setattr("bot.cogs.account.loa.get_siblings", fake_get_siblings_first)
-    monkeypatch.setattr("bot.cogs.account.loa.get_armory", fake_get_armory)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings_first)
+    monkeypatch.setattr("bot.services.expedition.loa.get_armory", fake_get_armory)
 
     success1, _, _, id1 = asyncio.run(
         verify_and_register_api_key("111", "key-a", "발키리")
@@ -158,7 +158,7 @@ def test_second_account_registration_adds_without_replacing_first(clean_db, monk
     async def fake_get_siblings_second(api_key, name):
         return second_siblings
 
-    monkeypatch.setattr("bot.cogs.account.loa.get_siblings", fake_get_siblings_second)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings_second)
 
     success2, message2, siblings2, id2 = asyncio.run(
         verify_and_register_api_key("111", "key-b", "슬레이어부캐")

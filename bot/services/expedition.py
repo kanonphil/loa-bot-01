@@ -9,8 +9,54 @@ from __future__ import annotations
 
 import asyncio
 
+import config
 import bot.api.lostark as loa
 import bot.database.manager as db
+
+
+async def verify_and_register_api_key(
+    discord_id: str, key: str, name: str
+) -> tuple[bool, str, list[dict] | None, int | None]:
+    """API 키 검증 + 길드 확인 + 저장까지 처리. 매번 새 계정(부계정)으로 추가된다 — 몇 번을 호출해도
+    기존에 등록된 다른 계정은 그대로 유지된다.
+    (성공 여부, 유저에게 보낼 메시지, 원정대 캐릭터 목록, 새로 등록된 api_key_id) 반환.
+    discord.Interaction 없이 동작해서 디스코드 모달(ApiKeyModal)과 웹 POST
+    /expedition/add-account가 동일하게 사용한다."""
+    try:
+        siblings = await loa.get_siblings(key, name)
+    except RuntimeError as e:
+        return False, f"❌ API 키 검증 실패: {e}", None, None
+
+    if siblings is None:
+        # 캐릭터를 못 찾았지만 API 키는 유효할 수 있음 (404)
+        # 401이었으면 RuntimeError가 발생했을 것
+        return False, (
+            f"⚠️ API 키는 유효하지만 **{name}** 캐릭터를 찾을 수 없습니다.\n"
+            "캐릭터 이름을 다시 확인한 뒤 재시도해주세요.\n\n"
+            "API 키는 저장되지 않았습니다."
+        ), None, None
+
+    # 길드 확인 — 실제 "동물롱장" 소속만 등록 허용 (디스코드 서버엔 길드원 아닌 인원도 있음)
+    # 부계정을 추가로 등록할 때도 매번 동일하게 확인한다.
+    if config.REQUIRED_GUILD_NAME:
+        try:
+            armory = await loa.get_armory(key, name)
+        except RuntimeError as e:
+            return False, f"❌ 길드 확인 중 오류: {e}", None, None
+        profile = (armory or {}).get("ArmoryProfile") or {}
+        guild_name = profile.get("GuildName") or ""
+        if guild_name != config.REQUIRED_GUILD_NAME:
+            detail = f" (현재: {guild_name})" if guild_name else " (길드 미가입)"
+            return False, (
+                f"❌ **{name}** 캐릭터는 **{config.REQUIRED_GUILD_NAME}** 길드 소속이 아닙니다{detail}.\n"
+                "API 키는 저장되지 않았습니다."
+            ), None, None
+
+    api_key_id = await db.add_user_api_key(discord_id, name, key)
+    return True, (
+        f"✅ **API 키 등록 완료!** (원정대 캐릭터 **{len(siblings)}개** 확인)\n\n"
+        f"원정대에 등록할 캐릭터를 선택하세요:"
+    ), siblings, api_key_id
 
 
 async def resolve_character_account(

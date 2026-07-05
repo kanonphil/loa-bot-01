@@ -1135,6 +1135,63 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   border-color: var(--accent);
 }
 
+.expedition-account-add {
+  margin-bottom: 24px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.expedition-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.expedition-section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+
+.expedition-account-form {
+  display: flex;
+  gap: 8px;
+}
+
+.expedition-account-form input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s ease;
+}
+
+.expedition-account-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.expedition-account-form button {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.15s ease;
+}
+
+.expedition-account-form button:hover {
+  filter: brightness(1.1);
+}
+
 .expedition-account-group {
   margin-bottom: 20px;
 }

@@ -8,6 +8,7 @@ CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters-groupe
 ADD_URL = "http://bot-server.internal/api/internal/characters/add"
 REMOVE_URL = "http://bot-server.internal/api/internal/characters/remove"
 SYNC_URL = "http://bot-server.internal/api/internal/characters/sync"
+ADD_ACCOUNT_URL = "http://bot-server.internal/api/internal/accounts/add"
 
 CHARACTERS = [
     {"character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0, "account_label": "발키리"},
@@ -129,3 +130,42 @@ def test_sync_shows_result(client):
 
     assert resp.status_code == 200
     assert "2/2개 캐릭터 동기화 완료" in resp.text
+
+
+def test_add_account_success_shows_confirmation(client):
+    with respx.mock:
+        log_in(client)
+        respx.post(ADD_ACCOUNT_URL).mock(
+            return_value=httpx.Response(
+                200, json={"success": True, "label": "슬레이어부계정", "added": 3, "total": 3}
+            )
+        )
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+
+        resp = client.post(
+            "/expedition/add-account",
+            data={"api_key": "dummy-key", "character_name": "슬레이어부계정"},
+        )
+
+    assert resp.status_code == 200
+    assert "슬레이어부계정" in resp.text
+    assert "3/3개" in resp.text
+
+
+def test_add_account_failure_shows_reason(client):
+    with respx.mock:
+        log_in(client)
+        respx.post(ADD_ACCOUNT_URL).mock(
+            return_value=httpx.Response(
+                200, json={"success": False, "reason": "동물롱장 길드 소속이 아닙니다."}
+            )
+        )
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+
+        resp = client.post(
+            "/expedition/add-account",
+            data={"api_key": "dummy-key", "character_name": "발키리"},
+        )
+
+    assert resp.status_code == 200
+    assert "동물롱장 길드 소속이 아닙니다" in resp.text

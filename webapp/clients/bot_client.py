@@ -105,6 +105,18 @@ async def sync_characters(discord_id: str) -> dict:
         return resp.json()
 
 
+async def add_account(discord_id: str, api_key: str, character_name: str) -> dict:
+    """부계정(로스트아크 API 키) 추가 — 검증(+길드 확인) 후 원정대 캐릭터 전체를 등록한다."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/accounts/add",
+            json={"discord_id": discord_id, "api_key": api_key, "character_name": character_name},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def toggle_completion(
     discord_id: str, character_name: str, raid_name: str, difficulty: str
 ) -> bool:

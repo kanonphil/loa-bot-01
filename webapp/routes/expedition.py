@@ -72,3 +72,19 @@ async def sync_characters(request: Request, user: dict = Depends(get_current_use
         "expedition.html",
         {"user": user, "active": "expedition", "sync_result": sync_result, **ctx},
     )
+
+
+@router.post("/expedition/add-account")
+async def add_account(
+    request: Request,
+    api_key: str = Form(...),
+    character_name: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    account_result = await bot_client.add_account(user["discord_id"], api_key.strip(), character_name.strip())
+    ctx = await _page_context(user["discord_id"])
+    return templates.TemplateResponse(
+        request,
+        "expedition.html",
+        {"user": user, "active": "expedition", "account_result": account_result, **ctx},
+    )

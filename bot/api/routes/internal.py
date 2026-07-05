@@ -7,7 +7,11 @@ from pydantic import BaseModel
 from bot.api.auth import verify_webapp_key
 import bot.api.lostark as loa
 import bot.database.manager as db
-from bot.services.expedition import register_character_auto_detect, sync_characters_for_discord_id
+from bot.services.expedition import (
+  register_character_auto_detect,
+  sync_characters_for_discord_id,
+  verify_and_register_api_key,
+)
 
 router = APIRouter(dependencies=[Depends(verify_webapp_key)])
 
@@ -564,3 +568,27 @@ async def sync_characters(body: SyncCharactersBody):
   # 동일한 공용 로직.
   updated, total = await sync_characters_for_discord_id(body.discord_id)
   return {"success": True, "updated": updated, "total": total}
+
+
+class AddAccountBody(BaseModel):
+  discord_id: str
+  api_key: str
+  character_name: str
+
+
+@router.post("/accounts/add")
+async def add_account(body: AddAccountBody):
+  """부계정(로스트아크 API 키) 추가 — Discord /api등록(ApiKeyModal)과 동일한
+  검증(+길드 확인)을 거친 뒤, 원정대 캐릭터 전체를 등록한다("원정대 전체 등록"과 동일)."""
+  success, message, siblings, api_key_id = await verify_and_register_api_key(
+    body.discord_id, body.api_key, body.character_name
+  )
+  if not success:
+    return {"success": False, "reason": message}
+
+  added = 0
+  for char in siblings or []:
+    name = char.get("CharacterName")
+    if name and await db.add_character(body.discord_id, name, api_key_id=api_key_id):
+      added += 1
+  return {"success": True, "label": body.character_name, "added": added, "total": len(siblings or [])}

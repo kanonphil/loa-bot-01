@@ -6,10 +6,9 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import Modal, TextInput, View, Button
 
-import config
-import bot.api.lostark as loa
 import bot.database.manager as db
 from bot.cogs.guide import send_guide
+from bot.services.expedition import verify_and_register_api_key
 
 
 class CharRegisterView(View):
@@ -48,11 +47,11 @@ class CharRegisterView(View):
         if str(interaction.user.id) != self.discord_id:
             await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
             return
-        added = sum(
-            1 for char in self.siblings
-            if char.get("CharacterName")
-            and await db.add_character(self.discord_id, char["CharacterName"], api_key_id=self.api_key_id)
-        )
+        added = 0
+        for char in self.siblings:
+            name = char.get("CharacterName")
+            if name and await db.add_character(self.discord_id, name, api_key_id=self.api_key_id):
+                added += 1
         self.stop()
         await self._finish(
             interaction,
@@ -63,50 +62,6 @@ class CharRegisterView(View):
     async def on_timeout(self) -> None:
         # 타임아웃 시 검증 캐릭터만 등록
         await db.add_character(self.discord_id, self.verified_name, api_key_id=self.api_key_id)
-
-
-async def verify_and_register_api_key(
-    discord_id: str, key: str, name: str
-) -> tuple[bool, str, list[dict] | None, int | None]:
-    """API 키 검증 + 길드 확인 + 저장까지 처리. 매번 새 계정(부계정)으로 추가된다 — 몇 번을 호출해도
-    기존에 등록된 다른 계정은 그대로 유지된다.
-    (성공 여부, 유저에게 보낼 메시지, 원정대 캐릭터 목록, 새로 등록된 api_key_id) 반환.
-    discord.Interaction 없이 동작해서 단위 테스트하기 쉽다."""
-    try:
-        siblings = await loa.get_siblings(key, name)
-    except RuntimeError as e:
-        return False, f"❌ API 키 검증 실패: {e}", None, None
-
-    if siblings is None:
-        # 캐릭터를 못 찾았지만 API 키는 유효할 수 있음 (404)
-        # 401이었으면 RuntimeError가 발생했을 것
-        return False, (
-            f"⚠️ API 키는 유효하지만 **{name}** 캐릭터를 찾을 수 없습니다.\n"
-            "캐릭터 이름을 다시 확인한 뒤 재시도해주세요.\n\n"
-            "API 키는 저장되지 않았습니다."
-        ), None, None
-
-    # 길드 확인 — 실제 "동물롱장" 소속만 등록 허용 (디스코드 서버엔 길드원 아닌 인원도 있음)
-    # 부계정을 추가로 등록할 때도 매번 동일하게 확인한다.
-    if config.REQUIRED_GUILD_NAME:
-        try:
-            armory = await loa.get_armory(key, name)
-        except RuntimeError as e:
-            return False, f"❌ 길드 확인 중 오류: {e}", None, None
-        profile = (armory or {}).get("ArmoryProfile") or {}
-        guild_name = profile.get("GuildName") or ""
-        if guild_name != config.REQUIRED_GUILD_NAME:
-            detail = f" (현재: {guild_name})" if guild_name else " (길드 미가입)"
-            return False, (
-                f"❌ **{name}** 캐릭터는 **{config.REQUIRED_GUILD_NAME}** 길드 소속이 아닙니다{detail}.\n"
-                "API 키는 저장되지 않았습니다."
-            ), None, None
-
-    api_key_id = await db.add_user_api_key(discord_id, name, key)
-    return True, (
-        f"✅ **API 키 등록 완료!** (원정대 캐릭터 **{len(siblings)}개** 확인)\n\n"
-        f"원정대에 등록할 캐릭터를 선택하세요:"
-    ), siblings, api_key_id
 
 
 class ApiKeyModal(Modal, title="로스트아크 API 키 등록"):
