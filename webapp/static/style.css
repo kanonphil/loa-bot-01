@@ -1251,3 +1251,36 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   border-color: var(--accent);
   background: var(--accent-dim);
 }
+
+/* 상단 연/월 헤더 — 월 드롭다운이 왼쪽 정렬로 넓게 차지해 연도와 비율이
+   안 맞아 보이던 문제. 가운데 정렬 + 내용 폭만큼만 차지하도록 수정. */
+.flatpickr-current-month {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 !important;
+}
+
+.flatpickr-monthDropdown-months {
+  width: auto !important;
+  text-align: center;
+  text-align-last: center;
+  padding: 0 4px;
+}
+
+.flatpickr-current-month .numInputWrapper {
+  width: 52px;
+  display: flex;
+  align-items: center;
+}
+
+.flatpickr-current-month .numInputWrapper .cur-year {
+  text-align: center;
+  padding: 0 !important;
+}
+
+.flatpickr-current-month .numInputWrapper span.arrowUp,
+.flatpickr-current-month .numInputWrapper span.arrowDown {
+  cursor: pointer;
+}
