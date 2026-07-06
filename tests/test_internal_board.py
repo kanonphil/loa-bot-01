@@ -34,6 +34,8 @@ def fake_bot(monkeypatch):
 
     fake_bot = MagicMock()
     fake_bot.get_channel = MagicMock(return_value=fake_channel)
+    # 길드 멤버 캐시에 없다고 가정 — _resolve_display_name이 discord_id로 안전하게 폴백해야 함
+    fake_bot.get_guild = MagicMock(return_value=None)
 
     bot_ref.set_bot(fake_bot)
     yield fake_bot, fake_channel
@@ -180,6 +182,32 @@ def test_get_post_detail_missing_returns_none(client, fake_bot):
     resp = client.get("/api/internal/board/posts/999", headers=HEADERS)
     assert resp.status_code == 200
     assert resp.json() is None
+
+
+def test_get_post_detail_resolves_display_names(client, fake_bot):
+    """웹앱은 discord_id만 갖고 있어 <@id> 멘션이 안 풀리므로, 서버 별명을 직접 붙여줘야 한다."""
+    bot, _ = fake_bot
+    fake_member = MagicMock()
+    fake_member.display_name = "author"
+    fake_guild = MagicMock()
+    fake_guild.get_member = MagicMock(return_value=fake_member)
+    bot.get_guild = MagicMock(return_value=fake_guild)
+
+    post_id = asyncio.run(db.create_board_post("1", "111", "글", "자유", "내용", None))
+    asyncio.run(db.add_board_comment(post_id, "222", "댓글"))
+    asyncio.run(db.join_board_post(post_id, "222"))
+
+    resp = client.get(f"/api/internal/board/posts/{post_id}", headers=HEADERS)
+    body = resp.json()
+    assert body["author_name"] == "author"
+    assert body["comments"][0]["display_name"] == "author"
+    assert body["participants"][0]["display_name"] == "author"
+
+
+def test_get_post_detail_falls_back_to_discord_id_when_member_unknown(client, fake_bot):
+    post_id = asyncio.run(db.create_board_post("1", "111", "글", "자유", "내용", None))
+    resp = client.get(f"/api/internal/board/posts/{post_id}", headers=HEADERS)
+    assert resp.json()["author_name"] == "111"
 
 
 # ── 수정/삭제 (작성자 전용) ─────────────────────────────────

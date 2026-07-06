@@ -957,6 +957,16 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   flex-wrap: wrap;
 }
 
+.board-post-actions {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.board-post-actions-inline-form {
+  display: contents;
+}
+
 .leader-form {
   display: flex;
   gap: 8px;
@@ -1945,6 +1955,8 @@ a.calendar-party:hover {
 .board-editor-image-wrap {
   position: relative;
   display: block;
+  width: fit-content;
+  max-width: 100%;
   margin: 8px 0;
 }
 
@@ -2008,6 +2020,10 @@ a.calendar-party:hover {
 .board-edit-form {
   flex-direction: column;
   align-items: stretch;
+}
+
+.board-edit-form[hidden] {
+  display: none;
 }
 
 .board-comments {

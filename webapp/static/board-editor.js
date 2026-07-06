@@ -54,6 +54,42 @@
       content.querySelectorAll("img").forEach(wrapImage);
     }
 
+    function insertImage(url) {
+      content.focus();
+      restoreSelection();
+      var sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      var range = sel.getRangeAt(0);
+      range.deleteContents();
+
+      var wrap = document.createElement("span");
+      wrap.className = "board-editor-image-wrap";
+      wrap.contentEditable = "false";
+      var img = document.createElement("img");
+      img.src = url;
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "board-editor-image-remove";
+      removeBtn.setAttribute("aria-label", "이미지 삭제");
+      removeBtn.textContent = "×";
+      wrap.appendChild(img);
+      wrap.appendChild(removeBtn);
+
+      // 사진 바로 아래에 커서가 놓이도록 뒤에 줄바꿈을 넣고 그 뒤로 커서를 이동한다.
+      var trailingBr = document.createElement("br");
+      var frag = document.createDocumentFragment();
+      frag.appendChild(wrap);
+      frag.appendChild(trailingBr);
+      range.insertNode(frag);
+
+      var newRange = document.createRange();
+      newRange.setStartAfter(trailingBr);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+      saveSelection();
+    }
+
     content.addEventListener("keyup", saveSelection);
     content.addEventListener("mouseup", saveSelection);
 
@@ -179,10 +215,7 @@
           return res.json();
         })
         .then(function (body) {
-          content.focus();
-          restoreSelection();
-          document.execCommand("insertHTML", false, '<img src="' + body.url + '">');
-          wrapExistingImages();
+          insertImage(body.url);
         })
         .catch(function (err) {
           alert(err.message);

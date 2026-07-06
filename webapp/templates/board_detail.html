@@ -18,7 +18,7 @@
   <span class="board-category-badge board-category-{{ post.category }}">{{ post.category }}</span>
 </div>
 <p class="party-meta">
-  작성자 <@{{ post.author_discord_id }}>
+  작성자 {{ post.author_name or post.author_discord_id }}
   {% if post.scheduled_datetime %}&middot; 🕒 {{ post.scheduled_datetime }}{% endif %}
 </p>
 
@@ -33,7 +33,7 @@
   <h2 class="leader-panel-title">참여자 ({{ post.participants | length }})</h2>
   <div class="board-participant-chips">
     {% for p in post.participants %}
-    <span class="board-participant-chip">&lt;@{{ p.discord_id }}&gt;</span>
+    <span class="board-participant-chip">{{ p.display_name or p.discord_id }}</span>
     {% else %}
     <span class="party-slot-empty">아직 참여자가 없습니다.</span>
     {% endfor %}
@@ -52,25 +52,30 @@
 {% endif %}
 
 {% if is_author %}
-<div class="leader-panel">
-  <h2 class="leader-panel-title">✏️ 글 관리</h2>
-  <form method="post" action="/board/{{ post.id }}/edit" class="leader-form board-edit-form">
-    <input type="text" name="title" maxlength="100" value="{{ post.title }}" required>
-    <input type="text" id="board-edit-datetime-input" name="scheduled_datetime" placeholder="일정 (선택)" value="{{ post.scheduled_datetime or '' }}">
-    {% set initial_content = post.content %}
-    {% include "_board_editor.html" %}
-    <button type="submit" class="leader-btn">수정 저장</button>
-  </form>
-
-  <form method="post" action="/board/{{ post.id }}/delete" class="leader-form">
+<div class="board-post-actions">
+  <button type="button" id="board-edit-toggle-btn" class="leader-btn">✏️ 수정</button>
+  <form method="post" action="/board/{{ post.id }}/delete" class="board-post-actions-inline-form">
     <button type="submit" class="leader-btn leader-btn-danger">🗑️ 삭제</button>
   </form>
 </div>
+
+<form method="post" action="/board/{{ post.id }}/edit" class="leader-panel leader-form board-edit-form" id="board-edit-form" hidden>
+  <h2 class="leader-panel-title">✏️ 글 수정</h2>
+  <input type="text" name="title" maxlength="100" value="{{ post.title }}" required>
+  <input type="text" id="board-edit-datetime-input" name="scheduled_datetime" placeholder="일정 (선택)" value="{{ post.scheduled_datetime or '' }}">
+  {% set initial_content = post.content %}
+  {% include "_board_editor.html" %}
+  <button type="submit" class="leader-btn">수정 저장</button>
+</form>
 <script src="/static/flatpickr.min.js"></script>
 <script src="/static/party-datetime.js"></script>
 <script src="/static/board-editor.js"></script>
 <script>
   initPartyDatetimePicker("#board-edit-datetime-input");
+  document.getElementById("board-edit-toggle-btn").addEventListener("click", function () {
+    var form = document.getElementById("board-edit-form");
+    form.hidden = !form.hidden;
+  });
 </script>
 {% endif %}
 
@@ -79,7 +84,7 @@
   <div class="board-comment-list">
     {% for c in post.comments %}
     <div class="board-comment">
-      <span class="board-comment-author">&lt;@{{ c.discord_id }}&gt;</span>
+      <span class="board-comment-author">{{ c.display_name or c.discord_id }}</span>
       <span class="board-comment-content">{{ c.content }}</span>
     </div>
     {% else %}

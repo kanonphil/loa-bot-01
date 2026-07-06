@@ -641,6 +641,23 @@ def _strip_html(html: str) -> str:
   return _HTML_TAG_RE.sub("", html)
 
 
+def _resolve_display_name(guild_id: str, discord_id: str) -> str:
+  """길드 멤버 캐시에서 서버 별명(닉네임)을 찾아온다 — 웹앱은 discord_id만 갖고 있어서
+  <@id> 멘션 문법을 그대로 표시하면(디스코드 클라이언트 밖이라) 안 풀리고 ID 그대로 보인다."""
+  from bot.api import bot_ref
+
+  bot = bot_ref.get_bot()
+  if not bot:
+    return discord_id
+  guild = bot.get_guild(int(guild_id))
+  if not guild:
+    return discord_id
+  member = guild.get_member(int(discord_id))
+  if not member:
+    return discord_id
+  return member.display_name
+
+
 async def _send_board_announcement(post: dict) -> None:
   """이벤트 카테고리 게시글 생성 직후 디스코드 채널에 알림 발송 — 채널 미설정이면
   조용히 건너뛰고(경고 로그만), 발송 성공 여부와 무관하게 announced=1로 마킹해
@@ -744,7 +761,15 @@ async def board_post_detail(post_id: int):
     return None
   comments = await db.list_board_comments(post_id)
   participants = await db.list_board_participants(post_id)
-  return {**post, "comments": comments, "participants": participants}
+  guild_id = post["guild_id"]
+  author_name = _resolve_display_name(guild_id, post["author_discord_id"])
+  comments = [
+    {**c, "display_name": _resolve_display_name(guild_id, c["discord_id"])} for c in comments
+  ]
+  participants = [
+    {**p, "display_name": _resolve_display_name(guild_id, p["discord_id"])} for p in participants
+  ]
+  return {**post, "author_name": author_name, "comments": comments, "participants": participants}
 
 
 class UpdateBoardPostBody(BaseModel):

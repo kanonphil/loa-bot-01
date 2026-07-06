@@ -23,8 +23,14 @@ POST_LIST = [
 
 POST1_DETAIL = {
     **POST_LIST[0],
-    "comments": [{"id": 1, "post_id": 1, "discord_id": "222", "content": "기대됩니다", "created_at": "2026-07-01 11:00:00"}],
-    "participants": [{"post_id": 1, "discord_id": "222", "joined_at": "2026-07-01 11:00:00"}],
+    "author_name": "길드장",
+    "comments": [
+        {"id": 1, "post_id": 1, "discord_id": "222", "content": "기대됩니다",
+         "created_at": "2026-07-01 11:00:00", "display_name": "댓글러"},
+    ],
+    "participants": [
+        {"post_id": 1, "discord_id": "222", "joined_at": "2026-07-01 11:00:00", "display_name": "댓글러"},
+    ],
 }
 
 
@@ -114,6 +120,20 @@ def test_board_detail_shows_comments_and_participants(client):
     assert "길드 회식" in resp.text
 
 
+def test_board_detail_shows_resolved_display_names_not_raw_discord_id(client):
+    """디스코드 <@id> 멘션은 웹 브라우저에서 안 풀리므로, 봇 서버가 내려준 서버 별명이 그대로 보여야 한다."""
+    with respx.mock:
+        log_in(client, discord_id="222")
+        respx.get(POST1_URL).mock(return_value=httpx.Response(200, json=POST1_DETAIL))
+        resp = client.get("/board/1")
+
+    assert resp.status_code == 200
+    assert "길드장" in resp.text
+    assert "댓글러" in resp.text
+    assert "<@111>" not in resp.text
+    assert "<@222>" not in resp.text
+
+
 def test_board_detail_missing_post_shows_not_found(client):
     with respx.mock:
         log_in(client, discord_id="111")
@@ -131,7 +151,10 @@ def test_author_sees_edit_delete_controls(client):
         resp = client.get("/board/1")
 
     assert resp.status_code == 200
-    assert "글 관리" in resp.text
+    assert "✏️ 수정" in resp.text
+    assert "🗑️ 삭제" in resp.text
+    # 수정 폼은 "수정" 버튼을 누르기 전엔 숨겨져 있어야 한다
+    assert '<form method="post" action="/board/1/edit" class="leader-panel leader-form board-edit-form" id="board-edit-form" hidden>' in resp.text
 
 
 def test_non_author_does_not_see_edit_delete_controls(client):
@@ -141,7 +164,8 @@ def test_non_author_does_not_see_edit_delete_controls(client):
         resp = client.get("/board/1")
 
     assert resp.status_code == 200
-    assert "글 관리" not in resp.text
+    assert "✏️ 수정" not in resp.text
+    assert "🗑️ 삭제" not in resp.text
 
 
 def test_join_button_shown_when_not_participant(client):
