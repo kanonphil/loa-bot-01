@@ -3,7 +3,7 @@
 import bleach
 
 _ALLOWED_TAGS = ["p", "br", "b", "strong", "i", "em", "u", "a", "img", "ul", "ol", "li", "blockquote"]
-_ALLOWED_ATTRS = {"a": ["href"], "img": ["src", "alt"]}
+_ALLOWED_ATTRS = {"a": ["href", "target", "rel"], "img": ["src", "alt"]}
 _ALLOWED_PROTOCOLS = ["http", "https"]
 
 

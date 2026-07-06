@@ -1,9 +1,16 @@
 (function () {
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
   function initEditor(root) {
     var content = root.querySelector(".board-editor-content");
     var hidden = root.querySelector(".board-editor-hidden-textarea");
     var fileInput = root.querySelector(".board-editor-image-input");
     var imageBtn = root.querySelector(".board-editor-image-btn");
+    var linkBtn = root.querySelector(".board-editor-link-btn");
     var savedRange = null;
 
     function saveSelection() {
@@ -26,14 +33,93 @@
       }
     }
 
+    function wrapImage(img) {
+      if (img.closest(".board-editor-image-wrap")) return;
+      var wrap = document.createElement("span");
+      wrap.className = "board-editor-image-wrap";
+      wrap.contentEditable = "false";
+      img.replaceWith(wrap);
+      wrap.appendChild(img);
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "board-editor-image-remove";
+      removeBtn.setAttribute("aria-label", "이미지 삭제");
+      removeBtn.textContent = "×";
+      wrap.appendChild(removeBtn);
+    }
+
+    function wrapExistingImages() {
+      content.querySelectorAll("img").forEach(wrapImage);
+    }
+
     content.addEventListener("keyup", saveSelection);
     content.addEventListener("mouseup", saveSelection);
+
+    // 사진 첨부는 백스페이스/Delete로 지워지지 않게 막는다 — 오직 × 버튼으로만 삭제.
+    content.addEventListener("beforeinput", function (e) {
+      if (!e.inputType || e.inputType.indexOf("delete") !== 0) return;
+      var wraps = content.querySelectorAll(".board-editor-image-wrap");
+      if (!wraps.length) return;
+      if (typeof e.getTargetRanges === "function") {
+        var targetRanges = e.getTargetRanges();
+        for (var i = 0; i < targetRanges.length; i++) {
+          for (var j = 0; j < wraps.length; j++) {
+            if (targetRanges[i].intersectsNode(wraps[j])) {
+              e.preventDefault();
+              return;
+            }
+          }
+        }
+      }
+    });
+
+    content.addEventListener("click", function (e) {
+      if (e.target.classList.contains("board-editor-image-remove")) {
+        e.preventDefault();
+        var wrap = e.target.closest(".board-editor-image-wrap");
+        if (wrap) wrap.remove();
+      }
+    });
 
     root.querySelectorAll(".board-editor-btn[data-cmd]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         content.focus();
         document.execCommand(btn.dataset.cmd, false, null);
       });
+    });
+
+    linkBtn.addEventListener("click", function () {
+      content.focus();
+      restoreSelection();
+      var sel = window.getSelection();
+      var hasSelection = sel && !sel.isCollapsed && content.contains(sel.anchorNode);
+
+      var url = prompt("연결할 주소를 입력하세요 (https://...)");
+      if (!url) return;
+      url = url.trim();
+      if (!url) return;
+      if (!/^https?:\/\//i.test(url)) {
+        url = "https://" + url;
+      }
+      var safeUrl = url.replace(/"/g, "&quot;");
+
+      if (hasSelection) {
+        document.execCommand("createLink", false, url);
+        var anchor = sel.anchorNode && sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest("a");
+        if (anchor) {
+          anchor.setAttribute("target", "_blank");
+          anchor.setAttribute("rel", "noopener noreferrer");
+        }
+      } else {
+        var text = prompt("링크에 표시할 텍스트를 입력하세요", url);
+        if (text === null) return;
+        var label = text.trim() || url;
+        document.execCommand(
+          "insertHTML",
+          false,
+          '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(label) + "</a>"
+        );
+      }
     });
 
     imageBtn.addEventListener("click", function () {
@@ -59,6 +145,7 @@
           content.focus();
           restoreSelection();
           document.execCommand("insertHTML", false, '<img src="' + body.url + '">');
+          wrapExistingImages();
         })
         .catch(function (err) {
           alert(err.message);
@@ -68,10 +155,23 @@
         });
     });
 
+    function getCleanHtml() {
+      var clone = content.cloneNode(true);
+      clone.querySelectorAll(".board-editor-image-wrap").forEach(function (wrap) {
+        var img = wrap.querySelector("img");
+        if (img) {
+          wrap.replaceWith(img);
+        } else {
+          wrap.remove();
+        }
+      });
+      return clone.innerHTML;
+    }
+
     var form = root.closest("form");
     if (form) {
       form.addEventListener("submit", function (e) {
-        hidden.value = content.innerHTML;
+        hidden.value = getCleanHtml();
         var hasText = content.textContent.trim().length > 0;
         var hasImage = content.querySelectorAll("img").length > 0;
         if (!hasText && !hasImage) {
@@ -80,6 +180,8 @@
         }
       });
     }
+
+    wrapExistingImages();
   }
 
   document.querySelectorAll(".board-editor").forEach(initEditor);
