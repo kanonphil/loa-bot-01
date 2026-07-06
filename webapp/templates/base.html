@@ -10,7 +10,9 @@
 <body>
   {% block body %}
   <div class="layout">
-    <aside class="sidebar">
+    <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="메뉴 열기">☰</button>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
         <img src="{{ get_guild_icon_url() or '/static/logo.svg' }}" alt="길드 로고">
         <span>{{ get_guild_name() }}</span>
@@ -42,6 +44,7 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script src="/static/mobile-nav.js"></script>
   {% endblock %}
 </body>
 </html>
