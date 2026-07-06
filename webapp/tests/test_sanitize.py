@@ -27,3 +27,24 @@ def test_preserves_link_target_and_rel():
 def test_preserves_allowed_image_and_paragraph_markup():
     html = '<p>안녕</p><img src="/static/uploads/board/x.png" alt="사진">'
     assert clean_html(html) == html
+
+
+def test_preserves_font_size_and_color_style():
+    """글씨 크기/색 지정(span style)은 에디터가 붙이는 안전한 서식이라 유지돼야 한다."""
+    result = clean_html('<span style="color:#ff0000; font-size:20px;">안녕</span>')
+    assert "color:#ff0000" in result
+    assert "font-size:20px" in result
+
+
+def test_strips_disallowed_css_properties_from_style():
+    """color/font-size 외의 CSS 속성(position, background 등)은 제거된다."""
+    result = clean_html('<span style="color:#ff0000; position:absolute; background:url(javascript:alert(1))">안녕</span>')
+    assert "color:#ff0000" in result
+    assert "position" not in result
+    assert "background" not in result
+
+
+def test_strips_event_handler_alongside_style():
+    result = clean_html('<span style="color:red" onclick="alert(1)">안녕</span>')
+    assert "onclick" not in result
+    assert "color:red" in result

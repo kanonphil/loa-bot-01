@@ -11,6 +11,8 @@
     var fileInput = root.querySelector(".board-editor-image-input");
     var imageBtn = root.querySelector(".board-editor-image-btn");
     var linkBtn = root.querySelector(".board-editor-link-btn");
+    var sizeSelect = root.querySelector(".board-editor-size-select");
+    var colorInput = root.querySelector(".board-editor-color-input");
     var savedRange = null;
 
     function saveSelection() {
@@ -120,6 +122,41 @@
           '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(label) + "</a>"
         );
       }
+    });
+
+    function applyStyleToSelection(prop, value) {
+      content.focus();
+      restoreSelection();
+      var sel = window.getSelection();
+      if (!sel.rangeCount || sel.isCollapsed || !content.contains(sel.anchorNode)) {
+        alert("먼저 서식을 적용할 텍스트를 선택해주세요.");
+        return;
+      }
+      var range = sel.getRangeAt(0);
+      var span = document.createElement("span");
+      span.style[prop] = value;
+      try {
+        range.surroundContents(span);
+      } catch (e) {
+        var frag = range.extractContents();
+        span.appendChild(frag);
+        range.insertNode(span);
+      }
+      sel.removeAllRanges();
+      var newRange = document.createRange();
+      newRange.selectNodeContents(span);
+      sel.addRange(newRange);
+      saveSelection();
+    }
+
+    sizeSelect.addEventListener("change", function () {
+      if (!sizeSelect.value) return;
+      applyStyleToSelection("fontSize", sizeSelect.value);
+      sizeSelect.value = "";
+    });
+
+    colorInput.addEventListener("change", function () {
+      applyStyleToSelection("color", colorInput.value);
     });
 
     imageBtn.addEventListener("click", function () {

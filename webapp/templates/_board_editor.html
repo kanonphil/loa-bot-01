@@ -2,6 +2,14 @@
   <div class="board-editor-toolbar">
     <button type="button" class="board-editor-btn" data-cmd="bold" title="굵게"><b>B</b></button>
     <button type="button" class="board-editor-btn" data-cmd="italic" title="기울임"><i>I</i></button>
+    <select class="board-editor-btn board-editor-size-select" title="글씨 크기">
+      <option value="">크기</option>
+      <option value="13px">작게</option>
+      <option value="16px">보통</option>
+      <option value="20px">크게</option>
+      <option value="26px">아주 크게</option>
+    </select>
+    <input type="color" class="board-editor-color-input" title="글씨 색" value="#e7e9ee">
     <button type="button" class="board-editor-btn board-editor-link-btn" title="링크 추가">🔗 링크</button>
     <button type="button" class="board-editor-btn board-editor-image-btn" title="사진 추가">🖼️ 사진</button>
     <input type="file" class="board-editor-image-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
