@@ -8,9 +8,21 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
-from webapp import chat_store, config, guild_info
+from webapp import chat_store, config, guild_info, party_events
 from webapp.auth.dependencies import NotAuthenticated
-from webapp.routes import auth_routes, board, calendar, chat, dashboard, expedition, pages, party, raid_check, tools
+from webapp.routes import (
+    auth_routes,
+    board,
+    calendar,
+    chat,
+    dashboard,
+    events,
+    expedition,
+    pages,
+    party,
+    raid_check,
+    tools,
+)
 from webapp.templating import templates
 
 logger = logging.getLogger("webapp")
@@ -34,10 +46,12 @@ async def lifespan(app: FastAPI):
     await chat_store.init_db()
     await guild_info.refresh()
     cleanup_task = asyncio.create_task(_cleanup_loop())
+    party_poll_task = asyncio.create_task(party_events.poll_loop())
     try:
         yield
     finally:
         cleanup_task.cancel()
+        party_poll_task.cancel()
 
 
 app = FastAPI(title="로아봇 웹", lifespan=lifespan)
@@ -67,6 +81,7 @@ app.include_router(party.router)
 app.include_router(calendar.router)
 app.include_router(board.router)
 app.include_router(tools.router)
+app.include_router(events.router)
 
 
 @app.exception_handler(NotAuthenticated)
