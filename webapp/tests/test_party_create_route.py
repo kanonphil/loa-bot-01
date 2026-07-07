@@ -8,11 +8,10 @@ from webapp.tests.conftest import log_in
 
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 PROFICIENCY_URL = "http://bot-server.internal/api/internal/parties/proficiency-options"
+CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters-grouped"
+SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 CREATE_URL = "http://bot-server.internal/api/internal/parties/create"
-ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/12345/eligibility"
 JOIN_URL = "http://bot-server.internal/api/internal/parties/12345/join"
-
-NOT_ELIGIBLE = {"can_join": False, "reason": "이미 파티에 참여 중입니다."}
 
 RAIDS = {
     "아르모체(4막)": {
@@ -32,6 +31,17 @@ PROFICIENCY = [
     {"value": "숙련", "label": "숙련", "description": "이 레이드를 완전 숙지"},
     {"value": "트라이", "label": "트라이", "description": "처음 도전하는 단계"},
 ]
+CHARACTERS = [
+    {"character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0, "account_label": "본계정"},
+    {"character_name": "워로드둘째", "character_class": "워로드", "item_level": 1710.0, "account_label": "본계정"},
+]
+
+
+def _mock_form_deps():
+    respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+    respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=PROFICIENCY))
+    respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+    respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트", "바드", "도화가"]))
 
 
 def test_create_form_requires_login(client):
@@ -40,18 +50,23 @@ def test_create_form_requires_login(client):
     assert resp.headers["location"] == "/login"
 
 
-def test_create_form_shows_only_active_raids(client):
+def test_create_form_shows_only_active_raids_and_own_characters(client):
     with respx.mock:
         log_in(client)
-        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
-        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=PROFICIENCY))
+        _mock_form_deps()
         resp = client.get("/parties/create")
 
     assert resp.status_code == 200
     assert "4막" in resp.text
-    assert "비활성" not in resp.text
+    assert "💤 비활성" not in resp.text
     assert "숙련" in resp.text
     assert "트라이" in resp.text
+    assert "발키리" in resp.text
+    assert "워로드둘째" in resp.text
+    assert "선택 안 함" in resp.text
+    # 홀리나이트(서포터)는 true, 워로드(딜러 전용)는 false로 JS에 전달돼야 한다
+    assert '"발키리": true' in resp.text
+    assert '"워로드둘째": false' in resp.text
 
 
 def _post_create(client, **overrides):
@@ -61,6 +76,8 @@ def _post_create(client, **overrides):
         "proficiency": "숙련",
         "scheduled_datetime": "2026-05-20T20:00",
         "memo": "음성 필수",
+        "character_name": "",
+        "role": "dps",
     }
     data.update(overrides)
     respx.post(CREATE_URL).mock(
@@ -69,100 +86,58 @@ def _post_create(client, **overrides):
     return client.post("/parties/create", data=data)
 
 
-def test_create_submit_redirects_on_success(client):
+def test_create_submit_redirects_on_success_without_character_selected(client):
     with respx.mock:
         log_in(client)
-        respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json=NOT_ELIGIBLE))
         resp = _post_create(client)
 
     assert resp.status_code == 303
     assert resp.headers["location"] == "/parties/12345"
 
 
-def test_create_submit_auto_joins_when_exactly_one_qualifying_character(client):
-    """공대장이 조건을 만족하는 캐릭터가 하나뿐이면, 개설 직후 참여 버튼을 따로 안 눌러도
-    자동으로 참여돼야 한다."""
+def test_create_submit_joins_with_explicitly_selected_character_and_role(client):
+    """공대장이 개설 폼에서 직접 캐릭터와 역할을 골랐으면, 그 값 그대로 참여 API에 전달돼야 한다
+    (봇이 임의로 캐릭터나 역할을 자동 판정하지 않음)."""
     with respx.mock:
         log_in(client, discord_id="111")
-        respx.get(ELIGIBILITY_URL).mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "can_join": True,
-                    "qualifying": [{"name": "발키리", "level": 1720.0, "class": "발키리"}],
-                    "party_split": None,
-                    "total_slots": 8,
-                },
-            )
-        )
         join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
-        resp = _post_create(client)
+        resp = _post_create(client, character_name="발키리", role="support")
 
     assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/12345"
     assert join_route.called
     sent = json.loads(join_route.calls.last.request.content)
     assert sent["discord_id"] == "111"
     assert sent["character_name"] == "발키리"
-    assert "role" not in sent  # role은 생략 — 봇이 직업 기준으로 자동 판정
+    assert sent["role"] == "support"
 
 
-def test_create_submit_does_not_auto_join_when_multiple_qualifying_characters(client):
-    """어느 캐릭터로 참여할지 애매하면(부계정 등 여러 개 조건 만족) 자동 참여하지 않는다."""
+def test_create_submit_does_not_call_join_when_no_character_selected(client):
     with respx.mock:
         log_in(client, discord_id="111")
-        respx.get(ELIGIBILITY_URL).mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "can_join": True,
-                    "qualifying": [
-                        {"name": "발키리", "level": 1720.0, "class": "발키리"},
-                        {"name": "워로드", "level": 1710.0, "class": "워로드"},
-                    ],
-                    "party_split": None,
-                    "total_slots": 8,
-                },
-            )
+        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = _post_create(client, character_name="")
+
+    assert resp.status_code == 303
+    assert not join_route.called
+
+
+def test_create_submit_redirects_with_join_error_when_join_fails(client):
+    """선택한 캐릭터로 참여가 실패해도(레벨 미달 등) 공대는 이미 개설된 상태이니,
+    실패 사유를 상세 페이지에 표시하며 그대로 이동한다."""
+    from urllib.parse import parse_qs, urlparse
+
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.post(JOIN_URL).mock(
+            return_value=httpx.Response(200, json={"success": False, "reason": "레벨이 부족합니다."})
         )
-        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
-        resp = _post_create(client)
+        resp = _post_create(client, character_name="발키리", role="support")
 
     assert resp.status_code == 303
-    assert not join_route.called
-
-
-def test_create_submit_does_not_auto_join_when_party_group_choice_required(client):
-    """레이드가 하위 그룹(party_split)으로 나뉘면 어느 그룹에 갈지 직접 골라야 하므로
-    자동 참여하지 않는다."""
-    with respx.mock:
-        log_in(client, discord_id="111")
-        respx.get(ELIGIBILITY_URL).mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "can_join": True,
-                    "qualifying": [{"name": "발키리", "level": 1720.0, "class": "발키리"}],
-                    "party_split": 4,
-                    "total_slots": 8,
-                },
-            )
-        )
-        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
-        resp = _post_create(client)
-
-    assert resp.status_code == 303
-    assert not join_route.called
-
-
-def test_create_submit_does_not_auto_join_when_not_eligible(client):
-    with respx.mock:
-        log_in(client, discord_id="111")
-        respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json=NOT_ELIGIBLE))
-        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
-        resp = _post_create(client)
-
-    assert resp.status_code == 303
-    assert not join_route.called
+    parsed = urlparse(resp.headers["location"])
+    assert parsed.path == "/parties/12345"
+    assert parse_qs(parsed.query)["join_error"] == ["레벨이 부족합니다."]
 
 
 def test_create_submit_shows_error_on_failure(client):
@@ -173,8 +148,7 @@ def test_create_submit_shows_error_on_failure(client):
                 200, json={"success": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."}
             )
         )
-        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
-        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=PROFICIENCY))
+        _mock_form_deps()
         resp = client.post(
             "/parties/create",
             data={
@@ -183,6 +157,8 @@ def test_create_submit_shows_error_on_failure(client):
                 "proficiency": "숙련",
                 "scheduled_datetime": "2026-05-20T20:00",
                 "memo": "",
+                "character_name": "",
+                "role": "dps",
             },
         )
 

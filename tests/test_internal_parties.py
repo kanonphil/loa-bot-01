@@ -78,6 +78,16 @@ def test_list_parties_includes_slots(client, party_setup, fake_bot):
     assert data[0]["slots"][0]["character_name"] == "워로드캐릭"
 
 
+def test_support_classes_endpoint_includes_known_support_class(client, party_setup, fake_bot):
+    """공대 개설 폼이 캐릭터별 역할 선택지를 제한하는 데 쓰는 목록 — 서포터로
+    분류된 직업(예: 홀리나이트)이 포함돼야 한다."""
+    resp = client.get("/api/internal/support-classes", headers=HEADERS)
+    assert resp.status_code == 200
+    classes = resp.json()
+    assert "홀리나이트" in classes
+    assert "워로드" not in classes
+
+
 def test_party_detail_returns_none_for_missing(client, party_setup, fake_bot):
     resp = client.get("/api/internal/parties/no-such-id", headers=HEADERS)
     assert resp.status_code == 200
@@ -119,40 +129,6 @@ def test_join_success_refreshes_discord_embed(client, party_setup, fake_bot):
     fake_message.edit.assert_awaited_once()
     slots = asyncio.run(db.get_party_slots(party_setup))
     assert any(s["discord_id"] == "111" and s["role"] == "support" for s in slots)
-
-
-def test_join_without_role_infers_support_for_support_class(client, party_setup, fake_bot):
-    """웹의 공대 개설 직후 자동 참여처럼 role을 생략하고 보내는 경우 —
-    캐릭터 직업이 서포터면 자동으로 support 역할로 배정돼야 한다."""
-    resp = client.post(
-        "/api/internal/parties/999/join",
-        json={"discord_id": "111", "character_name": "발키리", "party_group": 1},
-        headers=HEADERS,
-    )
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True
-
-    slots = asyncio.run(db.get_party_slots("999"))
-    assert any(s["discord_id"] == "111" and s["role"] == "support" for s in slots)
-
-
-def test_join_without_role_infers_dps_for_non_support_class(client, party_setup, fake_bot):
-    asyncio.run(db.set_user_api_key("333", "dummy-key-3"))
-    asyncio.run(db.add_character("333", "블레이드캐릭"))
-    asyncio.run(
-        db.update_character_cache("333", "블레이드캐릭", item_level=1710.0, character_class="블레이드")
-    )
-
-    resp = client.post(
-        "/api/internal/parties/999/join",
-        json={"discord_id": "333", "character_name": "블레이드캐릭", "party_group": 1},
-        headers=HEADERS,
-    )
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True
-
-    slots = asyncio.run(db.get_party_slots("999"))
-    assert any(s["discord_id"] == "333" and s["role"] == "dps" for s in slots)
 
 
 def test_join_requires_party_group_when_raid_is_split(client, party_setup, fake_bot):

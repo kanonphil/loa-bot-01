@@ -31,6 +31,12 @@ async def create_party_form(
     difficulties_by_raid = {
         name: list(info["difficulties"].keys()) for name, info in active_raids.items()
     }
+    characters = await bot_client.get_user_characters_grouped(user["discord_id"])
+    support_classes = set(await bot_client.get_support_classes())
+    # 캐릭터 직업이 서포터가 아니면 "서포터" 역할을 고를 수 없다 — 참여 API도 동일하게 검증한다.
+    character_is_support = {
+        c["character_name"]: c["character_class"] in support_classes for c in characters
+    }
     return templates.TemplateResponse(
         request,
         "party_create.html",
@@ -40,6 +46,8 @@ async def create_party_form(
             "raids": active_raids,
             "difficulties_by_raid_json": json.dumps(difficulties_by_raid, ensure_ascii=False),
             "proficiency_options": proficiency_options,
+            "characters": characters,
+            "character_is_support_json": json.dumps(character_is_support, ensure_ascii=False),
             "error": error,
         },
     )
@@ -53,6 +61,8 @@ async def create_party_submit(
     proficiency: str = Form(...),
     scheduled_datetime: str = Form(...),
     memo: str = Form(""),
+    character_name: str = Form(""),
+    role: str = Form("dps"),
     user: dict = Depends(get_current_user),
 ):
     result = await bot_client.create_party(
@@ -63,25 +73,16 @@ async def create_party_submit(
         return await create_party_form(request, error=result["reason"], user=user)
 
     message_id = result["message_id"]
-    await _auto_join_leader_if_unambiguous(message_id, user["discord_id"])
+    character_name = character_name.strip()
+    if character_name:
+        join_result = await bot_client.join_party(message_id, user["discord_id"], character_name, role)
+        if not join_result.get("success"):
+            from urllib.parse import quote
+
+            reason = quote(join_result.get("reason") or "선택한 캐릭터로 자동 참여하지 못했습니다.")
+            return RedirectResponse(f"/parties/{message_id}?join_error={reason}", status_code=303)
+
     return RedirectResponse(f"/parties/{message_id}", status_code=303)
-
-
-async def _auto_join_leader_if_unambiguous(message_id: str, discord_id: str) -> None:
-    """공대 개설 직후 파티장이 참여 버튼을 따로 안 눌러도 되도록, 조건을 만족하는
-    캐릭터가 정확히 하나뿐일 때만 자동으로 참여시킨다. 여러 캐릭터가 조건을 만족하면
-    (부계정 등 어떤 캐릭터로 갈지는 사용자가 직접 골라야 하므로) 자동 참여하지 않는다."""
-    eligibility = await bot_client.get_party_eligibility(message_id, discord_id)
-    if not eligibility.get("can_join"):
-        return
-    qualifying = eligibility.get("qualifying") or []
-    if len(qualifying) != 1:
-        return
-    party_split = eligibility.get("party_split")
-    total_slots = eligibility.get("total_slots") or 0
-    if party_split and total_slots > party_split:
-        return  # 파티가 하위 그룹으로 나뉘어 있으면 어느 그룹에 갈지 직접 골라야 함
-    await bot_client.join_party(message_id, discord_id, qualifying[0]["name"])
 
 
 async def _detail_context(message_id: str, discord_id: str) -> dict:
@@ -151,11 +152,17 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
 
 @router.get("/parties/{message_id}")
 async def party_detail(
-    request: Request, message_id: str, user: dict = Depends(get_current_user)
+    request: Request,
+    message_id: str,
+    join_error: str | None = None,
+    user: dict = Depends(get_current_user),
 ):
     ctx = await _detail_context(message_id, user["discord_id"])
+    action_result = {"success": False, "reason": join_error} if join_error else None
     return templates.TemplateResponse(
-        request, "party_detail.html", {"user": user, "active": "parties", **ctx}
+        request,
+        "party_detail.html",
+        {"user": user, "active": "parties", "action_result": action_result, **ctx},
     )
 
 

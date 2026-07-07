@@ -72,6 +72,15 @@ async def get_raid_categories() -> list[dict]:
         return resp.json()
 
 
+async def get_support_classes() -> list[str]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/support-classes", headers=_headers()
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_completions(discord_id: str, character_name: str) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
@@ -216,12 +225,10 @@ async def join_party(
     message_id: str,
     discord_id: str,
     character_name: str,
-    role: str | None = None,
+    role: str,
     party_group: int | None = None,
 ) -> dict:
-    payload = {"discord_id": discord_id, "character_name": character_name}
-    if role is not None:
-        payload["role"] = role
+    payload = {"discord_id": discord_id, "character_name": character_name, "role": role}
     if party_group is not None:
         payload["party_group"] = party_group
     async with httpx.AsyncClient(timeout=10) as client:
