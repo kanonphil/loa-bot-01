@@ -121,6 +121,40 @@ def test_join_success_refreshes_discord_embed(client, party_setup, fake_bot):
     assert any(s["discord_id"] == "111" and s["role"] == "support" for s in slots)
 
 
+def test_join_without_role_infers_support_for_support_class(client, party_setup, fake_bot):
+    """웹의 공대 개설 직후 자동 참여처럼 role을 생략하고 보내는 경우 —
+    캐릭터 직업이 서포터면 자동으로 support 역할로 배정돼야 한다."""
+    resp = client.post(
+        "/api/internal/parties/999/join",
+        json={"discord_id": "111", "character_name": "발키리", "party_group": 1},
+        headers=HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    slots = asyncio.run(db.get_party_slots("999"))
+    assert any(s["discord_id"] == "111" and s["role"] == "support" for s in slots)
+
+
+def test_join_without_role_infers_dps_for_non_support_class(client, party_setup, fake_bot):
+    asyncio.run(db.set_user_api_key("333", "dummy-key-3"))
+    asyncio.run(db.add_character("333", "블레이드캐릭"))
+    asyncio.run(
+        db.update_character_cache("333", "블레이드캐릭", item_level=1710.0, character_class="블레이드")
+    )
+
+    resp = client.post(
+        "/api/internal/parties/999/join",
+        json={"discord_id": "333", "character_name": "블레이드캐릭", "party_group": 1},
+        headers=HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    slots = asyncio.run(db.get_party_slots("999"))
+    assert any(s["discord_id"] == "333" and s["role"] == "dps" for s in slots)
+
+
 def test_join_requires_party_group_when_raid_is_split(client, party_setup, fake_bot):
     resp = client.post(
         "/api/internal/parties/999/join",

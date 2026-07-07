@@ -61,7 +61,27 @@ async def create_party_submit(
     )
     if not result["success"]:
         return await create_party_form(request, error=result["reason"], user=user)
-    return RedirectResponse(f"/parties/{result['message_id']}", status_code=303)
+
+    message_id = result["message_id"]
+    await _auto_join_leader_if_unambiguous(message_id, user["discord_id"])
+    return RedirectResponse(f"/parties/{message_id}", status_code=303)
+
+
+async def _auto_join_leader_if_unambiguous(message_id: str, discord_id: str) -> None:
+    """공대 개설 직후 파티장이 참여 버튼을 따로 안 눌러도 되도록, 조건을 만족하는
+    캐릭터가 정확히 하나뿐일 때만 자동으로 참여시킨다. 여러 캐릭터가 조건을 만족하면
+    (부계정 등 어떤 캐릭터로 갈지는 사용자가 직접 골라야 하므로) 자동 참여하지 않는다."""
+    eligibility = await bot_client.get_party_eligibility(message_id, discord_id)
+    if not eligibility.get("can_join"):
+        return
+    qualifying = eligibility.get("qualifying") or []
+    if len(qualifying) != 1:
+        return
+    party_split = eligibility.get("party_split")
+    total_slots = eligibility.get("total_slots") or 0
+    if party_split and total_slots > party_split:
+        return  # 파티가 하위 그룹으로 나뉘어 있으면 어느 그룹에 갈지 직접 골라야 함
+    await bot_client.join_party(message_id, discord_id, qualifying[0]["name"])
 
 
 async def _detail_context(message_id: str, discord_id: str) -> dict:

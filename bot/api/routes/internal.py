@@ -204,7 +204,7 @@ async def party_eligibility(message_id: str, discord_id: str):
 class JoinPartyBody(BaseModel):
   discord_id: str
   character_name: str
-  role: str = "dps"
+  role: str | None = None  # 생략하면 캐릭터 직업 기준으로 자동 판정(서포터 직업이면 support)
   party_group: int | None = None  # 파티가 하위 그룹으로 나뉜 경우에만 필요
 
 
@@ -224,7 +224,10 @@ async def join_party(message_id: str, body: JoinPartyBody):
   if char_info is None:
     return {"success": False, "reason": "선택한 캐릭터는 참여 조건을 만족하지 않습니다."}
 
-  role = body.role if body.role in ("dps", "support") else "dps"
+  if body.role in ("dps", "support"):
+    role = body.role
+  else:
+    role = "support" if char_info["class"] in SUPPORT_CLASSES else "dps"
   if role == "support" and char_info["class"] not in SUPPORT_CLASSES:
     return {"success": False, "reason": "서포터 역할은 서포터 직업만 선택할 수 있습니다."}
 

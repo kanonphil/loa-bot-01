@@ -216,10 +216,12 @@ async def join_party(
     message_id: str,
     discord_id: str,
     character_name: str,
-    role: str,
+    role: str | None = None,
     party_group: int | None = None,
 ) -> dict:
-    payload = {"discord_id": discord_id, "character_name": character_name, "role": role}
+    payload = {"discord_id": discord_id, "character_name": character_name}
+    if role is not None:
+        payload["role"] = role
     if party_group is not None:
         payload["party_group"] = party_group
     async with httpx.AsyncClient(timeout=10) as client:

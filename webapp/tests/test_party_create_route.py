@@ -1,4 +1,6 @@
 """공대 개설(/parties/create) 웹 라우트 검증 — 봇 서버는 respx로 모킹."""
+import json
+
 import httpx
 import respx
 
@@ -7,6 +9,10 @@ from webapp.tests.conftest import log_in
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 PROFICIENCY_URL = "http://bot-server.internal/api/internal/parties/proficiency-options"
 CREATE_URL = "http://bot-server.internal/api/internal/parties/create"
+ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/12345/eligibility"
+JOIN_URL = "http://bot-server.internal/api/internal/parties/12345/join"
+
+NOT_ELIGIBLE = {"can_join": False, "reason": "이미 파티에 참여 중입니다."}
 
 RAIDS = {
     "아르모체(4막)": {
@@ -48,25 +54,115 @@ def test_create_form_shows_only_active_raids(client):
     assert "트라이" in resp.text
 
 
+def _post_create(client, **overrides):
+    data = {
+        "raid_name": "아르모체(4막)",
+        "difficulty": "노말",
+        "proficiency": "숙련",
+        "scheduled_datetime": "2026-05-20T20:00",
+        "memo": "음성 필수",
+    }
+    data.update(overrides)
+    respx.post(CREATE_URL).mock(
+        return_value=httpx.Response(200, json={"success": True, "message_id": "12345"})
+    )
+    return client.post("/parties/create", data=data)
+
+
 def test_create_submit_redirects_on_success(client):
     with respx.mock:
         log_in(client)
-        respx.post(CREATE_URL).mock(
-            return_value=httpx.Response(200, json={"success": True, "message_id": "12345"})
-        )
-        resp = client.post(
-            "/parties/create",
-            data={
-                "raid_name": "아르모체(4막)",
-                "difficulty": "노말",
-                "proficiency": "숙련",
-                "scheduled_datetime": "2026-05-20T20:00",
-                "memo": "음성 필수",
-            },
-        )
+        respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json=NOT_ELIGIBLE))
+        resp = _post_create(client)
 
     assert resp.status_code == 303
     assert resp.headers["location"] == "/parties/12345"
+
+
+def test_create_submit_auto_joins_when_exactly_one_qualifying_character(client):
+    """공대장이 조건을 만족하는 캐릭터가 하나뿐이면, 개설 직후 참여 버튼을 따로 안 눌러도
+    자동으로 참여돼야 한다."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(ELIGIBILITY_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "can_join": True,
+                    "qualifying": [{"name": "발키리", "level": 1720.0, "class": "발키리"}],
+                    "party_split": None,
+                    "total_slots": 8,
+                },
+            )
+        )
+        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = _post_create(client)
+
+    assert resp.status_code == 303
+    assert join_route.called
+    sent = json.loads(join_route.calls.last.request.content)
+    assert sent["discord_id"] == "111"
+    assert sent["character_name"] == "발키리"
+    assert "role" not in sent  # role은 생략 — 봇이 직업 기준으로 자동 판정
+
+
+def test_create_submit_does_not_auto_join_when_multiple_qualifying_characters(client):
+    """어느 캐릭터로 참여할지 애매하면(부계정 등 여러 개 조건 만족) 자동 참여하지 않는다."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(ELIGIBILITY_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "can_join": True,
+                    "qualifying": [
+                        {"name": "발키리", "level": 1720.0, "class": "발키리"},
+                        {"name": "워로드", "level": 1710.0, "class": "워로드"},
+                    ],
+                    "party_split": None,
+                    "total_slots": 8,
+                },
+            )
+        )
+        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = _post_create(client)
+
+    assert resp.status_code == 303
+    assert not join_route.called
+
+
+def test_create_submit_does_not_auto_join_when_party_group_choice_required(client):
+    """레이드가 하위 그룹(party_split)으로 나뉘면 어느 그룹에 갈지 직접 골라야 하므로
+    자동 참여하지 않는다."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(ELIGIBILITY_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "can_join": True,
+                    "qualifying": [{"name": "발키리", "level": 1720.0, "class": "발키리"}],
+                    "party_split": 4,
+                    "total_slots": 8,
+                },
+            )
+        )
+        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = _post_create(client)
+
+    assert resp.status_code == 303
+    assert not join_route.called
+
+
+def test_create_submit_does_not_auto_join_when_not_eligible(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json=NOT_ELIGIBLE))
+        join_route = respx.post(JOIN_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = _post_create(client)
+
+    assert resp.status_code == 303
+    assert not join_route.called
 
 
 def test_create_submit_shows_error_on_failure(client):

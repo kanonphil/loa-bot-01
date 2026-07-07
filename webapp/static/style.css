@@ -2091,6 +2091,72 @@ a.calendar-party:hover {
   border-color: var(--accent);
 }
 
+/* ── 경매 분배금 계산기 ───────────────────────────────────── */
+
+.calc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 420px;
+  margin-top: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.calc-field input,
+.calc-field select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.calc-field input:focus,
+.calc-field select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.calc-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.calc-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.calc-result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.calc-result-row strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
 /* ── 모바일 대응 ───────────────────────────────────────── */
 
 .mobile-menu-btn {
@@ -2165,6 +2231,16 @@ a.calendar-party:hover {
 
   .expedition-list {
     grid-template-columns: 1fr;
+  }
+
+  .expedition-add-form,
+  .expedition-account-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .expedition-add-form input {
+    max-width: none;
   }
 
   .calendar-cell {
