@@ -79,7 +79,8 @@
   fillDifficulties();
 
   // 딜러 전용 직업은 서포터 역할을 고를 수 없다 (참여 API도 동일하게 검증) — 선택한
-  // 캐릭터가 서포터 직업이 아니면 "서포터" 옵션을 막고 자동으로 딜러로 되돌린다.
+  // 캐릭터가 서포터 직업이 아니면 "서포터" 옵션을 막고 자동으로 딜러로 되돌리고,
+  // 서포터 직업이면 편의상 역할을 자동으로 서포터로 맞춰준다.
   const characterIsSupport = {{ character_is_support_json | safe }};
   const characterSelect = document.getElementById("character-name-select");
   const roleSelect = document.getElementById("role-select");
@@ -90,6 +91,8 @@
     supportOption.disabled = characterSelect.value !== "" && !isSupport;
     if (supportOption.disabled && roleSelect.value === "support") {
       roleSelect.value = "dps";
+    } else if (isSupport) {
+      roleSelect.value = "support";
     }
   }
 
