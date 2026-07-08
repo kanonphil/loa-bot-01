@@ -2127,21 +2127,51 @@ a.calendar-party:hover {
   outline: none;
 }
 
-.calc-checkbox {
+.calc-party-size-field {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
+  padding: 0;
+  border: none;
+  margin: 0;
+}
+
+.calc-party-size-field legend {
+  padding: 0;
+  margin-right: 4px;
+}
+
+.calc-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   color: var(--text-muted);
   cursor: pointer;
 }
 
-.calc-result {
+.calc-radio input[type="number"] {
+  width: 90px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.calc-result-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+.calc-result-heading {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px;
 }
 
 .calc-result-row {

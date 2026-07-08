@@ -16,7 +16,8 @@ def test_renders_calculator_form(client):
         resp = client.get("/tools/auction-calculator")
 
     assert resp.status_code == 200
-    assert 'id="calc-bid"' in resp.text
-    assert 'id="calc-party-size"' in resp.text
-    assert 'id="calc-fee"' in resp.text
-    assert 'id="calc-include-winner"' in resp.text
+    assert 'id="calc-price"' in resp.text
+    assert 'name="calc-party-size"' in resp.text
+    assert 'id="calc-party-size-custom"' in resp.text
+    assert 'id="calc-use-bid"' in resp.text
+    assert 'id="calc-sell-breakeven"' in resp.text
