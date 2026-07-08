@@ -1317,6 +1317,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   gap: 6px;
   min-width: 0;
   flex: 1;
+  text-decoration: none;
+  color: inherit;
+}
+
+.expedition-item-main:hover .dash-char-name {
+  color: var(--accent);
 }
 
 .expedition-item-meta {
@@ -2185,6 +2191,236 @@ a.calendar-party:hover {
 .calc-result-row strong {
   color: var(--text);
   font-size: 16px;
+}
+
+/* ── 캐릭터 상세 정보 ─────────────────────────────────────── */
+
+.char-detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.char-detail-header h1 {
+  margin: 0;
+}
+
+.char-detail-sub {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.char-detail-section {
+  margin-bottom: 28px;
+}
+
+.char-detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.char-arkpassive-points {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.char-arkpassive-point-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.char-arkpassive-point-name {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.char-arkpassive-point-desc {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.char-arkpassive-category {
+  margin-bottom: 10px;
+}
+
+.char-arkpassive-category-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+
+.char-arkpassive-effect-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.char-skill-list,
+.char-accessory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.char-skill-card,
+.char-accessory-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.char-skill-header,
+.char-accessory-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.char-skill-name,
+.char-accessory-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.char-skill-level {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.char-skill-tripods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.char-tripod-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--sidebar-bg);
+  color: var(--text-muted);
+}
+
+.char-skill-rune {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.char-rune-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.char-rune-name {
+  font-weight: 600;
+}
+
+.char-rune-effect {
+  color: var(--text-muted);
+}
+
+.char-accessory-type {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.char-quality-badge {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.char-quality-상 {
+  background: rgba(255, 210, 0, 0.15);
+  color: #ffd200;
+}
+
+.char-quality-중 {
+  background: rgba(190, 130, 255, 0.15);
+  color: #be82ff;
+}
+
+.char-quality-하 {
+  background: rgba(122, 168, 224, 0.15);
+  color: #7aa8e0;
+}
+
+.char-honing-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.char-accessory-arkpassive {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.char-gem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.char-gem-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.char-gem-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+}
+
+.char-gem-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.char-gem-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.char-gem-effect {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* ── 모바일 대응 ───────────────────────────────────────── */

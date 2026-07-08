@@ -79,6 +79,14 @@ async def completions(discord_id: str, character_name: str):
   return {"week_key": week_key, "completions": sorted(done)}
 
 
+@router.get("/armory-detail")
+async def armory_detail(discord_id: str, character_name: str):
+  """캐릭터 상세 정보(스킬/트라이포드/룬/아크패시브/장신구 품질·연마/보석)."""
+  from bot.services.armory import get_character_armory_detail
+
+  return await get_character_armory_detail(discord_id, character_name)
+
+
 class ToggleCompletionBody(BaseModel):
   discord_id: str
   character_name: str

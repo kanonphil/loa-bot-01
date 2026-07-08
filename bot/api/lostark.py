@@ -4,6 +4,7 @@ from typing import Optional
 
 LOA_API_BASE = "https://developer-lostark.game.onstove.com"
 ARMORY_FILTERS = "profiles+equipment+engravings+gems+cards"
+ARMORY_DETAIL_FILTERS = "profiles+equipment+combat-skills+arkpassive+gems"
 
 # 공유 세션 (API 키는 요청마다 헤더로 전달)
 _shared_session: Optional[aiohttp.ClientSession] = None
@@ -63,12 +64,12 @@ async def get_siblings(api_key: str, character_name: str) -> Optional[list[dict]
     return await _get(api_key, f"/characters/{_enc(character_name)}/siblings")
 
 
-async def get_armory(api_key: str, character_name: str) -> Optional[dict]:
+async def get_armory(api_key: str, character_name: str, filters: str = ARMORY_FILTERS) -> Optional[dict]:
     """캐릭터 상세 정보"""
     return await _get(
         api_key,
         f"/armories/characters/{_enc(character_name)}",
-        params={"filters": ARMORY_FILTERS},
+        params={"filters": filters},
     )
 
 

@@ -14,6 +14,7 @@ from webapp.routes import (
     auth_routes,
     board,
     calendar,
+    character,
     chat,
     dashboard,
     events,
@@ -76,6 +77,7 @@ app.include_router(pages.router)
 app.include_router(chat.router)
 app.include_router(dashboard.router)
 app.include_router(expedition.router)
+app.include_router(character.router)
 app.include_router(raid_check.router)
 app.include_router(party.router)
 app.include_router(calendar.router)
