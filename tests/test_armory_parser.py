@@ -244,6 +244,15 @@ def test_parse_gems_handles_none():
     assert parser.parse_gems(None) == []
 
 
+def test_format_combat_power_adds_thousands_separators():
+    assert parser._format_combat_power("123456789") == "123,456,789"
+
+
+def test_format_combat_power_handles_none_and_non_numeric():
+    assert parser._format_combat_power(None) is None
+    assert parser._format_combat_power("모름") == "모름"
+
+
 def test_parse_armory_detail_combines_all_sections():
     raw = {
         "ArmoryProfile": {
@@ -266,6 +275,7 @@ def test_parse_armory_detail_combines_all_sections():
     result = parser.parse_armory_detail(raw)
     assert result["character_name"] == "테스트캐릭"
     assert result["character_class"] == "홀리나이트"
+    assert result["combat_power"] == "123,456,789"
     assert len(result["skills"]) == 1
     assert len(result["ark_passive"]["points"]) == 3
     assert len(result["accessories"]) == 1

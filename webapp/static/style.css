@@ -2423,6 +2423,82 @@ a.calendar-party:hover {
   color: var(--text-muted);
 }
 
+/* ── 공대 모집 파티원 hover 카드 ──────────────────────────── */
+
+.party-member-popover {
+  display: none;
+  position: fixed;
+  z-index: 300;
+  max-width: 260px;
+}
+
+.member-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.member-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.member-card-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.member-card-class {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.member-card-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.member-card-quality {
+  display: flex;
+  gap: 4px;
+}
+
+.member-card-quality .char-quality-badge {
+  padding: 1px 8px;
+}
+
+.member-card-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.member-card-link:hover {
+  text-decoration: underline;
+}
+
+.member-card-error {
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 240px;
+}
+
+.party-slot.filled[data-character-name] {
+  cursor: pointer;
+}
+
 /* ── 모바일 대응 ───────────────────────────────────────── */
 
 .mobile-menu-btn {

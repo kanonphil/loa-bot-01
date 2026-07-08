@@ -19,7 +19,7 @@
 {% else %}
 {% macro slot_row(s) %}
   {% if s.filled %}
-  <div class="party-slot filled">
+  <div class="party-slot filled" data-discord-id="{{ s.discord_id }}" data-character-name="{{ s.character_name }}">
     <span class="slot-number">{{ s.local_number if s.local_number is defined else s.slot_number }}</span>
     <span class="slot-char">{{ s.character_name }}</span>
     <span class="slot-class">{{ s.character_class }}</span>
@@ -166,6 +166,8 @@
   initPartyDatetimePicker("#reschedule-datetime-input");
 </script>
 {% endif %}
+<div class="party-member-popover" id="party-member-popover"></div>
+<script src="/static/party-member-card.js"></script>
 </div>
 {% endif %}
 {% endblock %}

@@ -1,4 +1,7 @@
-"""캐릭터 상세 정보(/characters/{character_name}) 웹 라우트 검증 — 봇 서버는 respx로 모킹."""
+"""캐릭터 상세 정보(/characters/{character_name}, /party-member-card) 웹 라우트 검증
+— 봇 서버는 respx로 모킹."""
+from urllib.parse import parse_qs, urlparse
+
 import httpx
 import respx
 
@@ -81,3 +84,61 @@ def test_renders_error_when_not_found(client):
     assert resp.status_code == 200
     assert "정보를 불러올 수 없습니다" in resp.text
     assert "/api등록" in resp.text
+
+
+def test_uses_own_discord_id_by_default(client):
+    """discord_id 쿼리파라미터 없이 들어오면(원정대 관리에서 진입) 로그인한 본인 기준으로 조회."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        route = respx.get(ARMORY_URL).mock(return_value=httpx.Response(200, json=DETAIL))
+        client.get("/characters/발키리")
+
+    sent_params = parse_qs(urlparse(str(route.calls.last.request.url)).query)
+    assert sent_params["discord_id"] == ["111"]
+
+
+def test_uses_explicit_discord_id_when_provided(client):
+    """공대 모집 '자세히 보기'처럼 다른 사람 캐릭터를 볼 땐 그 사람의 discord_id로 조회해야 한다."""
+    with respx.mock:
+        log_in(client, discord_id="111")  # 로그인은 111이지만
+        route = respx.get(ARMORY_URL).mock(return_value=httpx.Response(200, json=DETAIL))
+        client.get("/characters/발키리", params={"discord_id": "222"})  # 조회 대상은 222
+
+    sent_params = parse_qs(urlparse(str(route.calls.last.request.url)).query)
+    assert sent_params["discord_id"] == ["222"]
+
+
+PARTY_MEMBER_CARD_URL = "http://bot-server.internal/api/internal/armory-detail"
+
+
+def test_party_member_card_requires_login(client):
+    resp = client.get("/party-member-card", params={"discord_id": "222", "character_name": "발키리"})
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login"
+
+
+def test_party_member_card_renders_compact_summary(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(PARTY_MEMBER_CARD_URL).mock(return_value=httpx.Response(200, json=DETAIL))
+        resp = client.get("/party-member-card", params={"discord_id": "222", "character_name": "발키리"})
+
+    assert resp.status_code == 200
+    assert "발키리" in resp.text
+    assert "홀리나이트" in resp.text
+    assert "123456789" in resp.text or "123,456,789" in resp.text
+    assert "품질 96" not in resp.text  # 컴팩트 카드는 "품질 N" 문구 없이 배지에 숫자만
+    assert "자세히 보기" in resp.text
+    assert "discord_id=222" in resp.text  # 링크가 대상자의 discord_id를 유지해야 함
+
+
+def test_party_member_card_shows_error_message(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(PARTY_MEMBER_CARD_URL).mock(
+            return_value=httpx.Response(200, json={"error": "API 키가 만료되었습니다."})
+        )
+        resp = client.get("/party-member-card", params={"discord_id": "222", "character_name": "발키리"})
+
+    assert resp.status_code == 200
+    assert "API 키가 만료되었습니다." in resp.text

@@ -162,6 +162,17 @@ def parse_gems(gem_data: dict | None) -> list[dict]:
     return result
 
 
+def _format_combat_power(raw) -> str | None:
+    """전투력은 문자열 숫자로 내려오는데, 천단위 콤마 없이 그대로 보여주면 자릿수를
+    가늠하기 어려워 콤마를 붙인다. 숫자가 아니면(예외적인 경우) 원본을 그대로 반환."""
+    if raw is None:
+        return None
+    try:
+        return f"{int(float(raw)):,}"
+    except (TypeError, ValueError):
+        return str(raw)
+
+
 def parse_armory_detail(raw: dict) -> dict:
     """아머리 원본 응답(profiles+equipment+combat-skills+arkpassive+gems 필터) 전체를 정리."""
     profile = raw.get("ArmoryProfile") or {}
@@ -169,7 +180,7 @@ def parse_armory_detail(raw: dict) -> dict:
         "character_name": profile.get("CharacterName"),
         "character_class": profile.get("CharacterClassName"),
         "item_level": profile.get("ItemAvgLevel"),
-        "combat_power": profile.get("CombatPower"),
+        "combat_power": _format_combat_power(profile.get("CombatPower")),
         "skills": parse_skills(raw.get("ArmorySkills")),
         "ark_passive": parse_ark_passive(raw.get("ArkPassive")),
         "accessories": parse_accessories(raw.get("ArmoryEquipment")),

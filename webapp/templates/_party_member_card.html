@@ -1,0 +1,24 @@
+{% if detail.error %}
+<div class="member-card-error">{{ detail.error }}</div>
+{% else %}
+<div class="member-card">
+  <div class="member-card-header">
+    <span class="member-card-name">{{ detail.character_name }}</span>
+    <span class="member-card-class">{{ detail.character_class }}</span>
+  </div>
+  <div class="member-card-stats">
+    <span>Lv {{ detail.item_level }}</span>
+    {% if detail.combat_power %}<span>전투력 {{ detail.combat_power }}</span>{% endif %}
+  </div>
+  {% if detail.accessories %}
+  <div class="member-card-quality">
+    {% for a in detail.accessories %}
+    {% if a.quality is not none %}
+    <span class="char-quality-badge char-quality-{{ a.quality_tier }}" title="{{ a.type }} {{ a.quality }}">{{ a.quality }}</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+  <a class="member-card-link" href="/characters/{{ detail.character_name }}?discord_id={{ discord_id }}">자세히 보기 →</a>
+</div>
+{% endif %}
