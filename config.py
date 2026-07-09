@@ -13,6 +13,11 @@ WEBAPP_API_KEY: str = os.environ.get("WEBAPP_API_KEY", "changeme-webapp")
 # 빈 문자열이면 길드 확인을 건너뜀 (다른 서버에서 재사용할 때 대비).
 REQUIRED_GUILD_NAME: str = os.environ.get("REQUIRED_GUILD_NAME", "동물롱장")
 
+# 게스트(API 키 미등록자) 초대 시 캐릭터 정보(직업/전투력/아이템레벨) 조회에 쓸 API 키의 소유자.
+# 로스트아크 오픈API 캐릭터 조회는 조회 대상 소유 키가 아니어도 되는 공개 조회라, 이 discord_id가
+# /api등록으로 등록해둔 키를 그대로 재사용한다. 비어있으면 게스트 초대 시 조회를 건너뛴다.
+GUEST_LOOKUP_DISCORD_ID: str = os.environ.get("GUEST_LOOKUP_DISCORD_ID", "")
+
 # ── API 키 암호화 ─────────────────────────────────────────
 # .env에 ENCRYPTION_KEY가 없으면 평문 저장 (미설정 환경 호환)
 # 키 생성: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

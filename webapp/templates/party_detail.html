@@ -24,6 +24,7 @@
     <span class="slot-char">{{ s.character_name }}</span>
     <span class="slot-class">{{ s.character_class }}</span>
     <span class="role-badge role-{{ s.role }}">{{ "서포터" if s.role == "support" else "딜러" }}</span>
+    {% if s.is_guest %}<span class="guest-badge">게스트</span>{% endif %}
   </div>
   {% else %}
   <div class="party-slot empty">

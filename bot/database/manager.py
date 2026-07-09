@@ -893,14 +893,22 @@ async def get_party_by_channel(channel_id: str) -> Optional[dict]:
 
 
 async def get_party_slots(message_id: str) -> list[dict]:
+    """is_guest: /api등록으로 users 테이블에 있는 유저가 아니면(=게스트 초대로 참여) True."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT * FROM party_slots WHERE party_message_id=? ORDER BY slot_number",
+            "SELECT ps.*, (u.discord_id IS NULL) AS is_guest FROM party_slots ps "
+            "LEFT JOIN users u ON u.discord_id = ps.discord_id "
+            "WHERE ps.party_message_id=? ORDER BY ps.slot_number",
             (message_id,),
         )
         rows = await cur.fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        row = dict(r)
+        row["is_guest"] = bool(row["is_guest"])
+        result.append(row)
+    return result
 
 
 

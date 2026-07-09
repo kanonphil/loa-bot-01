@@ -233,7 +233,8 @@ def _slot_text(slot: dict | None, is_reserved: bool = False) -> str:
     if slot:
         role = slot.get("role", "dps")
         icon = "🛡️" if role == "support" else "⚔️"
-        return f"{icon} **{slot['character_name']}** · _{slot['character_class']}_"
+        guest_tag = " 🧑‍🤝‍🧑 _게스트_" if slot.get("is_guest") else ""
+        return f"{icon} **{slot['character_name']}** · _{slot['character_class']}_{guest_tag}"
     if is_reserved:
         return "⏳ _예약됨_"
     return "➖ _빈 자리_"

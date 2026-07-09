@@ -797,6 +797,16 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   color: var(--accent);
 }
 
+.guest-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: rgba(201, 168, 108, 0.18);
+  color: #c9a86c;
+}
+
 .party-join-form {
   display: flex;
   flex-wrap: wrap;

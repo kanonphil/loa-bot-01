@@ -101,6 +101,28 @@ def test_party_detail_shows_leave_when_already_joined(client):
     assert "party-leave-btn" in resp.text
 
 
+def test_party_detail_shows_guest_badge_for_guest_slot(client):
+    party_with_guest = {
+        **PARTY,
+        "slots": [
+            {"slot_number": 1, "discord_id": "222", "character_name": "워로드캐릭",
+             "character_class": "워로드", "role": "dps", "is_guest": False},
+            {"slot_number": 2, "discord_id": "333", "character_name": "게스트캐릭",
+             "character_class": "디스트로이어", "role": "dps", "is_guest": True},
+        ],
+    }
+    with respx.mock:
+        log_in(client, discord_id="222")  # PARTY 슬롯 주인(리더) — eligibility 호출 없음
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=party_with_guest))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        resp = client.get("/parties/p1")
+
+    assert resp.status_code == 200
+    body = resp.text
+    assert "게스트캐릭" in body
+    assert body.count("guest-badge") == 1  # 게스트 슬롯 1개에만 뱃지 표시
+
+
 def test_party_detail_shows_reason_when_cannot_join(client):
     with respx.mock:
         log_in(client, discord_id="111")

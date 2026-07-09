@@ -8,6 +8,7 @@ from bot.data.raids import RAIDS, get_applicable_raids, get_difficulty_info, SUP
 import bot.database.manager as db
 import bot.api.lostark as loa
 from bot.services.expedition import register_character_auto_detect, sync_characters_for_discord_id
+from bot.services.guest import lookup_guest_character
 
 KST = timezone(timedelta(hours=9))
 
@@ -163,8 +164,12 @@ class InviteResponseView(View):
         discord_id = str(interaction.user.id)
         api_key    = await db.get_user_api_key(discord_id)
         if not api_key:
-            await interaction.response.edit_message(content="❌ `/api등록`으로 API 키를 먼저 등록해주세요.", view=None)
-            self.stop()
+            # API 키 미등록자 = 게스트. 차단하지 않고 캐릭터 닉네임만 입력받아
+            # 관리자 API 키로 직업/전투력/아이템레벨을 조회하는 흐름으로 안내한다.
+            # (self.stop()을 호출하지 않음 — 모달을 닫아버려도 수락 버튼을 다시 누를 수 있어야 함)
+            await interaction.response.send_modal(
+                GuestCharacterNameModal(self.message_id, party, discord_id)
+            )
             return
         registered = await db.get_user_characters(discord_id)
         if not registered:
@@ -348,6 +353,105 @@ class InviteUserSelectView(View):
             view=view,
         )
         self.stop()
+
+
+class GuestUserSelectView(View):
+    """API 등록 여부와 무관하게 디스코드 서버 멤버 아무나 골라 게스트로 초대."""
+
+    def __init__(self, party: dict, original_message: discord.Message,
+                 total_slots: int, occupied: set[int], reserved: set[int],
+                 exclude_ids: set[str]) -> None:
+        super().__init__(timeout=60)
+        self.party             = party
+        self.original_message  = original_message
+        self.total_slots_count = total_slots
+        self.occupied          = occupied
+        self.reserved          = reserved
+        self.exclude_ids       = exclude_ids
+
+        select = discord.ui.UserSelect(placeholder="초대할 게스트를 선택하세요")
+        select.callback = self._on_select
+        self.add_item(select)
+        self._select = select
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        target    = self._select.values[0]
+        target_id = str(target.id)
+        if target_id in self.exclude_ids:
+            await interaction.response.edit_message(content="❌ 이미 파티에 있거나 예약된 유저입니다.", view=None)
+            return
+        view = InviteSlotSelectView(
+            self.party, self.original_message, self.total_slots_count,
+            target_id, target.display_name, self.occupied, self.reserved,
+        )
+        await interaction.response.edit_message(
+            content=f"**{target.display_name}**님을 초대할 슬롯을 선택하세요:",
+            view=view,
+        )
+        self.stop()
+
+
+class GuestCharacterNameModal(Modal, title="게스트 캐릭터 확인"):
+    """API 키 미등록자가 초대를 수락할 때 캐릭터 닉네임만 입력받아, 관리자 API 키로
+    직업/전투력/아이템레벨을 조회해서 보여준다 (본인 입력을 신뢰하지 않고 실제로 검증)."""
+
+    character_name = TextInput(label="캐릭터 닉네임", placeholder="예: 발키리", min_length=2, max_length=12)
+
+    def __init__(self, message_id: str, party: dict, invitee_id: str) -> None:
+        super().__init__()
+        self.message_id = message_id
+        self.party      = party
+        self.invitee_id = invitee_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(thinking=True)
+        info = await lookup_guest_character(self.character_name.value.strip())
+        if "error" in info:
+            await interaction.followup.send(f"❌ {info['error']}")
+            return
+
+        min_level = self.party.get("min_level") or 0
+        if min_level and info["item_level"] < min_level:
+            await interaction.followup.send(
+                f"❌ 최소 아이템 레벨 **{min_level:.0f}** 미달입니다. (현재 **{info['item_level']:.0f}**)"
+            )
+            return
+
+        cp      = info.get("combat_power")
+        cp_text = f"{int(float(cp)):,}" if cp else "?"
+        header  = (
+            f"✅ **{info['character_name']}** ({info['character_class']}, "
+            f"Lv.{info['item_level']:.0f}, 전투력 {cp_text})\n"
+        )
+
+        if info["character_class"] in SUPPORT_CLASSES:
+            view = InviteRoleSelectView(
+                self.message_id, self.party, self.invitee_id,
+                info["character_name"], info["character_class"],
+            )
+            await interaction.followup.send(header + "역할을 선택하세요:", view=view)
+            return
+
+        ok, msg = await db.assign_invite_slot(
+            self.message_id, self.invitee_id,
+            info["character_name"], info["character_class"], "dps",
+        )
+        if not ok:
+            await interaction.followup.send(f"❌ {msg}")
+            return
+
+        await interaction.followup.send(header + "게스트로 공대에 참여했습니다!")
+        party = await db.get_party(self.message_id)
+        if party:
+            await _refresh_party_embed_with_reserved(interaction.client, party)
+            try:
+                leader = await interaction.client.fetch_user(int(party["leader_id"]))
+                await leader.send(
+                    f"✅ **{info['character_name']}**({info['character_class']}, 게스트)님이 "
+                    f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}"
+                )
+            except discord.HTTPException:
+                pass
 
 
 # ─────────────────────────────────────────────────────
@@ -1885,6 +1989,11 @@ class ManageView(View):
         invite_btn.callback = self._handle_invite
         self.add_item(invite_btn)
 
+        guest_invite_btn = Button(label="게스트 초대", emoji="🧑‍🤝‍🧑",
+                                  style=discord.ButtonStyle.secondary, row=3)
+        guest_invite_btn.callback = self._handle_guest_invite
+        self.add_item(guest_invite_btn)
+
 
     async def _refresh_original(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
@@ -2034,6 +2143,26 @@ class ManageView(View):
             invitable, occupied, set(reserved.keys()),
         )
         await interaction.response.edit_message(content="초대할 유저를 선택하세요:", view=view)
+
+    # ── 게스트 초대 (API 키 미등록자 포함, 서버 멤버 아무나) ──────
+
+    async def _handle_guest_invite(self, interaction: discord.Interaction) -> None:
+        party = await db.get_party(self.party["message_id"])
+        if not party or party["status"] == "disbanded":
+            await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
+            return
+
+        slots_in_party = await db.get_party_slots(party["message_id"])
+        reserved       = await db.get_reserved_slots(party["message_id"])
+        occupied       = {s["slot_number"] for s in slots_in_party}
+        in_party_ids   = {s["discord_id"] for s in slots_in_party} | set(reserved.values())
+        in_party_ids.add(party["leader_id"])
+
+        view = GuestUserSelectView(
+            party, self.original_message, self.total_slots,
+            occupied, set(reserved.keys()), in_party_ids,
+        )
+        await interaction.response.edit_message(content="초대할 게스트(서버 멤버 아무나)를 선택하세요:", view=view)
 
     # ── 파티장 위임 ───────────────────────────────────
 
