@@ -43,12 +43,16 @@
     {% for s in detail.skills %}
     <div class="char-skill-card">
       <div class="char-skill-header">
+        {% if s.icon %}<img src="{{ s.icon }}" alt="" class="char-skill-icon">{% endif %}
         <span class="char-skill-name">{{ s.name }}</span>
         <span class="char-skill-level">Lv.{{ s.level }}</span>
       </div>
       <div class="char-skill-tripods">
         {% for t in s.tripods %}
-        <span class="char-tripod-chip">{{ t.name }}</span>
+        <span class="char-tripod-chip">
+          {% if t.icon %}<img src="{{ t.icon }}" alt="" class="char-tripod-icon">{% endif %}
+          {{ t.name }}
+        </span>
         {% endfor %}
       </div>
       {% if s.rune %}
@@ -107,6 +111,55 @@
     </div>
     {% else %}
     <p class="dash-empty">장착된 보석이 없습니다.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="char-detail-section">
+  <h2 class="char-detail-title">아크그리드</h2>
+  {% if detail.ark_grid.effects %}
+  <div class="char-arkgrid-summary">
+    <h3 class="char-arkgrid-summary-title">착용 젬 종합 스탯</h3>
+    <div class="char-arkgrid-summary-list">
+      {% for e in detail.ark_grid.effects %}
+      <span class="char-arkgrid-stat-chip">{{ e.text }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  <div class="char-arkgrid-cores">
+    {% for c in detail.ark_grid.cores %}
+    <div class="char-arkgrid-core-card">
+      <div class="char-arkgrid-core-header">
+        {% if c.icon %}<img src="{{ c.icon }}" alt="" class="char-arkgrid-core-icon char-grade-{{ c.grade }}">{% endif %}
+        <div class="char-arkgrid-core-title">
+          <span class="char-arkgrid-core-system char-arkgrid-system-{{ c.system }}">{{ c.system }}</span>
+          <span class="char-arkgrid-core-name char-grade-text-{{ c.grade }}">{{ c.core_name }} 코어</span>
+          <span class="char-arkgrid-core-point">{{ c.point }}P</span>
+        </div>
+      </div>
+      {% if c.flavor %}<p class="char-arkgrid-core-flavor">{{ c.flavor }}</p>{% endif %}
+      {% if c.option_lines %}
+      <ul class="char-arkgrid-core-options">
+        {% for line in c.option_lines %}
+        <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <div class="char-arkgrid-core-gems">
+        {% for g in c.gems %}
+        <div class="char-arkgrid-gem{{ ' char-arkgrid-gem-inactive' if not g.is_active }}">
+          {% if g.icon %}<img src="{{ g.icon }}" alt="" class="char-arkgrid-gem-icon char-grade-{{ g.grade }}">{% endif %}
+          <div class="char-arkgrid-gem-info">
+            {% if not g.is_active %}<span class="char-arkgrid-gem-inactive-label">비활성</span>{% endif %}
+            {% if g.effect %}<span class="char-arkgrid-gem-effect">{{ g.effect }}</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <p class="dash-empty">아크그리드 정보가 없습니다.</p>
     {% endfor %}
   </div>
 </div>

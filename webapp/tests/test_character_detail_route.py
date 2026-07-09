@@ -17,8 +17,11 @@ DETAIL = {
     "skills": [
         {
             "name": "심판의 빛",
+            "icon": "https://cdn-lostark.game.onstove.com/skill.png",
             "level": 10,
-            "tripods": [{"tier": 0, "name": "선택된 트라이포드"}],
+            "tripods": [
+                {"tier": 0, "name": "선택된 트라이포드", "icon": "https://cdn-lostark.game.onstove.com/tripod.png"}
+            ],
             "rune": {"name": "속행", "grade": "영웅", "effect": "재사용 대기시간 12% 감소"},
         }
     ],
@@ -43,6 +46,31 @@ DETAIL = {
         }
     ],
     "gems": [{"slot": 0, "name": "8레벨 광휘의 보석", "level": 8, "grade": "유물", "icon": None, "effect": "추가 피해 +8.00%"}],
+    "ark_grid": {
+        "cores": [
+            {
+                "name": "질서의 해 코어 : 빛이 생명을 새긴다",
+                "flavor": "빛이 생명을 새긴다",
+                "icon": "https://cdn-lostark.game.onstove.com/core.png",
+                "grade": "유물",
+                "point": 18,
+                "system": "질서",
+                "core_name": "해",
+                "willpower": "15 포인트",
+                "option_lines": ["[10P] 아군 공격력 강화 효과 +1.3%"],
+                "gems": [
+                    {
+                        "icon": "https://cdn-lostark.game.onstove.com/gem.png",
+                        "grade": "전설",
+                        "is_active": True,
+                        "info": "젬 타입 : 질서\n젬 포인트 : 14",
+                        "effect": "공격력 +0.80% 증가",
+                    }
+                ],
+            }
+        ],
+        "effects": [{"name": "공격력", "level": 29, "text": "공격력 +1.06%"}],
+    },
 }
 
 
@@ -71,6 +99,16 @@ def test_renders_character_detail(client):
     assert "낙인력 +8.00%" in resp.text
     assert "8레벨 광휘의 보석" in resp.text
     assert "추가 피해 +8.00%" in resp.text
+    assert 'src="https://cdn-lostark.game.onstove.com/skill.png"' in resp.text
+    assert 'src="https://cdn-lostark.game.onstove.com/tripod.png"' in resp.text
+    assert "빛이 생명을 새긴다" in resp.text
+    assert "[10P] 아군 공격력 강화 효과 +1.3%" in resp.text
+    assert "공격력 +0.80% 증가" in resp.text
+    assert "공격력 +1.06%" in resp.text
+    # 등급은 텍스트로 적지 않고 아이콘 테두리/이름 글자색(CSS 클래스)으로만 표현
+    assert 'class="char-arkgrid-core-icon char-grade-유물"' in resp.text
+    assert 'class="char-arkgrid-gem-icon char-grade-전설"' in resp.text
+    assert 'char-grade-text-유물' in resp.text
 
 
 def test_renders_error_when_not_found(client):

@@ -118,21 +118,23 @@ RUNE_TOOLTIP = json.dumps(
 SKILLS = [
     {
         "Name": "간파 베기",
+        "Icon": "https://example.com/skill-ganpa.png",
         "Level": 1,
         "Tripods": [
-            {"Tier": 0, "Slot": 1, "Name": "강화 베기", "IsSelected": False},
-            {"Tier": 0, "Slot": 2, "Name": "약육강식", "IsSelected": False},
+            {"Tier": 0, "Slot": 1, "Name": "강화 베기", "Icon": "https://example.com/t1.png", "IsSelected": False},
+            {"Tier": 0, "Slot": 2, "Name": "약육강식", "Icon": "https://example.com/t2.png", "IsSelected": False},
         ],
         "Rune": None,
     },
     {
         "Name": "계시의 검",
+        "Icon": "https://example.com/skill-gyesi.png",
         "Level": 10,
         "Tripods": [
-            {"Tier": 0, "Slot": 2, "Name": "부위파괴 강화", "IsSelected": True},
-            {"Tier": 1, "Slot": 3, "Name": "신앙심", "IsSelected": True},
-            {"Tier": 2, "Slot": 2, "Name": "더블 크로스", "IsSelected": True},
-            {"Tier": 2, "Slot": 1, "Name": "선택 안 한 것", "IsSelected": False},
+            {"Tier": 0, "Slot": 2, "Name": "부위파괴 강화", "Icon": "https://example.com/t3.png", "IsSelected": True},
+            {"Tier": 1, "Slot": 3, "Name": "신앙심", "Icon": "https://example.com/t4.png", "IsSelected": True},
+            {"Tier": 2, "Slot": 2, "Name": "더블 크로스", "Icon": "https://example.com/t5.png", "IsSelected": True},
+            {"Tier": 2, "Slot": 1, "Name": "선택 안 한 것", "Icon": "https://example.com/t6.png", "IsSelected": False},
         ],
         "Rune": {"Name": "속행", "Grade": "영웅", "Tooltip": RUNE_TOOLTIP},
     },
@@ -150,6 +152,12 @@ def test_parse_skills_returns_tripods_sorted_by_tier():
     tiers = [t["tier"] for t in result[0]["tripods"]]
     assert tiers == [0, 1, 2]
     assert result[0]["tripods"][0]["name"] == "부위파괴 강화"
+
+
+def test_parse_skills_includes_skill_and_tripod_icons():
+    result = parser.parse_skills(SKILLS)
+    assert result[0]["icon"] == "https://example.com/skill-gyesi.png"
+    assert result[0]["tripods"][0]["icon"] == "https://example.com/t3.png"
 
 
 def test_parse_skills_includes_rune_effect_when_present():
@@ -244,6 +252,116 @@ def test_parse_gems_handles_none():
     assert parser.parse_gems(None) == []
 
 
+CORE_TOOLTIP = json.dumps(
+    {
+        "Element_004": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>코어 타입</FONT>", "Element_001": "질서 - 해"},
+        },
+        "Element_005": {
+            "type": "ItemPartBox",
+            "value": {
+                "Element_000": "<FONT COLOR='#A9D0F5'>코어 공급 의지력</FONT>",
+                "Element_001": "<FONT COLOR='#B7FB00'>15</FONT> 포인트",
+            },
+        },
+        "Element_006": {
+            "type": "ItemPartBox",
+            "value": {
+                "Element_000": "<FONT COLOR='#A9D0F5'>코어 옵션</FONT>",
+                "Element_001": "[10P] 아군 공격력 강화 효과 +1.3%<br>[18P] 아군 공격력 강화 효과 +0.15%",
+            },
+        },
+    }
+)
+
+GEM_TOOLTIP_ARKGRID = json.dumps(
+    {
+        "Element_004": {
+            "type": "ItemPartBox",
+            "value": {
+                "Element_000": "<FONT COLOR='#A9D0F5'>젬 기본 정보</FONT>",
+                "Element_001": "젬 타입 : 질서<br>젬 포인트 : 14",
+            },
+        },
+        "Element_005": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>젬 효과</FONT>", "Element_001": "공격력 +0.80% 증가"},
+        },
+    }
+)
+
+ARK_GRID = {
+    "Slots": [
+        {
+            "Index": 0,
+            "Icon": "https://example.com/core-sun.png",
+            "Name": "질서의 해 코어 : 빛이 생명을 새긴다",
+            "Point": 18,
+            "Grade": "유물",
+            "Tooltip": CORE_TOOLTIP,
+            "Gems": [
+                {
+                    "Index": 0,
+                    "Icon": "https://example.com/gem-order.png",
+                    "IsActive": True,
+                    "Grade": "전설",
+                    "Tooltip": GEM_TOOLTIP_ARKGRID,
+                },
+                {
+                    "Index": 1,
+                    "Icon": "https://example.com/gem-empty.png",
+                    "IsActive": False,
+                    "Grade": "영웅",
+                    "Tooltip": "{}",
+                },
+            ],
+        }
+    ],
+    "Effects": [
+        {"Name": "공격력", "Level": 29, "Tooltip": "공격력 <font color='#ffd200'>+1.06%</font>"},
+        {"Name": "낙인력", "Level": 44, "Tooltip": "낙인력 <font color='#ffd200'>+7.33%</font>"},
+    ],
+}
+
+
+def test_parse_ark_grid_extracts_core_type_point_and_options():
+    result = parser.parse_ark_grid(ARK_GRID)
+    core = result["cores"][0]
+    assert core["system"] == "질서"
+    assert core["core_name"] == "해"
+    assert core["point"] == 18
+    assert core["grade"] == "유물"
+    assert core["willpower"] == "15 포인트"
+    assert core["flavor"] == "빛이 생명을 새긴다"
+    assert core["option_lines"] == [
+        "[10P] 아군 공격력 강화 효과 +1.3%",
+        "[18P] 아군 공격력 강화 효과 +0.15%",
+    ]
+
+
+def test_parse_ark_grid_extracts_gems_with_active_flag():
+    result = parser.parse_ark_grid(ARK_GRID)
+    gems = result["cores"][0]["gems"]
+    assert len(gems) == 2
+    assert gems[0]["is_active"] is True
+    assert gems[0]["effect"] == "공격력 +0.80% 증가"
+    assert gems[1]["is_active"] is False
+
+
+def test_parse_ark_grid_extracts_aggregate_stat_effects():
+    result = parser.parse_ark_grid(ARK_GRID)
+    assert result["effects"] == [
+        {"name": "공격력", "level": 29, "text": "공격력 +1.06%"},
+        {"name": "낙인력", "level": 44, "text": "낙인력 +7.33%"},
+    ]
+
+
+def test_parse_ark_grid_handles_none():
+    result = parser.parse_ark_grid(None)
+    assert result == {"cores": [], "effects": []}
+
+
 def test_format_combat_power_adds_thousands_separators():
     assert parser._format_combat_power("123456789") == "123,456,789"
 
@@ -271,6 +389,7 @@ def test_parse_armory_detail_combines_all_sections():
                 {"Slot": 0, "Name": "8레벨 광휘의 보석", "Level": 8, "Grade": "유물", "Tooltip": GEM_TOOLTIP}
             ]
         },
+        "ArkGrid": ARK_GRID,
     }
     result = parser.parse_armory_detail(raw)
     assert result["character_name"] == "테스트캐릭"
@@ -280,3 +399,5 @@ def test_parse_armory_detail_combines_all_sections():
     assert len(result["ark_passive"]["points"]) == 3
     assert len(result["accessories"]) == 1
     assert len(result["gems"]) == 1
+    assert len(result["ark_grid"]["cores"]) == 1
+    assert len(result["ark_grid"]["effects"]) == 2

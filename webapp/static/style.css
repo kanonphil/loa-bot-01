@@ -2423,6 +2423,211 @@ a.calendar-party:hover {
   color: var(--text-muted);
 }
 
+.char-skill-icon,
+.char-tripod-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  vertical-align: middle;
+}
+
+.char-tripod-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.char-tripod-chip .char-tripod-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+/* ── 아크그리드 ──────────────────────────────────────────── */
+
+.char-arkgrid-summary {
+  margin-bottom: 14px;
+}
+
+.char-arkgrid-summary-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+
+.char-arkgrid-summary-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.char-arkgrid-stat-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.char-arkgrid-cores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.char-arkgrid-core-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.char-arkgrid-core-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.char-arkgrid-core-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+}
+
+.char-arkgrid-core-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.char-arkgrid-core-system {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.char-arkgrid-system-질서 {
+  background: rgba(122, 168, 224, 0.15);
+  color: #7aa8e0;
+}
+
+.char-arkgrid-system-혼돈 {
+  background: rgba(255, 138, 92, 0.15);
+  color: #ff8a5c;
+}
+
+.char-arkgrid-core-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.char-arkgrid-core-point {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.char-arkgrid-core-flavor {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.char-arkgrid-core-options {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.char-arkgrid-core-gems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.char-arkgrid-gem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.char-arkgrid-gem-inactive {
+  opacity: 0.5;
+}
+
+.char-arkgrid-gem-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+}
+
+.char-arkgrid-gem-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 등급을 텍스트로 적지 않고 게임 내 등급 색상으로만 표현 (아이콘 테두리/이름 글자색).
+   .char-arkgrid-core-icon/.char-arkgrid-gem-icon의 기본 border-color를 덮어써야 하므로
+   반드시 그 규칙들보다 뒤에 와야 한다 — 동일 특이도에서는 소스 순서가 나중인 쪽이 이긴다. */
+.char-grade-영웅 {
+  border-color: #b16cf0;
+}
+
+.char-grade-전설 {
+  border-color: #f99200;
+}
+
+.char-grade-유물 {
+  border-color: #fa5d00;
+}
+
+.char-grade-고대 {
+  border-color: #c9a86c;
+}
+
+.char-grade-text-영웅 {
+  color: #b16cf0;
+}
+
+.char-grade-text-전설 {
+  color: #f99200;
+}
+
+.char-grade-text-유물 {
+  color: #fa5d00;
+}
+
+.char-grade-text-고대 {
+  color: #c9a86c;
+}
+
+.char-arkgrid-gem-inactive-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.char-arkgrid-gem-effect {
+  font-size: 12px;
+}
+
 /* ── 공대 모집 파티원 hover 카드 ──────────────────────────── */
 
 .party-member-popover {

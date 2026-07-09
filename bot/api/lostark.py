@@ -4,7 +4,7 @@ from typing import Optional
 
 LOA_API_BASE = "https://developer-lostark.game.onstove.com"
 ARMORY_FILTERS = "profiles+equipment+engravings+gems+cards"
-ARMORY_DETAIL_FILTERS = "profiles+equipment+combat-skills+arkpassive+gems"
+ARMORY_DETAIL_FILTERS = "profiles+equipment+combat-skills+arkpassive+gems+arkgrid"
 
 # 공유 세션 (API 키는 요청마다 헤더로 전달)
 _shared_session: Optional[aiohttp.ClientSession] = None

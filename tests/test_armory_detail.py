@@ -51,6 +51,7 @@ ARMORY_RAW = {
         }
     ],
     "ArmoryGem": {"Gems": []},
+    "ArkGrid": {"Slots": [], "Effects": []},
 }
 
 

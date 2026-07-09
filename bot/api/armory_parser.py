@@ -88,9 +88,10 @@ def parse_skills(skills: list[dict]) -> list[dict]:
         result.append(
             {
                 "name": skill.get("Name"),
+                "icon": skill.get("Icon"),
                 "level": skill.get("Level"),
                 "tripods": [
-                    {"tier": t.get("Tier"), "name": t.get("Name")}
+                    {"tier": t.get("Tier"), "name": t.get("Name"), "icon": t.get("Icon")}
                     for t in sorted(selected_tripods, key=lambda t: t.get("Tier", 0))
                 ],
                 "rune": rune,
@@ -162,6 +163,57 @@ def parse_gems(gem_data: dict | None) -> list[dict]:
     return result
 
 
+def parse_ark_grid(ark_grid: dict | None) -> dict:
+    """아크그리드: 질서/혼돈 해·달·별 코어 6개(+각 코어에 장착된 젬)와
+    전체 장착 젬을 합산한 종합 스탯 효과(Effects)를 정리한다."""
+    ark_grid = ark_grid or {}
+
+    cores = []
+    for slot in ark_grid.get("Slots") or []:
+        tooltip = parse_tooltip_json(slot.get("Tooltip"))
+        core_type = find_item_part(tooltip, "코어 타입") or ""
+        system, _, core_name = core_type.partition(" - ")
+        option_text = find_item_part(tooltip, "코어 옵션") or ""
+        # Name은 "질서의 해 코어 : 빛이 생명을 새긴다"처럼 시스템/코어명 뒤에
+        # 콜론으로 구분된 플레이버 텍스트가 붙어있다 — 부제로 따로 보여준다.
+        _, _, flavor = (slot.get("Name") or "").partition(" : ")
+
+        gems = []
+        for gem in slot.get("Gems") or []:
+            gem_tooltip = parse_tooltip_json(gem.get("Tooltip"))
+            gems.append(
+                {
+                    "icon": gem.get("Icon"),
+                    "grade": gem.get("Grade"),
+                    "is_active": bool(gem.get("IsActive")),
+                    "info": find_item_part(gem_tooltip, "젬 기본 정보"),
+                    "effect": find_item_part(gem_tooltip, "젬 효과"),
+                }
+            )
+
+        cores.append(
+            {
+                "name": slot.get("Name"),
+                "flavor": flavor or None,
+                "icon": slot.get("Icon"),
+                "grade": slot.get("Grade"),
+                "point": slot.get("Point"),
+                "system": system or None,
+                "core_name": core_name or None,
+                "willpower": find_item_part(tooltip, "코어 공급 의지력"),
+                "option_lines": [line for line in option_text.split("\n") if line.strip()],
+                "gems": gems,
+            }
+        )
+
+    effects = [
+        {"name": e.get("Name"), "level": e.get("Level"), "text": strip_html(e.get("Tooltip"))}
+        for e in ark_grid.get("Effects") or []
+    ]
+
+    return {"cores": cores, "effects": effects}
+
+
 def _format_combat_power(raw) -> str | None:
     """전투력은 문자열 숫자로 내려오는데, 천단위 콤마 없이 그대로 보여주면 자릿수를
     가늠하기 어려워 콤마를 붙인다. 숫자가 아니면(예외적인 경우) 원본을 그대로 반환."""
@@ -185,4 +237,5 @@ def parse_armory_detail(raw: dict) -> dict:
         "ark_passive": parse_ark_passive(raw.get("ArkPassive")),
         "accessories": parse_accessories(raw.get("ArmoryEquipment")),
         "gems": parse_gems(raw.get("ArmoryGem")),
+        "ark_grid": parse_ark_grid(raw.get("ArkGrid")),
     }
