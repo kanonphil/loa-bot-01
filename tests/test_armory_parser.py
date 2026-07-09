@@ -205,6 +205,13 @@ def test_parse_ark_passive_groups_effects_by_category():
     assert "해방자 Lv.1" in result["effects_by_category"]["깨달음"][0]
 
 
+def test_parse_ark_passive_orders_categories_evolution_realization_leap():
+    """API가 내려주는 Effects 순서(이 픽스처는 깨달음이 먼저 나옴)와 무관하게
+    항상 진화 → 깨달음 → 도약 순으로 정렬돼야 한다 (가로 배치 UI가 이 순서를 그대로 씀)."""
+    result = parser.parse_ark_passive(ARK_PASSIVE)
+    assert list(result["effects_by_category"].keys()) == ["진화", "깨달음"]
+
+
 def test_parse_ark_passive_handles_none():
     result = parser.parse_ark_passive(None)
     assert result["points"] == []
@@ -275,22 +282,6 @@ CORE_TOOLTIP = json.dumps(
     }
 )
 
-GEM_TOOLTIP_ARKGRID = json.dumps(
-    {
-        "Element_004": {
-            "type": "ItemPartBox",
-            "value": {
-                "Element_000": "<FONT COLOR='#A9D0F5'>젬 기본 정보</FONT>",
-                "Element_001": "젬 타입 : 질서<br>젬 포인트 : 14",
-            },
-        },
-        "Element_005": {
-            "type": "ItemPartBox",
-            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>젬 효과</FONT>", "Element_001": "공격력 +0.80% 증가"},
-        },
-    }
-)
-
 ARK_GRID = {
     "Slots": [
         {
@@ -300,22 +291,9 @@ ARK_GRID = {
             "Point": 18,
             "Grade": "유물",
             "Tooltip": CORE_TOOLTIP,
-            "Gems": [
-                {
-                    "Index": 0,
-                    "Icon": "https://example.com/gem-order.png",
-                    "IsActive": True,
-                    "Grade": "전설",
-                    "Tooltip": GEM_TOOLTIP_ARKGRID,
-                },
-                {
-                    "Index": 1,
-                    "Icon": "https://example.com/gem-empty.png",
-                    "IsActive": False,
-                    "Grade": "영웅",
-                    "Tooltip": "{}",
-                },
-            ],
+            # 코어에 장착된 젬 원본 데이터(Gems)는 파서가 더 이상 읽지 않는다 —
+            # 개별 젬 세부 정보는 너무 장황해서 종합 스탯(Effects)만 보여주기로 했다.
+            "Gems": [{"Index": 0, "Icon": "https://example.com/gem-order.png", "IsActive": True, "Grade": "전설"}],
         }
     ],
     "Effects": [
@@ -340,13 +318,10 @@ def test_parse_ark_grid_extracts_core_type_point_and_options():
     ]
 
 
-def test_parse_ark_grid_extracts_gems_with_active_flag():
+def test_parse_ark_grid_does_not_include_per_core_gem_details():
+    """코어에 장착된 젬의 세부 정보(아이콘/효과 텍스트)는 너무 장황해서 보여주지 않기로 했다."""
     result = parser.parse_ark_grid(ARK_GRID)
-    gems = result["cores"][0]["gems"]
-    assert len(gems) == 2
-    assert gems[0]["is_active"] is True
-    assert gems[0]["effect"] == "공격력 +0.80% 증가"
-    assert gems[1]["is_active"] is False
+    assert "gems" not in result["cores"][0]
 
 
 def test_parse_ark_grid_extracts_aggregate_stat_effects():

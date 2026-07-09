@@ -58,15 +58,6 @@ DETAIL = {
                 "core_name": "해",
                 "willpower": "15 포인트",
                 "option_lines": ["[10P] 아군 공격력 강화 효과 +1.3%"],
-                "gems": [
-                    {
-                        "icon": "https://cdn-lostark.game.onstove.com/gem.png",
-                        "grade": "전설",
-                        "is_active": True,
-                        "info": "젬 타입 : 질서\n젬 포인트 : 14",
-                        "effect": "공격력 +0.80% 증가",
-                    }
-                ],
             }
         ],
         "effects": [{"name": "공격력", "level": 29, "text": "공격력 +1.06%"}],
@@ -103,12 +94,12 @@ def test_renders_character_detail(client):
     assert 'src="https://cdn-lostark.game.onstove.com/tripod.png"' in resp.text
     assert "빛이 생명을 새긴다" in resp.text
     assert "[10P] 아군 공격력 강화 효과 +1.3%" in resp.text
-    assert "공격력 +0.80% 증가" in resp.text
     assert "공격력 +1.06%" in resp.text
     # 등급은 텍스트로 적지 않고 아이콘 테두리/이름 글자색(CSS 클래스)으로만 표현
     assert 'class="char-arkgrid-core-icon char-grade-유물"' in resp.text
-    assert 'class="char-arkgrid-gem-icon char-grade-전설"' in resp.text
     assert 'char-grade-text-유물' in resp.text
+    # 코어에 장착된 젬의 세부 정보는 너무 장황해서 보여주지 않기로 했다
+    assert "char-arkgrid-gem" not in resp.text
 
 
 def test_renders_error_when_not_found(client):

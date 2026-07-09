@@ -100,18 +100,28 @@ def parse_skills(skills: list[dict]) -> list[dict]:
     return result
 
 
+_ARK_PASSIVE_CATEGORY_ORDER = ["진화", "깨달음", "도약"]
+
+
 def parse_ark_passive(ark_passive: dict | None) -> dict:
-    """진화/깨달음/도약 포인트 요약 + 카테고리별로 실제 선택한 노드 목록."""
+    """진화/깨달음/도약 포인트 요약 + 카테고리별로 실제 선택한 노드 목록.
+    카테고리는 API가 내려주는 순서(등장 순)가 아니라 항상 진화/깨달음/도약 고정 순서로 정렬한다."""
     ark_passive = ark_passive or {}
     points = [
         {"name": p.get("Name"), "value": p.get("Value"), "description": p.get("Description")}
         for p in ark_passive.get("Points") or []
     ]
 
-    effects_by_category: dict[str, list[str]] = {}
+    raw_by_category: dict[str, list[str]] = {}
     for effect in ark_passive.get("Effects") or []:
         category = effect.get("Name", "기타")
-        effects_by_category.setdefault(category, []).append(strip_html(effect.get("Description", "")))
+        raw_by_category.setdefault(category, []).append(strip_html(effect.get("Description", "")))
+
+    effects_by_category: dict[str, list[str]] = {}
+    for category in _ARK_PASSIVE_CATEGORY_ORDER:
+        if category in raw_by_category:
+            effects_by_category[category] = raw_by_category.pop(category)
+    effects_by_category.update(raw_by_category)  # 예상 못한 카테고리가 있으면 뒤에 붙인다
 
     return {"title": ark_passive.get("Title"), "points": points, "effects_by_category": effects_by_category}
 
@@ -164,8 +174,9 @@ def parse_gems(gem_data: dict | None) -> list[dict]:
 
 
 def parse_ark_grid(ark_grid: dict | None) -> dict:
-    """아크그리드: 질서/혼돈 해·달·별 코어 6개(+각 코어에 장착된 젬)와
-    전체 장착 젬을 합산한 종합 스탯 효과(Effects)를 정리한다."""
+    """아크그리드: 질서/혼돈 해·달·별 코어 6개와, 전체 장착 젬을 합산한
+    종합 스탯 효과(Effects)를 정리한다. 코어별 개별 젬 세부 정보는 너무 장황해서
+    보여주지 않기로 했다 — 종합 스탯만으로 충분하다."""
     ark_grid = ark_grid or {}
 
     cores = []
@@ -178,19 +189,6 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
         # 콜론으로 구분된 플레이버 텍스트가 붙어있다 — 부제로 따로 보여준다.
         _, _, flavor = (slot.get("Name") or "").partition(" : ")
 
-        gems = []
-        for gem in slot.get("Gems") or []:
-            gem_tooltip = parse_tooltip_json(gem.get("Tooltip"))
-            gems.append(
-                {
-                    "icon": gem.get("Icon"),
-                    "grade": gem.get("Grade"),
-                    "is_active": bool(gem.get("IsActive")),
-                    "info": find_item_part(gem_tooltip, "젬 기본 정보"),
-                    "effect": find_item_part(gem_tooltip, "젬 효과"),
-                }
-            )
-
         cores.append(
             {
                 "name": slot.get("Name"),
@@ -202,7 +200,6 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
                 "core_name": core_name or None,
                 "willpower": find_item_part(tooltip, "코어 공급 의지력"),
                 "option_lines": [line for line in option_text.split("\n") if line.strip()],
-                "gems": gems,
             }
         )
 

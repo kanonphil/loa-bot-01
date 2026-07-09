@@ -2248,8 +2248,17 @@ a.calendar-party:hover {
   font-weight: 600;
 }
 
+.char-arkpassive-categories {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
 .char-arkpassive-category {
-  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
 }
 
 .char-arkpassive-category-title {
@@ -2261,28 +2270,44 @@ a.calendar-party:hover {
 
 .char-arkpassive-effect-list {
   margin: 0;
-  padding-left: 18px;
-  font-size: 13px;
+  padding-left: 16px;
+  font-size: 12px;
   color: var(--text);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
-.char-skill-list,
+@media (max-width: 640px) {
+  .char-arkpassive-categories {
+    grid-template-columns: 1fr;
+  }
+}
+
 .char-accessory-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
 }
 
+.char-skill-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
 .char-skill-card,
 .char-accessory-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
+  gap: 6px;
+  padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--panel);
+}
+
+.char-accessory-card {
+  gap: 8px;
+  padding: 14px 16px;
 }
 
 .char-skill-header,
@@ -2290,29 +2315,33 @@ a.calendar-party:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
-.char-skill-name,
+.char-skill-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .char-accessory-name {
   font-weight: 600;
   font-size: 14px;
 }
 
 .char-skill-level {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
 .char-skill-tripods {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .char-tripod-chip {
-  font-size: 12px;
-  padding: 3px 10px;
+  font-size: 11px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: var(--sidebar-bg);
   color: var(--text-muted);
@@ -2322,18 +2351,18 @@ a.calendar-party:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  font-size: 12px;
-  padding-top: 6px;
+  gap: 5px;
+  font-size: 11px;
+  padding-top: 5px;
   border-top: 1px solid var(--border);
 }
 
 .char-rune-badge {
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: var(--accent-dim);
   color: var(--accent);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .char-rune-name {
@@ -2425,22 +2454,22 @@ a.calendar-party:hover {
 
 .char-skill-icon,
 .char-tripod-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
   vertical-align: middle;
 }
 
 .char-tripod-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .char-tripod-chip .char-tripod-icon {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
 }
 
 /* ── 아크그리드 ──────────────────────────────────────────── */
@@ -2473,15 +2502,15 @@ a.calendar-party:hover {
 
 .char-arkgrid-cores {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
 }
 
 .char-arkgrid-core-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
+  gap: 6px;
+  padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--panel);
@@ -2490,12 +2519,12 @@ a.calendar-party:hover {
 .char-arkgrid-core-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .char-arkgrid-core-icon {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border-radius: 6px;
   box-sizing: border-box;
   border: 2px solid transparent;
@@ -2506,12 +2535,12 @@ a.calendar-party:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
 .char-arkgrid-core-system {
-  font-size: 11px;
-  padding: 2px 8px;
+  font-size: 10px;
+  padding: 1px 7px;
   border-radius: 999px;
   font-weight: 600;
 }
@@ -2528,65 +2557,32 @@ a.calendar-party:hover {
 
 .char-arkgrid-core-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .char-arkgrid-core-point {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
 .char-arkgrid-core-flavor {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   font-style: italic;
 }
 
 .char-arkgrid-core-options {
   margin: 0;
-  padding-left: 18px;
-  font-size: 12px;
+  padding-left: 16px;
+  font-size: 11px;
   color: var(--text-muted);
-  line-height: 1.6;
-}
-
-.char-arkgrid-core-gems {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-
-.char-arkgrid-gem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.char-arkgrid-gem-inactive {
-  opacity: 0.5;
-}
-
-.char-arkgrid-gem-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  box-sizing: border-box;
-  border: 2px solid transparent;
-  flex-shrink: 0;
-}
-
-.char-arkgrid-gem-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  line-height: 1.5;
 }
 
 /* 등급을 텍스트로 적지 않고 게임 내 등급 색상으로만 표현 (아이콘 테두리/이름 글자색).
-   .char-arkgrid-core-icon/.char-arkgrid-gem-icon의 기본 border-color를 덮어써야 하므로
-   반드시 그 규칙들보다 뒤에 와야 한다 — 동일 특이도에서는 소스 순서가 나중인 쪽이 이긴다. */
+   .char-arkgrid-core-icon의 기본 border-color(transparent)를 덮어써야 하므로
+   반드시 그 규칙보다 뒤에 와야 한다 — 동일 특이도에서는 소스 순서가 나중인 쪽이 이긴다. */
 .char-grade-영웅 {
   border-color: #b16cf0;
 }
@@ -2617,15 +2613,6 @@ a.calendar-party:hover {
 
 .char-grade-text-고대 {
   color: #c9a86c;
-}
-
-.char-arkgrid-gem-inactive-label {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.char-arkgrid-gem-effect {
-  font-size: 12px;
 }
 
 /* ── 공대 모집 파티원 hover 카드 ──────────────────────────── */

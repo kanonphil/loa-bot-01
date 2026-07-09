@@ -25,16 +25,18 @@
     </div>
     {% endfor %}
   </div>
-  {% for category, effects in detail.ark_passive.effects_by_category.items() %}
-  <div class="char-arkpassive-category">
-    <h3 class="char-arkpassive-category-title">{{ category }}</h3>
-    <ul class="char-arkpassive-effect-list">
-      {% for e in effects %}
-      <li>{{ e }}</li>
-      {% endfor %}
-    </ul>
+  <div class="char-arkpassive-categories">
+    {% for category, effects in detail.ark_passive.effects_by_category.items() %}
+    <div class="char-arkpassive-category">
+      <h3 class="char-arkpassive-category-title">{{ category }}</h3>
+      <ul class="char-arkpassive-effect-list">
+        {% for e in effects %}
+        <li>{{ e }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
   </div>
-  {% endfor %}
 </div>
 
 <div class="char-detail-section">
@@ -146,17 +148,6 @@
         {% endfor %}
       </ul>
       {% endif %}
-      <div class="char-arkgrid-core-gems">
-        {% for g in c.gems %}
-        <div class="char-arkgrid-gem{{ ' char-arkgrid-gem-inactive' if not g.is_active }}">
-          {% if g.icon %}<img src="{{ g.icon }}" alt="" class="char-arkgrid-gem-icon char-grade-{{ g.grade }}">{% endif %}
-          <div class="char-arkgrid-gem-info">
-            {% if not g.is_active %}<span class="char-arkgrid-gem-inactive-label">비활성</span>{% endif %}
-            {% if g.effect %}<span class="char-arkgrid-gem-effect">{{ g.effect }}</span>{% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
     </div>
     {% else %}
     <p class="dash-empty">아크그리드 정보가 없습니다.</p>
