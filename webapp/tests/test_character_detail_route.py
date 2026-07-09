@@ -156,7 +156,9 @@ def test_party_member_card_renders_compact_summary(client):
     assert "발키리" in resp.text
     assert "홀리나이트" in resp.text
     assert "123456789" in resp.text or "123,456,789" in resp.text
-    assert "품질 96" not in resp.text  # 컴팩트 카드는 "품질 N" 문구 없이 배지에 숫자만
+    assert "품질 96" not in resp.text  # 컴팩트 카드는 장신구 품질 배지를 아예 보여주지 않음
+    assert "char-quality-badge" not in resp.text
+    assert "member-card-stat-value" in resp.text  # 아이템레벨/전투력이 큰 글씨로 강조되어야 함
     assert "자세히 보기" in resp.text
     assert "discord_id=222" in resp.text  # 링크가 대상자의 discord_id를 유지해야 함
 

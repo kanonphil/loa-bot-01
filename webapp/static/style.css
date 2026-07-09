@@ -2663,18 +2663,28 @@ a.calendar-party:hover {
 
 .member-card-stats {
   display: flex;
-  gap: 10px;
-  font-size: 12px;
+  gap: 18px;
+}
+
+.member-card-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.member-card-stat-label {
+  font-size: 10px;
   color: var(--text-muted);
 }
 
-.member-card-quality {
-  display: flex;
-  gap: 4px;
+.member-card-stat-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
 }
 
-.member-card-quality .char-quality-badge {
-  padding: 1px 8px;
+.member-card-stat-cp {
+  color: var(--accent);
 }
 
 .member-card-link {

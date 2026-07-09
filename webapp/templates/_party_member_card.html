@@ -7,18 +7,17 @@
     <span class="member-card-class">{{ detail.character_class }}</span>
   </div>
   <div class="member-card-stats">
-    <span>Lv {{ detail.item_level }}</span>
-    {% if detail.combat_power %}<span>전투력 {{ detail.combat_power }}</span>{% endif %}
-  </div>
-  {% if detail.accessories %}
-  <div class="member-card-quality">
-    {% for a in detail.accessories %}
-    {% if a.quality is not none %}
-    <span class="char-quality-badge char-quality-{{ a.quality_tier }}" title="{{ a.type }} {{ a.quality }}">{{ a.quality }}</span>
+    <div class="member-card-stat">
+      <span class="member-card-stat-label">아이템 레벨</span>
+      <span class="member-card-stat-value">{{ detail.item_level }}</span>
+    </div>
+    {% if detail.combat_power %}
+    <div class="member-card-stat">
+      <span class="member-card-stat-label">전투력</span>
+      <span class="member-card-stat-value member-card-stat-cp">{{ detail.combat_power }}</span>
+    </div>
     {% endif %}
-    {% endfor %}
   </div>
-  {% endif %}
   <a class="member-card-link" href="/characters/{{ detail.character_name }}?discord_id={{ discord_id }}">자세히 보기 →</a>
 </div>
 {% endif %}
