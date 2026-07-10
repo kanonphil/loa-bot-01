@@ -46,7 +46,7 @@
 {% if party.memo %}<p class="party-memo">📌 {{ party.memo }}</p>{% endif %}
 
 {% if action_result and not action_result.success %}
-<p class="party-action-error">{{ action_result.reason }}</p>
+<div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
 {% endif %}
 
 {% if party_groups %}

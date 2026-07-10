@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content">
+<h1>알림 설정</h1>
+
+<div class="settings-card">
+  <h2 class="leader-panel-title">🔔 공대 알림 구독</h2>
+  <p class="settings-desc">
+    구독하면 공대 모집 생성/클리어/게스트 합류 소식이 종 아이콘 이력에 쌓여 나중에 다시 볼 수 있어요.
+    구독하지 않으면 발생하는 순간 화면에 뜨는 toast로만 확인할 수 있고, 이력에는 남지 않습니다.
+  </p>
+  <form method="post" action="/notifications/subscribe">
+    {% if subscribed %}
+    <button type="submit" class="settings-toggle-btn settings-toggle-on">✅ 구독 중 (해제하기)</button>
+    {% else %}
+    <button type="submit" class="settings-toggle-btn">🔕 구독하기</button>
+    {% endif %}
+  </form>
+</div>
+</div>
+{% endblock %}

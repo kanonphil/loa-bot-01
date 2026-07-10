@@ -8,7 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
-from webapp import chat_store, config, guild_info, party_events
+from webapp import chat_store, config, guild_info, notification_store, party_events
 from webapp.auth.dependencies import NotAuthenticated
 from webapp.routes import (
     auth_routes,
@@ -19,6 +19,7 @@ from webapp.routes import (
     dashboard,
     events,
     expedition,
+    notifications,
     pages,
     party,
     raid_check,
@@ -39,12 +40,19 @@ async def _cleanup_loop() -> None:
                 logger.info("만료된 채팅 세션 %d개 삭제 (보관기간 %d일)", deleted, config.CHAT_RETENTION_DAYS)
         except Exception:
             logger.exception("채팅 세션 자동 정리 중 오류")
+        try:
+            deleted = await notification_store.delete_expired(config.NOTIFICATION_RETENTION_DAYS)
+            if deleted:
+                logger.info("만료된 알림 %d개 삭제 (보관기간 %d일)", deleted, config.NOTIFICATION_RETENTION_DAYS)
+        except Exception:
+            logger.exception("알림 자동 정리 중 오류")
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await chat_store.init_db()
+    await notification_store.init_db()
     await guild_info.refresh()
     cleanup_task = asyncio.create_task(_cleanup_loop())
     party_poll_task = asyncio.create_task(party_events.poll_loop())
@@ -84,6 +92,7 @@ app.include_router(calendar.router)
 app.include_router(board.router)
 app.include_router(tools.router)
 app.include_router(events.router)
+app.include_router(notifications.router)
 
 
 @app.exception_handler(NotAuthenticated)

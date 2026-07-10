@@ -2811,3 +2811,175 @@ a.calendar-party:hover {
     font-size: 20px;
   }
 }
+
+/* ── Toast ─────────────────────────────────────────────── */
+
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.toast {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: toast-in 0.2s ease-out;
+}
+
+.toast-hide {
+  animation: toast-out 0.3s ease-in forwards;
+}
+
+.toast-success {
+  border-color: #3ba55d;
+}
+
+.toast-error {
+  border-color: #e05656;
+}
+
+.toast-info {
+  border-color: var(--accent);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(24px); }
+}
+
+/* ── 알림 종 아이콘 ────────────────────────────────────── */
+
+.sidebar-brand span {
+  flex: 1;
+}
+
+.notif-bell {
+  position: relative;
+  background: none;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  background: #e05656;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 999px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.notif-panel {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  right: 12px;
+  z-index: 50;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.notif-panel-empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.notif-panel-settings-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.notif-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+
+.notif-panel-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.notif-panel-item:hover {
+  background: var(--sidebar-bg);
+}
+
+.notif-panel-icon {
+  flex-shrink: 0;
+}
+
+/* ── 설정 페이지 ───────────────────────────────────────── */
+
+.settings-card {
+  margin-top: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  max-width: 560px;
+}
+
+.settings-desc {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0 16px;
+}
+
+.settings-toggle-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-toggle-btn:hover {
+  opacity: 0.85;
+}
+
+.settings-toggle-on {
+  background: #21331f;
+  border-color: #3ba55d;
+}

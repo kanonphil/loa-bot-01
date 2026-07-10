@@ -38,6 +38,11 @@ CHAT_DB_PATH: str = os.environ.get("CHAT_DB_PATH", "webapp_chat_history.db")
 # 이 기간(일)이 지난 대화는 자동 삭제. 기본 30일 — 필요하면 언제든 값만 바꾸면 됨.
 CHAT_RETENTION_DAYS: int = int(os.environ.get("CHAT_RETENTION_DAYS", "30"))
 
+# ── 공대 알림 이력 (webapp 자체 소유, 봇 서버 DB와 분리) ────────
+NOTIFICATION_DB_PATH: str = os.environ.get("NOTIFICATION_DB_PATH", "webapp_notifications.db")
+# 이 기간(일)이 지난 알림은 자동 삭제. 기본 30일.
+NOTIFICATION_RETENTION_DAYS: int = int(os.environ.get("NOTIFICATION_RETENTION_DAYS", "30"))
+
 # ── Gemini API (AI 상담) ──────────────────────────────────
 # 일부러 필수(os.environ[...])로 안 두고 선택값으로 둠 — 이 키 하나 때문에
 # 로그인/레이드체크 같은 나머지 기능까지 앱 전체가 안 뜨는 걸 막기 위함.

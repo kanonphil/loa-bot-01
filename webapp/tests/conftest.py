@@ -20,7 +20,7 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from webapp import chat_store, config
+from webapp import chat_store, config, notification_store
 from webapp.main import app
 
 TOKEN_URL = "https://discord.com/api/v10/oauth2/token"
@@ -41,7 +41,16 @@ def chat_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def client(chat_db):
+def notification_db(tmp_path, monkeypatch):
+    """앱의 lifespan(startup)에 기대지 않고, 테스트가 직접 알림 DB를 준비한다."""
+    path = str(tmp_path / "notification_test.db")
+    monkeypatch.setattr(config, "NOTIFICATION_DB_PATH", path)
+    asyncio.run(notification_store.init_db())
+    return path
+
+
+@pytest.fixture()
+def client(chat_db, notification_db):
     return TestClient(app, follow_redirects=False)
 
 

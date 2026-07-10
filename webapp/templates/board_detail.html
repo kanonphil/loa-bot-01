@@ -23,7 +23,7 @@
 </p>
 
 {% if action_result and not action_result.success %}
-<p class="party-action-error">{{ action_result.reason }}</p>
+<div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
 {% endif %}
 
 <div class="board-content">{{ post.content | safe }}</div>

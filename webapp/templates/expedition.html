@@ -4,26 +4,24 @@
 <h1>원정대 관리</h1>
 
 {% if action_result and not action_result.success %}
-<p class="party-action-error">{{ action_result.reason }}</p>
+<div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
 {% elif action_result and action_result.success and action_result.character_name %}
-<p class="expedition-success">
-  ✅ {{ action_result.character_name }} ({{ action_result.character_class }} / {{ action_result.item_level }}) 등록 완료!
-</p>
+<div class="flash-data" hidden data-type="success" data-message="✅ {{ action_result.character_name }} ({{ action_result.character_class }} / {{ action_result.item_level }}) 등록 완료!"></div>
 {% endif %}
 
 {% if sync_result %}
   {% if sync_result.success %}
-  <p class="expedition-success">🔄 {{ sync_result.updated }}/{{ sync_result.total }}개 캐릭터 동기화 완료!</p>
+  <div class="flash-data" hidden data-type="success" data-message="🔄 {{ sync_result.updated }}/{{ sync_result.total }}개 캐릭터 동기화 완료!"></div>
   {% else %}
-  <p class="party-action-error">{{ sync_result.reason }}</p>
+  <div class="flash-data" hidden data-type="error" data-message="{{ sync_result.reason }}"></div>
   {% endif %}
 {% endif %}
 
 {% if account_result %}
   {% if account_result.success %}
-  <p class="expedition-success">✅ "{{ account_result.label }}" 계정 등록 완료! (원정대 캐릭터 {{ account_result.added }}/{{ account_result.total }}개 추가)</p>
+  <div class="flash-data" hidden data-type="success" data-message="✅ &quot;{{ account_result.label }}&quot; 계정 등록 완료! (원정대 캐릭터 {{ account_result.added }}/{{ account_result.total }}개 추가)"></div>
   {% else %}
-  <p class="party-action-error">{{ account_result.reason }}</p>
+  <div class="flash-data" hidden data-type="error" data-message="{{ account_result.reason }}"></div>
   {% endif %}
 {% endif %}
 

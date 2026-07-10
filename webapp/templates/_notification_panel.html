@@ -1,0 +1,23 @@
+{% if not subscribed %}
+<div class="notif-panel-empty">
+  <p>알림을 구독하면 여기서 이력을 볼 수 있어요.</p>
+  <a href="/settings" class="notif-panel-settings-link">알림 설정으로 이동 &rarr;</a>
+</div>
+{% elif not items %}
+<div class="notif-panel-empty">
+  <p>새 알림이 없습니다.</p>
+</div>
+{% else %}
+<ul class="notif-panel-list">
+  {% for n in items %}
+  <li>
+    <a href="/notifications/{{ n.id }}/open" class="notif-panel-item notif-panel-item-{{ n.type }}">
+      <span class="notif-panel-icon">
+        {% if n.type == "created" %}📢{% elif n.type == "cleared" %}🏆{% elif n.type == "guest_joined" %}👤{% else %}🔔{% endif %}
+      </span>
+      <span class="notif-panel-text">{{ n.text }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
