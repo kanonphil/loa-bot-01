@@ -13,7 +13,8 @@ _ACCESSORY_TYPES = {"목걸이", "귀걸이", "반지"}
 _WEAPON_ARMOR_TYPES = {"무기", "투구", "상의", "하의", "장갑", "어깨"}
 _GEM_LEVEL_PREFIX_RE = re.compile(r"^\d+레벨\s*")
 _HONING_LEVEL_RE = re.compile(r"^\+(\d+)\s*")
-_STAT_PERCENT_RE = re.compile(r"(.+?)(?:이|가)\s*([\d.]+)%\s*(증가|감소)")
+_STAT_PERCENT_RE = re.compile(r"([^,.\n]+?)(?:이|가)\s*([\d.]+)%\s*(증가|감소)")
+_SIMPLE_PERCENT_RE = re.compile(r"^(.+?)\s*([+-][\d.]+)%")
 
 
 def strip_html(text: str | None) -> str:
@@ -204,6 +205,104 @@ def parse_stat_effects(stats: list[dict] | None) -> list[dict]:
     return result
 
 
+def parse_engravings(engraving: dict | None) -> list[dict]:
+    """각인 — 구 각인 아이템(Engravings)은 아크패시브 도입 이후 대부분 비어있고(null),
+    실제로 장착 중인 각인 5개는 ArkPassiveEffects에 등급/레벨과 함께 내려온다."""
+    engraving = engraving or {}
+    result = []
+    for e in engraving.get("ArkPassiveEffects") or []:
+        result.append(
+            {
+                "name": e.get("Name"),
+                "grade": e.get("Grade"),
+                "level": e.get("Level"),
+                "description": strip_html(e.get("Description")),
+            }
+        )
+    return result
+
+
+def parse_cards(card: dict | None) -> dict:
+    """카드 — 장착된 카드 목록과, 세트효과가 활성화됐다면 그 이름/효과 설명을 정리한다."""
+    card = card or {}
+    cards = [
+        {
+            "slot": c.get("Slot"),
+            "name": c.get("Name"),
+            "icon": c.get("Icon"),
+            "grade": c.get("Grade"),
+            "awake_count": c.get("AwakeCount"),
+            "awake_total": c.get("AwakeTotal"),
+        }
+        for c in card.get("Cards") or []
+    ]
+    effects = []
+    for e in card.get("Effects") or []:
+        # ArkPassive/ArkGrid의 Effects는 Name+Description(또는 Tooltip) 형태였다 —
+        # 카드 세트효과도 같은 컨벤션일 것으로 보고 두 필드 모두 방어적으로 처리한다.
+        text = e.get("Description") or e.get("Tooltip") or ""
+        effects.append({"name": e.get("Name"), "text": strip_html(text)})
+    return {"cards": cards, "effects": effects}
+
+
+def _iter_percent_effects(text: str):
+    """한 텍스트(문장/여러 줄) 안에서 "OOO가 N% 증가/감소" 또는 "OOO +N.NN%" 형태를
+    전부 찾아 (이름, 부호 있는 값) 쌍으로 내보낸다. 여러 절이 붙은 긴 문장(각인 설명 등)에도
+    대응하기 위해 첫 매치만 보지 않고 finditer로 전부 훑는다."""
+    for match in _STAT_PERCENT_RE.finditer(text):
+        name, value, direction = match.groups()
+        sign = 1 if direction == "증가" else -1
+        yield name.strip(), sign * float(value)
+    for line in text.split("\n"):
+        match = _SIMPLE_PERCENT_RE.match(line.strip())
+        if match:
+            name, value = match.groups()
+            yield name.strip(), float(value)
+
+
+def parse_aggregate_effects(
+    stats: list[dict] | None,
+    engravings: list[dict] | None,
+    equipment: list[dict] | None,
+    accessories: list[dict] | None,
+) -> list[dict]:
+    """전투특성 + 각인 + 장비/장신구 추가 효과에서 퍼센트 효과를 모아 이름별로 합산한다.
+    참고용 종합치다 — 카드 세트효과나 아크그리드 코어 옵션 등 조건부 효과까지 완벽히
+    반영한 것은 아니라 레퍼런스 사이트의 "효과 양수지"와 100% 일치하지 않을 수 있다."""
+    totals: dict[str, float] = {}
+    order: list[str] = []
+
+    def add(name: str, value: float) -> None:
+        if name not in totals:
+            totals[name] = 0.0
+            order.append(name)
+        totals[name] += value
+
+    for stat in stats or []:
+        for raw_line in stat.get("Tooltip") or []:
+            for name, value in _iter_percent_effects(strip_html(raw_line)):
+                add(name, value)
+
+    for eng in engravings or []:
+        for name, value in _iter_percent_effects(eng.get("description") or ""):
+            add(name, value)
+
+    for item in equipment or []:
+        if item.get("bonus_effect"):
+            for name, value in _iter_percent_effects(item["bonus_effect"]):
+                add(name, value)
+
+    for acc in accessories or []:
+        for line in acc.get("honing_effects") or []:
+            for name, value in _iter_percent_effects(line):
+                add(name, value)
+
+    return [
+        {"name": name, "text": f"{name} {'+' if totals[name] >= 0 else ''}{totals[name]:.2f}%"}
+        for name in order
+    ]
+
+
 def parse_gems(gem_data: dict | None) -> list[dict]:
     """보석 슬롯/이름/레벨/등급/효과를 정리한다."""
     gem_data = gem_data or {}
@@ -277,8 +376,14 @@ def _format_combat_power(raw) -> str | None:
 
 
 def parse_armory_detail(raw: dict) -> dict:
-    """아머리 원본 응답(profiles+equipment+combat-skills+arkpassive+gems+arkgrid 필터) 전체를 정리."""
+    """아머리 원본 응답(profiles+equipment+combat-skills+engravings+cards+arkpassive+gems+arkgrid
+    필터) 전체를 정리."""
     profile = raw.get("ArmoryProfile") or {}
+    stats = profile.get("Stats")
+    equipment = parse_weapon_armor(raw.get("ArmoryEquipment"))
+    accessories = parse_accessories(raw.get("ArmoryEquipment"))
+    engravings = parse_engravings(raw.get("ArmoryEngraving"))
+
     return {
         "character_name": profile.get("CharacterName"),
         "character_class": profile.get("CharacterClassName"),
@@ -295,9 +400,12 @@ def parse_armory_detail(raw: dict) -> dict:
         "server_name": profile.get("ServerName"),
         "skills": parse_skills(raw.get("ArmorySkills")),
         "ark_passive": parse_ark_passive(raw.get("ArkPassive")),
-        "equipment": parse_weapon_armor(raw.get("ArmoryEquipment")),
-        "accessories": parse_accessories(raw.get("ArmoryEquipment")),
+        "equipment": equipment,
+        "accessories": accessories,
         "gems": parse_gems(raw.get("ArmoryGem")),
         "ark_grid": parse_ark_grid(raw.get("ArkGrid")),
-        "stat_effects": parse_stat_effects(profile.get("Stats")),
+        "stat_effects": parse_stat_effects(stats),
+        "engravings": engravings,
+        "cards": parse_cards(raw.get("ArmoryCard")),
+        "aggregate_effects": parse_aggregate_effects(stats, engravings, equipment, accessories),
     }

@@ -27,6 +27,21 @@ DETAIL = {
         {"stat": "신속", "text": "공격 속도 +30.99%"},
         {"stat": "신속", "text": "이동 속도 +30.99%"},
     ],
+    "aggregate_effects": [
+        {"name": "공격 속도", "text": "공격 속도 +30.99%"},
+        {"name": "추가 피해", "text": "추가 피해 +30.00%"},
+    ],
+    "engravings": [
+        {"name": "각성", "grade": "유물", "level": 4, "description": "각성기의 재사용 대기시간이 60.50% 감소한다."},
+    ],
+    "cards": {
+        "cards": [
+            {"slot": 0, "name": "아만", "icon": "https://cdn-lostark.game.onstove.com/card.png", "grade": "전설", "awake_count": 5, "awake_total": 5},
+        ],
+        "effects": [
+            {"name": "남겨진 바람의 절벽", "text": "암속성 피해 감소 +25.00%"},
+        ],
+    },
     "equipment": [
         {
             "type": "무기",
@@ -137,12 +152,18 @@ def test_renders_character_detail(client):
     assert 'data-armory-tab="gem"' in resp.text
     # 코어에 장착된 젬의 세부 정보는 너무 장황해서 보여주지 않기로 했다
     assert "char-arkgrid-gem" not in resp.text
-    # 무기/방어구 + 전투특성 효과
+    # 무기/방어구 + 종합 효과(효과 양수지)
     assert "운명의 전율 한손검" in resp.text
     assert "+18" in resp.text
     assert "무기 공격력 +203054" in resp.text
     assert "추가 피해 +30.00%" in resp.text
     assert "공격 속도 +30.99%" in resp.text
+    # 각인 + 카드
+    assert "각성" in resp.text
+    assert "Lv.4" in resp.text
+    assert 'src="https://cdn-lostark.game.onstove.com/card.png"' in resp.text
+    assert "남겨진 바람의 절벽" in resp.text
+    assert "암속성 피해 감소 +25.00%" in resp.text
 
 
 def test_renders_error_when_not_found(client):

@@ -526,3 +526,84 @@ def test_parse_stat_effects_ignores_boilerplate_lines_without_percent():
 
 def test_parse_stat_effects_handles_none():
     assert parser.parse_stat_effects(None) == []
+
+
+# ── 각인 (실제 API 응답 샘플 기반 — 구 Engravings는 null, ArkPassiveEffects에 들어있음) ──
+
+ENGRAVING_SAMPLE = {
+    "Engravings": None,
+    "Effects": None,
+    "ArkPassiveEffects": [
+        {
+            "AbilityStoneLevel": 3,
+            "Grade": "유물",
+            "Level": 4,
+            "Name": "각성",
+            "Description": "각성기의 재사용 대기시간이 <FONT COLOR='#99ff99'>60.50%</FONT> 감소하고, 사용 제한 횟수가 <FONT COLOR='#99ff99'>5</FONT>회 증가한다.",
+        },
+        {
+            "AbilityStoneLevel": None,
+            "Grade": "유물",
+            "Level": 4,
+            "Name": "급소 타격",
+            "Description": "무력화 공격 시 주는 무력화 수치가 <FONT COLOR='#99ff99'>37.00%</FONT> 증가한다.",
+        },
+    ],
+}
+
+
+def test_parse_engravings_extracts_name_grade_level_description():
+    result = parser.parse_engravings(ENGRAVING_SAMPLE)
+    assert len(result) == 2
+    assert result[0]["name"] == "각성"
+    assert result[0]["grade"] == "유물"
+    assert result[0]["level"] == 4
+    assert "60.50%" in result[0]["description"]
+    assert "<FONT" not in result[0]["description"]  # HTML 태그 제거 확인
+
+
+def test_parse_engravings_handles_none():
+    assert parser.parse_engravings(None) == []
+
+
+# ── 카드 ────────────────────────────────────────────────
+
+CARD_SAMPLE = {
+    "Cards": [
+        {"Slot": 0, "Name": "아만", "Icon": "https://example.com/card.png", "AwakeCount": 5, "AwakeTotal": 5, "Grade": "전설"},
+    ],
+    "Effects": [
+        {"Name": "남겨진 바람의 절벽", "Description": "암속성 피해 감소 <FONT COLOR='#99ff99'>+25.00%</FONT>"},
+    ],
+}
+
+
+def test_parse_cards_extracts_card_list_and_set_effects():
+    result = parser.parse_cards(CARD_SAMPLE)
+    assert result["cards"][0]["name"] == "아만"
+    assert result["cards"][0]["awake_count"] == 5
+    assert result["effects"][0]["name"] == "남겨진 바람의 절벽"
+    assert result["effects"][0]["text"] == "암속성 피해 감소 +25.00%"
+
+
+def test_parse_cards_handles_none():
+    assert parser.parse_cards(None) == {"cards": [], "effects": []}
+
+
+# ── 종합 효과(효과 양수지) — 전투특성/각인/장비/장신구에서 % 효과를 모아 이름별로 합산 ──
+
+def test_parse_aggregate_effects_sums_same_named_stat_across_sources():
+    stats = [{"Type": "신속", "Tooltip": ["공격 속도가 <font>30.99%</font> 증가합니다."]}]
+    engravings = [{"description": "무력화 공격 시 주는 무력화 수치가 37.00% 증가한다."}]
+    equipment = [{"bonus_effect": "추가 피해 +30.00%"}]
+    accessories = [{"honing_effects": ["낙인력 +8.00%", "낙인력 +2.00%"]}]
+
+    result = parser.parse_aggregate_effects(stats, engravings, equipment, accessories)
+    by_name = {r["name"]: r["text"] for r in result}
+    assert by_name["공격 속도"] == "공격 속도 +30.99%"
+    assert by_name["추가 피해"] == "추가 피해 +30.00%"
+    assert by_name["낙인력"] == "낙인력 +10.00%"  # 8.00 + 2.00 합산
+
+
+def test_parse_aggregate_effects_handles_all_none():
+    assert parser.parse_aggregate_effects(None, None, None, None) == []
