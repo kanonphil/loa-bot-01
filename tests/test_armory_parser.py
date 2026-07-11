@@ -353,6 +353,15 @@ def test_parse_armory_detail_combines_all_sections():
             "CharacterClassName": "홀리나이트",
             "ItemAvgLevel": "1680.00",
             "CombatPower": "123456789",
+            "CharacterImage": "https://example.com/char.png",
+            "CharacterLevel": 70,
+            "ExpeditionLevel": 293,
+            "GuildName": "동물롱장",
+            "GuildMemberGrade": "일반 길드원",
+            "HonorPoint": 220,
+            "TownLevel": 70,
+            "TownName": "졸타뉴 마을",
+            "ServerName": "루페온",
         },
         "ArmorySkills": SKILLS,
         "ArkPassive": ARK_PASSIVE,
@@ -370,6 +379,14 @@ def test_parse_armory_detail_combines_all_sections():
     assert result["character_name"] == "테스트캐릭"
     assert result["character_class"] == "홀리나이트"
     assert result["combat_power"] == "123,456,789"
+    assert result["guild_name"] == "동물롱장"
+    assert result["guild_member_grade"] == "일반 길드원"
+    assert result["character_level"] == 70
+    assert result["expedition_level"] == 293
+    assert result["honor_point"] == 220
+    assert result["town_level"] == 70
+    assert result["town_name"] == "졸타뉴 마을"
+    assert result["server_name"] == "루페온"
     assert len(result["skills"]) == 1
     assert len(result["ark_passive"]["points"]) == 3
     assert len(result["accessories"]) == 1

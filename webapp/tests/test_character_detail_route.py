@@ -14,6 +14,15 @@ DETAIL = {
     "character_class": "홀리나이트",
     "item_level": "1720.00",
     "combat_power": "123456789",
+    "character_image": "https://cdn-lostark.game.onstove.com/portrait.png",
+    "character_level": 70,
+    "expedition_level": 293,
+    "guild_name": "동물롱장",
+    "guild_member_grade": "일반 길드원",
+    "honor_point": 220,
+    "town_level": 70,
+    "town_name": "졸타뉴 마을",
+    "server_name": "루페온",
     "skills": [
         {
             "name": "심판의 빛",
@@ -98,6 +107,16 @@ def test_renders_character_detail(client):
     # 등급은 텍스트로 적지 않고 아이콘 테두리/이름 글자색(CSS 클래스)으로만 표현
     assert 'class="char-arkgrid-core-icon char-grade-유물"' in resp.text
     assert 'char-grade-text-유물' in resp.text
+    # 좌측 프로필 사이드바 (칭호/수집형 포인트/아이템레벨-전투력 순위는 제외)
+    assert "동물롱장" in resp.text
+    assert "일반 길드원" in resp.text
+    assert "졸타뉴 마을" in resp.text
+    assert 'src="https://cdn-lostark.game.onstove.com/portrait.png"' in resp.text
+    # 장비/스킬/아크그리드/보석 4개 탭
+    assert 'data-armory-tab="equip"' in resp.text
+    assert 'data-armory-tab="skill"' in resp.text
+    assert 'data-armory-tab="arkgrid"' in resp.text
+    assert 'data-armory-tab="gem"' in resp.text
     # 코어에 장착된 젬의 세부 정보는 너무 장황해서 보여주지 않기로 했다
     assert "char-arkgrid-gem" not in resp.text
 

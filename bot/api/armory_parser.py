@@ -223,13 +223,22 @@ def _format_combat_power(raw) -> str | None:
 
 
 def parse_armory_detail(raw: dict) -> dict:
-    """아머리 원본 응답(profiles+equipment+combat-skills+arkpassive+gems 필터) 전체를 정리."""
+    """아머리 원본 응답(profiles+equipment+combat-skills+arkpassive+gems+arkgrid 필터) 전체를 정리."""
     profile = raw.get("ArmoryProfile") or {}
     return {
         "character_name": profile.get("CharacterName"),
         "character_class": profile.get("CharacterClassName"),
         "item_level": profile.get("ItemAvgLevel"),
         "combat_power": _format_combat_power(profile.get("CombatPower")),
+        "character_image": profile.get("CharacterImage"),
+        "character_level": profile.get("CharacterLevel"),
+        "expedition_level": profile.get("ExpeditionLevel"),
+        "guild_name": profile.get("GuildName"),
+        "guild_member_grade": profile.get("GuildMemberGrade"),
+        "honor_point": profile.get("HonorPoint"),
+        "town_level": profile.get("TownLevel"),
+        "town_name": profile.get("TownName"),
+        "server_name": profile.get("ServerName"),
         "skills": parse_skills(raw.get("ArmorySkills")),
         "ark_passive": parse_ark_passive(raw.get("ArkPassive")),
         "accessories": parse_accessories(raw.get("ArmoryEquipment")),
