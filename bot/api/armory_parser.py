@@ -10,7 +10,10 @@ import re
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _ACCESSORY_TYPES = {"목걸이", "귀걸이", "반지"}
+_WEAPON_ARMOR_TYPES = {"무기", "투구", "상의", "하의", "장갑", "어깨"}
 _GEM_LEVEL_PREFIX_RE = re.compile(r"^\d+레벨\s*")
+_HONING_LEVEL_RE = re.compile(r"^\+(\d+)\s*")
+_STAT_PERCENT_RE = re.compile(r"(.+?)(?:이|가)\s*([\d.]+)%\s*(증가|감소)")
 
 
 def strip_html(text: str | None) -> str:
@@ -150,6 +153,57 @@ def parse_accessories(equipment: list[dict]) -> list[dict]:
     return result
 
 
+def parse_weapon_armor(equipment: list[dict]) -> list[dict]:
+    """무기/방어구(투구·상의·하의·장갑·어깨) 6부위 — 강화 수치, 품질, 기본/추가 효과를 정리한다.
+    이름에 붙은 "+18" 같은 강화 수치 접두어는 honing_level로 따로 뽑아내고 이름에서는 제거한다."""
+    result = []
+    for item in equipment or []:
+        if item.get("Type") not in _WEAPON_ARMOR_TYPES:
+            continue
+        raw_name = strip_html(item.get("Name"))
+        honing_match = _HONING_LEVEL_RE.match(raw_name)
+        honing_level = honing_match.group(1) if honing_match else None
+        name = _HONING_LEVEL_RE.sub("", raw_name)
+
+        tooltip = parse_tooltip_json(item.get("Tooltip"))
+        quality = find_quality(tooltip)
+        base_stats = find_item_part(tooltip, "기본 효과")
+        bonus_effect = find_item_part(tooltip, "추가 효과")
+        ark_passive_bonus = find_item_part(tooltip, "아크 패시브 포인트 효과")
+
+        result.append(
+            {
+                "type": item.get("Type"),
+                "name": name,
+                "honing_level": honing_level,
+                "icon": item.get("Icon"),
+                "grade": item.get("Grade"),
+                "quality": quality,
+                "quality_tier": quality_tier(quality) if quality is not None else None,
+                "base_stat_lines": [line for line in (base_stats or "").split("\n") if line.strip()],
+                "bonus_effect": bonus_effect,
+                "ark_passive_bonus": ark_passive_bonus,
+            }
+        )
+    return result
+
+
+def parse_stat_effects(stats: list[dict] | None) -> list[dict]:
+    """전투특성(특화/치명/신속/제압/인내/숙련) 툴팁에서 "OOO가 N% 증가/감소합니다" 형태의
+    실제 효과 문장만 뽑아 정리한다. 보상/카드도감 안내 문구는 "%" 표기가 없어 자동으로 걸러진다."""
+    result = []
+    for stat in stats or []:
+        for raw_line in stat.get("Tooltip") or []:
+            line = strip_html(raw_line)
+            match = _STAT_PERCENT_RE.search(line)
+            if not match:
+                continue
+            name, value, direction = match.groups()
+            sign = "+" if direction == "증가" else "-"
+            result.append({"stat": stat.get("Type"), "text": f"{name.strip()} {sign}{value}%"})
+    return result
+
+
 def parse_gems(gem_data: dict | None) -> list[dict]:
     """보석 슬롯/이름/레벨/등급/효과를 정리한다."""
     gem_data = gem_data or {}
@@ -241,7 +295,9 @@ def parse_armory_detail(raw: dict) -> dict:
         "server_name": profile.get("ServerName"),
         "skills": parse_skills(raw.get("ArmorySkills")),
         "ark_passive": parse_ark_passive(raw.get("ArkPassive")),
+        "equipment": parse_weapon_armor(raw.get("ArmoryEquipment")),
         "accessories": parse_accessories(raw.get("ArmoryEquipment")),
         "gems": parse_gems(raw.get("ArmoryGem")),
         "ark_grid": parse_ark_grid(raw.get("ArkGrid")),
+        "stat_effects": parse_stat_effects(profile.get("Stats")),
     }

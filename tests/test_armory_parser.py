@@ -393,3 +393,136 @@ def test_parse_armory_detail_combines_all_sections():
     assert len(result["gems"]) == 1
     assert len(result["ark_grid"]["cores"]) == 1
     assert len(result["ark_grid"]["effects"]) == 2
+
+
+# ── 무기/방어구 (실제 API 응답 샘플 기반) ──────────────────────
+
+WEAPON_TOOLTIP = json.dumps(
+    {
+        "Element_000": {"type": "NameTagBox", "value": "<P ALIGN='CENTER'><FONT COLOR='#E3C7A1'>+18 운명의 전율 한손검</FONT></P>"},
+        "Element_001": {
+            "type": "ItemTitle",
+            "value": {"leftStr0": "고대 한손검", "qualityValue": 100, "rightStr0": "장착중"},
+        },
+        "Element_005": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>기본 효과</FONT>", "Element_001": "무기 공격력 +203054"},
+        },
+        "Element_007": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>추가 효과</FONT>", "Element_001": "추가 피해 +30.00%"},
+        },
+    }
+)
+
+ARMOR_TOOLTIP = json.dumps(
+    {
+        "Element_000": {"type": "NameTagBox", "value": "<P ALIGN='CENTER'><FONT COLOR='#E3C7A1'>+17 운명의 전율 투구</FONT></P>"},
+        "Element_001": {
+            "type": "ItemTitle",
+            "value": {"leftStr0": "고대 머리 방어구", "qualityValue": 99, "rightStr0": "장착중"},
+        },
+        "Element_005": {
+            "type": "ItemPartBox",
+            "value": {
+                "Element_000": "<FONT COLOR='#A9D0F5'>기본 효과</FONT>",
+                "Element_001": "물리 방어력 +9497<BR>마법 방어력 +10552<BR>힘 +114358<BR>체력 +11117",
+            },
+        },
+        "Element_007": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>추가 효과</FONT>", "Element_001": "생명 활성력 +1373"},
+        },
+        "Element_009": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>아크 패시브 포인트 효과</FONT>", "Element_001": "진화 +24"},
+        },
+    }
+)
+
+WEAPON_ARMOR_EQUIPMENT = [
+    {
+        "Type": "무기",
+        "Name": "+18 운명의 전율 한손검",
+        "Icon": "https://example.com/weapon.png",
+        "Grade": "고대",
+        "Tooltip": WEAPON_TOOLTIP,
+    },
+    {
+        "Type": "투구",
+        "Name": "+17 운명의 전율 투구",
+        "Icon": "https://example.com/helmet.png",
+        "Grade": "고대",
+        "Tooltip": ARMOR_TOOLTIP,
+    },
+    {"Type": "목걸이", "Name": "장신구는 여기 안 나옴", "Grade": "고대", "Tooltip": "{}"},
+]
+
+
+def test_parse_weapon_armor_extracts_honing_level_and_strips_from_name():
+    result = parser.parse_weapon_armor(WEAPON_ARMOR_EQUIPMENT)
+    weapon = next(i for i in result if i["type"] == "무기")
+    assert weapon["honing_level"] == "18"
+    assert weapon["name"] == "운명의 전율 한손검"
+
+
+def test_parse_weapon_armor_excludes_accessories():
+    result = parser.parse_weapon_armor(WEAPON_ARMOR_EQUIPMENT)
+    assert len(result) == 2
+    assert all(i["type"] != "목걸이" for i in result)
+
+
+def test_parse_weapon_armor_extracts_quality_and_effects():
+    result = parser.parse_weapon_armor(WEAPON_ARMOR_EQUIPMENT)
+    weapon = next(i for i in result if i["type"] == "무기")
+    assert weapon["quality"] == 100
+    assert weapon["quality_tier"] == "상"
+    assert weapon["base_stat_lines"] == ["무기 공격력 +203054"]
+    assert weapon["bonus_effect"] == "추가 피해 +30.00%"
+    assert weapon["ark_passive_bonus"] is None  # 무기는 아크 패시브 포인트 효과가 없음
+
+    armor = next(i for i in result if i["type"] == "투구")
+    assert armor["quality"] == 99
+    assert armor["base_stat_lines"] == [
+        "물리 방어력 +9497",
+        "마법 방어력 +10552",
+        "힘 +114358",
+        "체력 +11117",
+    ]
+    assert armor["bonus_effect"] == "생명 활성력 +1373"
+    assert armor["ark_passive_bonus"] == "진화 +24"
+
+
+# ── 전투특성 효과 (실제 API 응답 샘플 기반) ────────────────────
+
+STATS_SAMPLE = [
+    {
+        "Type": "신속",
+        "Value": "1804",
+        "Tooltip": [
+            "<textformat indent='-21' leftMargin='10'><font> </font> 공격 속도가 <font color='#99ff99'>30.99%</font> 증가합니다.</textformat>",
+            "<textformat indent='-21' leftMargin='10'><font> </font> 이동 속도가 <font color='#99ff99'>30.99%</font> 증가합니다.</textformat>",
+            "<textformat indent='-21' leftMargin='10'><font> </font> 스킬 재사용 대기시간이 <font color='#99ff99'>38.73%</font> 감소합니다.</textformat>",
+            "<textformat indent='-21' leftMargin='10'><font> </font> 물약 및 원정대 레벨 보상 효과로 <font color='#99ff99'>32</font>만큼 영구적으로 증가되었습니다.</textformat>",
+            "<textformat indent='-21' leftMargin='10'><font> </font> 카드 도감 누적 효과가 반영된 값으로 전투정보실에서는 별도 수치를 표기하지 않습니다.</textformat>",
+        ],
+    }
+]
+
+
+def test_parse_stat_effects_extracts_percent_lines_only():
+    result = parser.parse_stat_effects(STATS_SAMPLE)
+    texts = [r["text"] for r in result]
+    assert texts == ["공격 속도 +30.99%", "이동 속도 +30.99%", "스킬 재사용 대기시간 -38.73%"]
+    assert all(r["stat"] == "신속" for r in result)
+
+
+def test_parse_stat_effects_ignores_boilerplate_lines_without_percent():
+    """"32만큼 영구적으로 증가" 같은 보상 안내 문구는 %가 없어서 자동으로 제외돼야 한다."""
+    result = parser.parse_stat_effects(STATS_SAMPLE)
+    assert not any("32" in r["text"] for r in result)
+    assert not any("카드 도감" in r["text"] for r in result)
+
+
+def test_parse_stat_effects_handles_none():
+    assert parser.parse_stat_effects(None) == []

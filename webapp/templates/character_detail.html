@@ -51,6 +51,49 @@
 
     <!-- ── 장비 ── -->
     <div class="armory-panel is-active" data-armory-panel="equip">
+      {% if detail.stat_effects %}
+      <div class="char-detail-section">
+        <h2 class="char-detail-title">전투특성 효과</h2>
+        <div class="char-arkgrid-summary-list">
+          {% for e in detail.stat_effects %}
+          <span class="char-arkgrid-stat-chip">{{ e.text }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="char-detail-section">
+        <h2 class="char-detail-title">무기 / 방어구</h2>
+        <div class="char-equipment-list">
+          {% for e in detail.equipment %}
+          <div class="char-equipment-card">
+            <div class="char-equipment-header">
+              {% if e.icon %}<img src="{{ e.icon }}" alt="" class="char-equipment-icon char-grade-{{ e.grade }}">{% endif %}
+              <div class="char-equipment-title">
+                <span class="char-equipment-type">{{ e.type }}</span>
+                <span class="char-equipment-name char-grade-text-{{ e.grade }}">{{ e.name }}</span>
+                {% if e.honing_level %}<span class="char-equipment-honing">+{{ e.honing_level }}</span>{% endif %}
+                {% if e.quality is not none %}
+                <span class="char-quality-badge char-quality-{{ e.quality_tier }}">품질 {{ e.quality }}</span>
+                {% endif %}
+              </div>
+            </div>
+            {% if e.base_stat_lines %}
+            <ul class="char-honing-list">
+              {% for line in e.base_stat_lines %}
+              <li>{{ line }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+            {% if e.bonus_effect %}<p class="char-accessory-arkpassive">{{ e.bonus_effect }}</p>{% endif %}
+            {% if e.ark_passive_bonus %}<p class="char-accessory-arkpassive">{{ e.ark_passive_bonus }}</p>{% endif %}
+          </div>
+          {% else %}
+          <p class="dash-empty">무기/방어구 정보가 없습니다.</p>
+          {% endfor %}
+        </div>
+      </div>
+
       <div class="char-detail-section">
         <h2 class="char-detail-title">장신구</h2>
         <div class="char-accessory-list">

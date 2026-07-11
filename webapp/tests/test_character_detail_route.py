@@ -23,6 +23,24 @@ DETAIL = {
     "town_level": 70,
     "town_name": "졸타뉴 마을",
     "server_name": "루페온",
+    "stat_effects": [
+        {"stat": "신속", "text": "공격 속도 +30.99%"},
+        {"stat": "신속", "text": "이동 속도 +30.99%"},
+    ],
+    "equipment": [
+        {
+            "type": "무기",
+            "name": "운명의 전율 한손검",
+            "honing_level": "18",
+            "icon": "https://cdn-lostark.game.onstove.com/weapon.png",
+            "grade": "고대",
+            "quality": 100,
+            "quality_tier": "상",
+            "base_stat_lines": ["무기 공격력 +203054"],
+            "bonus_effect": "추가 피해 +30.00%",
+            "ark_passive_bonus": None,
+        }
+    ],
     "skills": [
         {
             "name": "심판의 빛",
@@ -119,6 +137,12 @@ def test_renders_character_detail(client):
     assert 'data-armory-tab="gem"' in resp.text
     # 코어에 장착된 젬의 세부 정보는 너무 장황해서 보여주지 않기로 했다
     assert "char-arkgrid-gem" not in resp.text
+    # 무기/방어구 + 전투특성 효과
+    assert "운명의 전율 한손검" in resp.text
+    assert "+18" in resp.text
+    assert "무기 공격력 +203054" in resp.text
+    assert "추가 피해 +30.00%" in resp.text
+    assert "공격 속도 +30.99%" in resp.text
 
 
 def test_renders_error_when_not_found(client):
