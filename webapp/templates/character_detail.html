@@ -219,9 +219,13 @@
 
           <div class="equip-zone equip-box">
             <h2 class="char-detail-title">아크 그리드</h2>
-            <div class="char-arkgrid-mini-list">
+            <div class="arkgrid-core-mini-rows">
               {% for c in detail.ark_grid.cores %}
-              {% if c.icon %}<img src="{{ c.icon }}" alt="{{ c.name }}" title="{{ c.name }} ({{ c.point }}P)" class="char-arkgrid-mini-icon char-grade-{{ c.grade }}">{% endif %}
+              <div class="arkgrid-core-mini-row">
+                {% if c.icon %}<img src="{{ c.icon }}" alt="" class="char-arkgrid-mini-icon char-grade-{{ c.grade }}">{% endif %}
+                <span class="arkgrid-core-mini-name char-grade-text-{{ c.grade }}">{{ c.name }}</span>
+                <span class="arkgrid-core-mini-point">{{ c.point }}P</span>
+              </div>
               {% endfor %}
             </div>
             {% if detail.ark_grid.effects %}

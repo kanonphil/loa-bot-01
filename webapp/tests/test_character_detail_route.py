@@ -213,6 +213,10 @@ def test_renders_character_detail(client):
     # 등급은 텍스트로 적지 않고 아이콘 테두리/이름 글자색(CSS 클래스)으로만 표현
     assert 'class="char-arkgrid-core-icon char-grade-유물"' in resp.text
     assert 'char-grade-text-유물' in resp.text
+    # 장비 탭 아크 그리드 요약 — 코어 이름이 hover 툴팁이 아니라 아이콘 오른쪽에 노출
+    assert "arkgrid-core-mini-name" in resp.text
+    assert "질서의 해 코어 : 빛이 생명을 새긴다" in resp.text
+    assert "18P" in resp.text
     # 좌측 프로필 사이드바 (칭호/수집형 포인트/아이템레벨-전투력 순위는 제외)
     assert "동물롱장" in resp.text
     assert "일반 길드원" in resp.text

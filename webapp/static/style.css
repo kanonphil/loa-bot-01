@@ -2631,19 +2631,44 @@ a.calendar-party:hover {
   color: #b16cf0;
 }
 
-.char-arkgrid-mini-list {
+/* 장비 탭 아크 그리드 요약 — 코어 하나당 한 줄(아이콘 + 이름 + 포인트) */
+.arkgrid-core-mini-rows {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   margin-bottom: 10px;
 }
 
+.arkgrid-core-mini-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arkgrid-core-mini-name {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+  line-height: 1.35;
+  /* 긴 코어 이름은 말줄임으로 자르지 않고 두 줄로 줄바꿈 */
+  overflow-wrap: anywhere;
+}
+
+.arkgrid-core-mini-point {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .char-arkgrid-mini-icon {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
   box-sizing: border-box;
   border: 2px solid transparent;
+  flex-shrink: 0;
 }
 
 /* 카드 6장이 항상 한 줄에 들어가도록 6열 고정 그리드 */
