@@ -258,8 +258,13 @@ def parse_cards(card: dict | None) -> dict:
     for e in card.get("Effects") or []:
         # ArkPassive/ArkGrid의 Effects는 Name+Description(또는 Tooltip) 형태였다 —
         # 카드 세트효과도 같은 컨벤션일 것으로 보고 두 필드 모두 방어적으로 처리한다.
-        text = e.get("Description") or e.get("Tooltip") or ""
-        effects.append({"name": e.get("Name"), "text": strip_html(text)})
+        # 실제 응답에는 이 컨벤션과 안 맞는(이름/본문이 둘 다 없는) 항목이 섞여 나올 수
+        # 있어서, 둘 다 비어있으면 "None —" 같은 깨진 줄이 보이지 않도록 건너뛴다.
+        name = e.get("Name")
+        text = strip_html(e.get("Description") or e.get("Tooltip") or "")
+        if not name and not text:
+            continue
+        effects.append({"name": name, "text": text})
     return {"cards": cards, "effects": effects}
 
 

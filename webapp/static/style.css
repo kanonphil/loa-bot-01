@@ -2495,19 +2495,28 @@ a.calendar-party:hover {
   line-height: 1.6;
 }
 
-/* ── 장비 탭: 레퍼런스(loawa.com)와 동일하게 3열 그리드 두 줄
-   (무기/방어구 | 장신구 | 효과영수증), (아크그리드 | 각인 | 카드) ── */
+/* ── 장비 탭: 레퍼런스(loawa.com)와 동일한 3열 구성 —
+   1열: 무기/방어구+아크그리드, 2열: 장신구+각인, 3열: 효과영수증+카드.
+   align-items: start가 핵심 — 없으면 그리드가 세 칸 높이를 강제로 맞춰서,
+   짧은 칸 밑에 다음 섹션이 못 올라오고 큰 빈 공간이 생긴다. */
 .equip-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  align-items: start;
   gap: 16px;
-  margin-bottom: 16px;
 }
 
 @media (max-width: 900px) {
   .equip-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.equip-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 
 .equip-zone {

@@ -604,6 +604,14 @@ def test_parse_cards_handles_none():
     assert parser.parse_cards(None) == {"cards": [], "effects": []}
 
 
+def test_parse_cards_skips_effect_entries_without_name_or_text():
+    """실제 응답에서 Name/Description(Tooltip)이 둘 다 없는 항목이 섞여 나온 적이 있어서
+    (화면에 "None —"으로 깨져 보였음), 그런 항목은 건너뛰어야 한다."""
+    card_data = {"Cards": [], "Effects": [{"Name": None}, {"Description": ""}]}
+    result = parser.parse_cards(card_data)
+    assert result["effects"] == []
+
+
 # ── 종합 효과(효과 영수증) — 전투특성/각인/장비/장신구에서 % 효과를 모아 이름별로 합산 ──
 
 def test_parse_aggregate_effects_sums_same_named_stat_across_sources():
