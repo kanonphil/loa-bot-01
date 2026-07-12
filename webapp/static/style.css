@@ -2609,9 +2609,26 @@ a.calendar-party:hover {
   font-weight: 600;
 }
 
+.char-engraving-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .char-engraving-level {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* 어빌리티 스톤으로 활성화된 각인의 스톤 세공 레벨 */
+.char-engraving-stone {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(177, 108, 240, 0.16);
+  color: #b16cf0;
 }
 
 .char-arkgrid-mini-list {
@@ -2629,18 +2646,44 @@ a.calendar-party:hover {
   border: 2px solid transparent;
 }
 
+/* 카드 6장이 항상 한 줄에 들어가도록 6열 고정 그리드 */
 .char-card-icon-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
   margin-bottom: 10px;
 }
 
+.char-card-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
 .char-card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
   border: 1px solid var(--border);
+}
+
+.char-card-awake {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffb64c;
+}
+
+.card-awake-total {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 182, 76, 0.14);
+  color: #ffb64c;
+  vertical-align: 2px;
 }
 
 .char-gem-list {

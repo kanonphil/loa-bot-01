@@ -576,6 +576,13 @@ def test_parse_engravings_extracts_name_grade_level_description():
     assert "<FONT" not in result[0]["description"]  # HTML 태그 제거 확인
 
 
+def test_parse_engravings_includes_ability_stone_level():
+    """어빌리티 스톤으로 활성화된 각인은 스톤 세공 레벨을 함께 보여줘야 한다."""
+    result = parser.parse_engravings(ENGRAVING_SAMPLE)
+    assert result[0]["ability_stone_level"] == 3  # 각성 — 스톤 세공 3레벨
+    assert result[1]["ability_stone_level"] is None  # 급소 타격 — 스톤 아님
+
+
 def test_parse_engravings_handles_none():
     assert parser.parse_engravings(None) == []
 
@@ -600,8 +607,36 @@ def test_parse_cards_extracts_card_list_and_set_effects():
     assert result["effects"][0]["text"] == "암속성 피해 감소 +25.00%"
 
 
+def test_parse_cards_unwraps_items_nested_effects_and_sums_awakening():
+    """실제 응답의 Effects는 Items로 한 겹 감싸져 있고 세트 이름이
+    "남겨진 바람의 절벽 6세트 (12각성)" 형태로 Items 안에 들어있다 — 평면 형태만
+    처리하던 기존 파서에서는 세트효과가 화면에 아예 안 떴다."""
+    card_data = {
+        "Cards": [
+            {"Slot": 0, "Name": "아만", "AwakeCount": 5, "AwakeTotal": 5, "Grade": "전설"},
+            {"Slot": 1, "Name": "니나브", "AwakeCount": 4, "AwakeTotal": 5, "Grade": "전설"},
+        ],
+        "Effects": [
+            {
+                "Index": 0,
+                "Items": [
+                    {"Name": "남겨진 바람의 절벽 6세트", "Description": "암속성 피해 감소 +20.00%"},
+                    {"Name": "남겨진 바람의 절벽 6세트 (12각성)", "Description": "암속성 피해 감소 <FONT COLOR='#99ff99'>+25.00%</FONT>"},
+                ],
+            }
+        ],
+    }
+    result = parser.parse_cards(card_data)
+    assert result["total_awake"] == 9  # 5 + 4
+    assert [e["name"] for e in result["effects"]] == [
+        "남겨진 바람의 절벽 6세트",
+        "남겨진 바람의 절벽 6세트 (12각성)",
+    ]
+    assert result["effects"][1]["text"] == "암속성 피해 감소 +25.00%"
+
+
 def test_parse_cards_handles_none():
-    assert parser.parse_cards(None) == {"cards": [], "effects": []}
+    assert parser.parse_cards(None) == {"cards": [], "effects": [], "total_awake": 0}
 
 
 def test_parse_cards_skips_effect_entries_without_name_or_text():

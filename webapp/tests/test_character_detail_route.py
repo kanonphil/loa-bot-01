@@ -58,15 +58,16 @@ DETAIL = {
         {"name": "최대 마나", "value_text": "+6", "text": "최대 마나 +6"},
     ],
     "engravings": [
-        {"name": "각성", "grade": "유물", "level": 4, "description": "각성기의 재사용 대기시간이 60.50% 감소한다."},
+        {"name": "각성", "grade": "유물", "level": 4, "ability_stone_level": 3, "description": "각성기의 재사용 대기시간이 60.50% 감소한다."},
     ],
     "cards": {
         "cards": [
             {"slot": 0, "name": "아만", "icon": "https://cdn-lostark.game.onstove.com/card.png", "grade": "전설", "awake_count": 5, "awake_total": 5},
         ],
         "effects": [
-            {"name": "남겨진 바람의 절벽", "text": "암속성 피해 감소 +25.00%"},
+            {"name": "남겨진 바람의 절벽 6세트 (12각성)", "text": "암속성 피해 감소 +25.00%"},
         ],
+        "total_awake": 30,
     },
     "equipment": [
         {
@@ -232,9 +233,12 @@ def test_renders_character_detail(client):
     # 각인 + 카드
     assert "각성" in resp.text
     assert "Lv.4" in resp.text
+    assert "스톤 Lv.3" in resp.text  # 어빌리티 스톤으로 활성화된 각인은 스톤 레벨 표시
     assert 'src="https://cdn-lostark.game.onstove.com/card.png"' in resp.text
-    assert "남겨진 바람의 절벽" in resp.text
+    assert "남겨진 바람의 절벽 6세트 (12각성)" in resp.text
     assert "암속성 피해 감소 +25.00%" in resp.text
+    assert "30각성" in resp.text  # 카드 제목 옆 총 각성 수
+    assert "5각" in resp.text  # 카드마다 각성 수 배지
 
 
 def test_renders_error_when_not_found(client):

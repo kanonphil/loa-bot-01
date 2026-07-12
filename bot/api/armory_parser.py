@@ -330,6 +330,8 @@ def parse_engravings(engraving: dict | None) -> list[dict]:
                 "name": e.get("Name"),
                 "grade": e.get("Grade"),
                 "level": e.get("Level"),
+                # 어빌리티 스톤으로 활성화된 각인이면 그 스톤 세공 레벨 (아니면 None)
+                "ability_stone_level": e.get("AbilityStoneLevel"),
                 "description": strip_html(e.get("Description")),
             }
         )
@@ -337,7 +339,7 @@ def parse_engravings(engraving: dict | None) -> list[dict]:
 
 
 def parse_cards(card: dict | None) -> dict:
-    """카드 — 장착된 카드 목록과, 세트효과가 활성화됐다면 그 이름/효과 설명을 정리한다."""
+    """카드 — 장착된 카드 목록, 총 각성 수, 세트효과 이름/설명을 정리한다."""
     card = card or {}
     cards = [
         {
@@ -350,18 +352,29 @@ def parse_cards(card: dict | None) -> dict:
         }
         for c in card.get("Cards") or []
     ]
-    effects = []
+    total_awake = sum(c["awake_count"] or 0 for c in cards)
+
+    # 실제 응답의 Effects는 [{"Index": 0, "Items": [{Name, Description}, ...]}]처럼
+    # Items로 한 겹 감싸져 있다 (세트 이름이 "남겨진 바람의 절벽 6세트 (12각성)" 형태로
+    # Items 안에 들어있음). 감싸지지 않은 평면 형태(Name/Description 직접)도 함께 처리한다.
+    entries = []
     for e in card.get("Effects") or []:
-        # ArkPassive/ArkGrid의 Effects는 Name+Description(또는 Tooltip) 형태였다 —
-        # 카드 세트효과도 같은 컨벤션일 것으로 보고 두 필드 모두 방어적으로 처리한다.
-        # 실제 응답에는 이 컨벤션과 안 맞는(이름/본문이 둘 다 없는) 항목이 섞여 나올 수
-        # 있어서, 둘 다 비어있으면 "None —" 같은 깨진 줄이 보이지 않도록 건너뛴다.
+        if not isinstance(e, dict):
+            continue
+        if isinstance(e.get("Items"), list):
+            entries.extend(i for i in e["Items"] if isinstance(i, dict))
+        else:
+            entries.append(e)
+
+    effects = []
+    for e in entries:
+        # 이름/본문이 둘 다 없는 항목은 "None —" 같은 깨진 줄이 보이지 않도록 건너뛴다.
         name = e.get("Name")
         text = strip_html(e.get("Description") or e.get("Tooltip") or "")
         if not name and not text:
             continue
         effects.append({"name": name, "text": text})
-    return {"cards": cards, "effects": effects}
+    return {"cards": cards, "effects": effects, "total_awake": total_awake}
 
 
 def _iter_percent_effects(text: str):

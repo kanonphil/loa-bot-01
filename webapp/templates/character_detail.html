@@ -244,7 +244,10 @@
               {% for eng in detail.engravings %}
               <div class="char-engraving-row" title="{{ eng.description }}">
                 <span class="char-engraving-name char-grade-text-{{ eng.grade }}">{{ eng.name }}</span>
-                <span class="char-engraving-level">Lv.{{ eng.level }}</span>
+                <span class="char-engraving-meta">
+                  {% if eng.ability_stone_level %}<span class="char-engraving-stone">스톤 Lv.{{ eng.ability_stone_level }}</span>{% endif %}
+                  <span class="char-engraving-level">Lv.{{ eng.level }}</span>
+                </span>
               </div>
               {% else %}
               <p class="dash-empty">각인 정보가 없습니다.</p>
@@ -253,11 +256,16 @@
           </div>
 
           <div class="equip-zone equip-box">
-            <h2 class="char-detail-title">카드</h2>
+            <h2 class="char-detail-title">카드
+              {% if detail.cards.total_awake %}<span class="card-awake-total">{{ detail.cards.total_awake }}각성</span>{% endif %}
+            </h2>
             {% if detail.cards.cards %}
             <div class="char-card-icon-list">
               {% for c in detail.cards.cards %}
-              <img src="{{ c.icon }}" alt="{{ c.name }}" title="{{ c.name }} ({{ c.awake_count }}/{{ c.awake_total }})" class="char-card-icon">
+              <span class="char-card-item" title="{{ c.name }} ({{ c.awake_count }}/{{ c.awake_total }})">
+                <img src="{{ c.icon }}" alt="{{ c.name }}" class="char-card-icon">
+                {% if c.awake_count is not none %}<span class="char-card-awake">{{ c.awake_count }}각</span>{% endif %}
+              </span>
               {% endfor %}
             </div>
             {% endif %}
