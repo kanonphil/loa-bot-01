@@ -229,22 +229,22 @@ def parse_weapon_armor(equipment: list[dict]) -> list[dict]:
     return result
 
 
-# 화면 배치 순서 — 팔찌/어빌리티 스톤은 반지 열 아래, 보주는 귀걸이 열 아래 첫 번째로
-# 오도록 나침반/부적보다 앞세운다 (템플릿이 이 정렬 순서를 그대로 쓴다).
+# 화면에 보여줄 기타 장비 화이트리스트 겸 배치 순서 — 팔찌/어빌리티 스톤은 반지 열 아래,
+# 보주는 귀걸이 열 아래 (템플릿이 이 정렬 순서를 그대로 쓴다).
+# 나침반/부적 등 전투와 무관한 아이템은 화면만 어지럽혀서 아예 제외한다.
 _EXTRA_EQUIP_ORDER = ["팔찌", "어빌리티 스톤", "보주"]
 # 장비 획득처/상인 판매 안내 같은 잡다한 섹션은 빼고, 실제 효과만 보여준다.
 _EXTRA_SECTION_KEYWORDS = ("효과", "각인", "보너스")
 
 
 def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
-    """무기/방어구/장신구에 안 잡히는 나머지 장착 아이템 — 팔찌/어빌리티 스톤(+나침반/부적 등).
+    """무기/방어구/장신구 외 장착 아이템 중 팔찌/어빌리티 스톤/보주만 정리한다.
     아이템 종류마다 Tooltip 구조가 달라서, ItemPartBox 섹션 중 제목에 효과/각인/보너스가
     들어간 것들을 (제목, 줄 목록) 그대로 수집하는 방어적 방식을 쓴다."""
-    handled = _ACCESSORY_TYPES | _WEAPON_ARMOR_TYPES
     result = []
     for item in equipment or []:
         item_type = item.get("Type")
-        if not item_type or item_type in handled:
+        if item_type not in _EXTRA_EQUIP_ORDER:
             continue
         tooltip = parse_tooltip_json(item.get("Tooltip"))
         sections = []

@@ -712,11 +712,11 @@ EXTRA_EQUIPMENT = [
 ]
 
 
-def test_parse_extra_equipment_extracts_bracelet_and_stone_in_fixed_order():
-    """팔찌/어빌리티 스톤은 반지 열 아래, 보주는 귀걸이 열 아래 첫 번째로 배치되므로
-    파서가 팔찌 → 스톤 → 보주 → 나머지(나침반/부적) 순으로 정렬해줘야 한다."""
+def test_parse_extra_equipment_keeps_only_bracelet_stone_orb_in_fixed_order():
+    """팔찌/어빌리티 스톤은 반지 열 아래, 보주는 귀걸이 열 아래에 배치되므로 이 순서로
+    정렬하고, 나침반/부적처럼 전투와 무관한 아이템은 아예 제외해야 한다."""
     result = parser.parse_extra_equipment(EXTRA_EQUIPMENT)
-    assert [x["type"] for x in result] == ["팔찌", "어빌리티 스톤", "보주", "나침반"]
+    assert [x["type"] for x in result] == ["팔찌", "어빌리티 스톤", "보주"]
     bracelet = result[0]
     assert bracelet["name"] == "천선의 구슬치"
     assert bracelet["grade"] == "고대"
