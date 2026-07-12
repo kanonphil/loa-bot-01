@@ -16,7 +16,7 @@
     <img src="{{ detail.character_image }}" alt="" class="armory-portrait">
     {% endif %}
     <h1 class="armory-name">{{ detail.character_name }}</h1>
-    <p class="armory-class">{{ detail.character_class }}</p>
+    <p class="armory-class">{{ detail.character_class }}{% if detail.ark_passive.title %} &middot; {{ detail.ark_passive.title }}{% endif %}</p>
     {% if detail.guild_name %}
     <p class="armory-guild">{{ detail.guild_name }}{% if detail.guild_member_grade %} &middot; {{ detail.guild_member_grade }}{% endif %}</p>
     {% endif %}
@@ -51,112 +51,88 @@
 
     <!-- ── 장비 ── -->
     <div class="armory-panel is-active" data-armory-panel="equip">
-      <div class="equip-layout">
-        <!-- 왼쪽: 무기/방어구 아이콘 그리드 -->
-        <div class="equip-col-left">
-          <div class="char-equipment-grid">
-            {% for e in detail.equipment %}
-            <div class="equip-icon-card">
-              <div class="equip-icon-wrap">
-                {% if e.icon %}<img src="{{ e.icon }}" alt="" class="equip-icon char-grade-{{ e.grade }}">{% endif %}
-                {% if e.honing_level %}<span class="equip-honing-badge">+{{ e.honing_level }}</span>{% endif %}
-              </div>
+      <div class="equip-columns">
+        <div class="equip-block">
+          {% for e in detail.equipment %}
+          <div class="equip-icon-card" title="{{ e.detail_text }}">
+            <div class="equip-icon-wrap">
+              {% if e.icon %}<img src="{{ e.icon }}" alt="" class="equip-icon char-grade-{{ e.grade }}">{% endif %}
+              {% if e.honing_level %}<span class="equip-honing-badge">+{{ e.honing_level }}</span>{% endif %}
+            </div>
+            <div class="equip-info">
+              <div class="equip-icon-name char-grade-text-{{ e.grade }}">{{ e.name }}</div>
               {% if e.quality is not none %}
               <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ e.quality_tier }}" style="width: {{ e.quality }}%;"></div></div>
               {% endif %}
-              <div class="equip-icon-name char-grade-text-{{ e.grade }}" title="{{ e.name }}">{{ e.name }}</div>
-              {% if e.base_stat_lines %}
-              <ul class="char-honing-list equip-icon-stats">
-                {% for line in e.base_stat_lines %}
-                <li>{{ line }}</li>
-                {% endfor %}
-              </ul>
+            </div>
+          </div>
+          {% else %}
+          <p class="dash-empty">무기/방어구 정보가 없습니다.</p>
+          {% endfor %}
+        </div>
+
+        <div class="equip-block">
+          {% for a in detail.accessories %}
+          <div class="equip-icon-card" title="{{ a.detail_text }}">
+            <div class="equip-icon-wrap">
+              {% if a.icon %}<img src="{{ a.icon }}" alt="" class="equip-icon char-grade-{{ a.grade }}">{% endif %}
+            </div>
+            <div class="equip-info">
+              <div class="equip-icon-name char-grade-text-{{ a.grade }}">{{ a.name }}</div>
+              {% if a.quality is not none %}
+              <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ a.quality_tier }}" style="width: {{ a.quality }}%;"></div></div>
               {% endif %}
-              {% if e.bonus_effect %}<p class="char-accessory-arkpassive">{{ e.bonus_effect }}</p>{% endif %}
-              {% if e.ark_passive_bonus %}<p class="char-accessory-arkpassive">{{ e.ark_passive_bonus }}</p>{% endif %}
+            </div>
+          </div>
+          {% else %}
+          <p class="dash-empty">장신구 정보가 없습니다.</p>
+          {% endfor %}
+        </div>
+
+        {% if detail.aggregate_effects %}
+        <div class="equip-block equip-summary-box">
+          <h2 class="char-detail-title">효과 양수지</h2>
+          <p class="equip-summary-caption">전투특성·각인·장비·장신구 효과를 합산한 참고용 수치입니다.</p>
+          <div class="char-arkgrid-summary-list">
+            {% for e in detail.aggregate_effects %}
+            <span class="char-arkgrid-stat-chip">{{ e.text }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="equip-block">
+          <h2 class="char-detail-title">각인</h2>
+          <div class="char-engraving-list">
+            {% for eng in detail.engravings %}
+            <div class="char-engraving-row">
+              <span class="char-engraving-name char-grade-text-{{ eng.grade }}">{{ eng.name }}</span>
+              <span class="char-engraving-level">Lv.{{ eng.level }}</span>
             </div>
             {% else %}
-            <p class="dash-empty">무기/방어구 정보가 없습니다.</p>
+            <p class="dash-empty">각인 정보가 없습니다.</p>
             {% endfor %}
           </div>
         </div>
 
-        <!-- 오른쪽: 효과 양수지 / 장신구 / 각인 / 카드 -->
-        <div class="equip-col-right">
-          {% if detail.aggregate_effects %}
-          <div class="char-detail-section equip-summary-box">
-            <h2 class="char-detail-title">효과 양수지</h2>
-            <p class="equip-summary-caption">전투특성·각인·장비·장신구 효과를 합산한 참고용 수치입니다.</p>
-            <div class="char-arkgrid-summary-list">
-              {% for e in detail.aggregate_effects %}
-              <span class="char-arkgrid-stat-chip">{{ e.text }}</span>
-              {% endfor %}
-            </div>
+        <div class="equip-block">
+          <h2 class="char-detail-title">카드</h2>
+          {% if detail.cards.cards %}
+          <div class="char-card-icon-list">
+            {% for c in detail.cards.cards %}
+            <img src="{{ c.icon }}" alt="{{ c.name }}" title="{{ c.name }} ({{ c.awake_count }}/{{ c.awake_total }})" class="char-card-icon">
+            {% endfor %}
           </div>
           {% endif %}
-
-          <div class="char-detail-section">
-            <h2 class="char-detail-title">장신구</h2>
-            <div class="char-accessory-list">
-              {% for a in detail.accessories %}
-              <div class="char-accessory-card">
-                <div class="char-accessory-header">
-                  <span class="char-accessory-type">{{ a.type }}</span>
-                  <span class="char-accessory-name">{{ a.name }}</span>
-                  {% if a.quality is not none %}
-                  <span class="char-quality-badge char-quality-{{ a.quality_tier }}">품질 {{ a.quality }}</span>
-                  {% endif %}
-                </div>
-                {% if a.honing_effects %}
-                <ul class="char-honing-list">
-                  {% for line in a.honing_effects %}
-                  <li>{{ line }}</li>
-                  {% endfor %}
-                </ul>
-                {% endif %}
-                {% if a.ark_passive_bonus %}
-                <p class="char-accessory-arkpassive">{{ a.ark_passive_bonus }}</p>
-                {% endif %}
-              </div>
-              {% else %}
-              <p class="dash-empty">장신구 정보가 없습니다.</p>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div class="char-detail-section">
-            <h2 class="char-detail-title">각인</h2>
-            <div class="char-engraving-list">
-              {% for eng in detail.engravings %}
-              <div class="char-engraving-row">
-                <span class="char-engraving-name char-grade-text-{{ eng.grade }}">{{ eng.name }}</span>
-                <span class="char-engraving-level">Lv.{{ eng.level }}</span>
-              </div>
-              {% else %}
-              <p class="dash-empty">각인 정보가 없습니다.</p>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div class="char-detail-section">
-            <h2 class="char-detail-title">카드</h2>
-            {% if detail.cards.cards %}
-            <div class="char-card-icon-list">
-              {% for c in detail.cards.cards %}
-              <img src="{{ c.icon }}" alt="{{ c.name }}" title="{{ c.name }} ({{ c.awake_count }}/{{ c.awake_total }})" class="char-card-icon">
-              {% endfor %}
-            </div>
-            {% endif %}
-            {% if detail.cards.effects %}
-            <ul class="char-honing-list">
-              {% for eff in detail.cards.effects %}
-              <li><strong>{{ eff.name }}</strong> — {{ eff.text }}</li>
-              {% endfor %}
-            </ul>
-            {% elif not detail.cards.cards %}
-            <p class="dash-empty">카드 정보가 없습니다.</p>
-            {% endif %}
-          </div>
+          {% if detail.cards.effects %}
+          <ul class="char-honing-list">
+            {% for eff in detail.cards.effects %}
+            <li><strong>{{ eff.name }}</strong> — {{ eff.text }}</li>
+            {% endfor %}
+          </ul>
+          {% elif not detail.cards.cards %}
+          <p class="dash-empty">카드 정보가 없습니다.</p>
+          {% endif %}
         </div>
       </div>
     </div>

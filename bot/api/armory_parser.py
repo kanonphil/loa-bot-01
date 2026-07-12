@@ -140,15 +140,23 @@ def parse_accessories(equipment: list[dict]) -> list[dict]:
         quality = find_quality(tooltip)
         honing = find_item_part(tooltip, "연마 효과")
         ark_passive_bonus = find_item_part(tooltip, "아크 패시브 포인트 효과")
+        honing_effects = [line for line in (honing or "").split("\n") if line.strip()]
+
+        detail_lines = list(honing_effects)
+        if ark_passive_bonus:
+            detail_lines.append(ark_passive_bonus)
+
         result.append(
             {
                 "type": item.get("Type"),
                 "name": strip_html(item.get("Name")),
+                "icon": item.get("Icon"),
                 "grade": item.get("Grade"),
                 "quality": quality,
                 "quality_tier": quality_tier(quality) if quality is not None else None,
-                "honing_effects": [line for line in (honing or "").split("\n") if line.strip()],
+                "honing_effects": honing_effects,
                 "ark_passive_bonus": ark_passive_bonus,
+                "detail_text": "\n".join(detail_lines),
             }
         )
     return result
@@ -171,6 +179,15 @@ def parse_weapon_armor(equipment: list[dict]) -> list[dict]:
         base_stats = find_item_part(tooltip, "기본 효과")
         bonus_effect = find_item_part(tooltip, "추가 효과")
         ark_passive_bonus = find_item_part(tooltip, "아크 패시브 포인트 효과")
+        base_stat_lines = [line for line in (base_stats or "").split("\n") if line.strip()]
+
+        # 목록 자체는 아이콘/이름/품질만 컴팩트하게 보여주고, 세부 스탯은
+        # 마우스 오버 시 뜨는 네이티브 title 툴팁으로 몰아넣는다.
+        detail_lines = list(base_stat_lines)
+        if bonus_effect:
+            detail_lines.append(bonus_effect)
+        if ark_passive_bonus:
+            detail_lines.append(ark_passive_bonus)
 
         result.append(
             {
@@ -181,9 +198,10 @@ def parse_weapon_armor(equipment: list[dict]) -> list[dict]:
                 "grade": item.get("Grade"),
                 "quality": quality,
                 "quality_tier": quality_tier(quality) if quality is not None else None,
-                "base_stat_lines": [line for line in (base_stats or "").split("\n") if line.strip()],
+                "base_stat_lines": base_stat_lines,
                 "bonus_effect": bonus_effect,
                 "ark_passive_bonus": ark_passive_bonus,
+                "detail_text": "\n".join(detail_lines),
             }
         )
     return result

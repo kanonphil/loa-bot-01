@@ -2415,20 +2415,13 @@ a.calendar-party:hover {
   }
 }
 
-.char-accessory-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-}
-
 .char-skill-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 8px;
 }
 
-.char-skill-card,
-.char-accessory-card {
+.char-skill-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2438,13 +2431,7 @@ a.calendar-party:hover {
   background: var(--panel);
 }
 
-.char-accessory-card {
-  gap: 8px;
-  padding: 14px 16px;
-}
-
-.char-skill-header,
-.char-accessory-header {
+.char-skill-header {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -2454,11 +2441,6 @@ a.calendar-party:hover {
 .char-skill-name {
   font-weight: 600;
   font-size: 13px;
-}
-
-.char-accessory-name {
-  font-weight: 600;
-  font-size: 14px;
 }
 
 .char-skill-level {
@@ -2506,34 +2488,6 @@ a.calendar-party:hover {
   color: var(--text-muted);
 }
 
-.char-accessory-type {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.char-quality-badge {
-  margin-left: auto;
-  font-size: 12px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-.char-quality-상 {
-  background: rgba(255, 210, 0, 0.15);
-  color: #ffd200;
-}
-
-.char-quality-중 {
-  background: rgba(190, 130, 255, 0.15);
-  color: #be82ff;
-}
-
-.char-quality-하 {
-  background: rgba(122, 168, 224, 0.15);
-  color: #7aa8e0;
-}
-
 .char-honing-list {
   margin: 0;
   padding-left: 18px;
@@ -2541,53 +2495,48 @@ a.calendar-party:hover {
   line-height: 1.6;
 }
 
-.char-accessory-arkpassive {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
+/* ── 장비 탭: 레퍼런스처럼 무기/방어구 → 장신구 → 효과 양수지 → 각인 → 카드를
+   한 흐름으로 두고 CSS 다단(2열)으로 컴팩트하게 흘려보낸다. ── */
+.equip-columns {
+  column-count: 2;
+  column-gap: 20px;
 }
 
-/* ── 장비 탭: 레퍼런스와 동일하게 좌(무기/방어구 아이콘 그리드) + 우(효과 양수지/
-   장신구/각인/카드) 2열 배치 ── */
-.equip-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .equip-layout {
-    grid-template-columns: 1fr;
+@media (max-width: 760px) {
+  .equip-columns {
+    column-count: 1;
   }
 }
 
-.char-equipment-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+.equip-block {
+  break-inside: avoid;
+  margin-bottom: 16px;
 }
 
 .equip-icon-card {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px;
-  border-radius: 10px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--panel);
+  cursor: default;
+  break-inside: avoid;
+  margin-bottom: 6px;
 }
 
 .equip-icon-wrap {
   position: relative;
-  width: 100%;
-  aspect-ratio: 1;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
 }
 
 .equip-icon {
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  border-radius: 6px;
   box-sizing: border-box;
   border: 2px solid transparent;
   object-fit: cover;
@@ -2597,21 +2546,37 @@ a.calendar-party:hover {
   position: absolute;
   top: -4px;
   left: -4px;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   color: var(--text);
   background: var(--sidebar-bg);
   border: 1px solid var(--border);
-  padding: 0 5px;
+  padding: 0 4px;
   border-radius: 999px;
+  line-height: 1.4;
+}
+
+.equip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.equip-icon-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .equip-quality-bar {
-  height: 4px;
+  height: 3px;
   border-radius: 999px;
   background: var(--border);
   overflow: hidden;
-  margin-top: 2px;
 }
 
 .equip-quality-fill {
@@ -2621,18 +2586,6 @@ a.calendar-party:hover {
 .quality-bg-상 { background: #ffd200; }
 .quality-bg-중 { background: #be82ff; }
 .quality-bg-하 { background: #7aa8e0; }
-
-.equip-icon-name {
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.equip-icon-stats {
-  font-size: 11px;
-}
 
 .equip-summary-box {
   padding: 14px 16px;

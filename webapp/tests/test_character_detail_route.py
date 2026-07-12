@@ -54,6 +54,7 @@ DETAIL = {
             "base_stat_lines": ["무기 공격력 +203054"],
             "bonus_effect": "추가 피해 +30.00%",
             "ark_passive_bonus": None,
+            "detail_text": "무기 공격력 +203054\n추가 피해 +30.00%",
         }
     ],
     "skills": [
@@ -80,11 +81,13 @@ DETAIL = {
         {
             "type": "목걸이",
             "name": "도래한 결전의 목걸이",
+            "icon": "https://cdn-lostark.game.onstove.com/necklace.png",
             "grade": "고대",
             "quality": 96,
             "quality_tier": "상",
             "honing_effects": ["낙인력 +8.00%", "최대 마나 +6"],
             "ark_passive_bonus": "깨달음 +13",
+            "detail_text": "낙인력 +8.00%\n최대 마나 +6\n깨달음 +13",
         }
     ],
     "gems": [{"slot": 0, "name": "8레벨 광휘의 보석", "level": 8, "grade": "유물", "icon": None, "effect": "추가 피해 +8.00%"}],
@@ -128,8 +131,8 @@ def test_renders_character_detail(client):
     assert "6랭크 27레벨" in resp.text
     assert "깨달음 1티어 해방자 Lv.1" in resp.text
     assert "도래한 결전의 목걸이" in resp.text
-    assert "품질 96" in resp.text
-    assert "낙인력 +8.00%" in resp.text
+    assert "width: 96%;" in resp.text  # 품질은 텍스트 배지 대신 색상 바 너비로 표현
+    assert "낙인력 +8.00%" in resp.text  # 세부 효과는 title 툴팁 안에 포함
     assert "8레벨 광휘의 보석" in resp.text
     assert "추가 피해 +8.00%" in resp.text
     assert 'src="https://cdn-lostark.game.onstove.com/skill.png"' in resp.text

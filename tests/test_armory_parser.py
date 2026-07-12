@@ -89,18 +89,23 @@ def test_quality_tier_thresholds():
 
 def test_parse_accessories_extracts_quality_honing_and_ark_passive_bonus():
     equipment = [
-        {"Type": "목걸이", "Name": "도래한 결전의 목걸이", "Grade": "고대", "Tooltip": ACCESSORY_TOOLTIP},
+        {
+            "Type": "목걸이", "Name": "도래한 결전의 목걸이", "Icon": "https://example.com/necklace.png",
+            "Grade": "고대", "Tooltip": ACCESSORY_TOOLTIP,
+        },
         {"Type": "무기", "Name": "어떤 무기", "Grade": "유물", "Tooltip": "{}"},
     ]
     result = parser.parse_accessories(equipment)
     assert len(result) == 1  # 무기는 장신구가 아니므로 제외
     acc = result[0]
     assert acc["type"] == "목걸이"
+    assert acc["icon"] == "https://example.com/necklace.png"
     assert acc["grade"] == "고대"
     assert acc["quality"] == 96
     assert acc["quality_tier"] == "상"
     assert acc["honing_effects"] == ["낙인력 +8.00%", "최대 마나 +6"]
     assert acc["ark_passive_bonus"] == "깨달음 +13"
+    assert acc["detail_text"] == "낙인력 +8.00%\n최대 마나 +6\n깨달음 +13"
 
 
 RUNE_TOOLTIP = json.dumps(
@@ -491,6 +496,15 @@ def test_parse_weapon_armor_extracts_quality_and_effects():
     ]
     assert armor["bonus_effect"] == "생명 활성력 +1373"
     assert armor["ark_passive_bonus"] == "진화 +24"
+
+
+def test_parse_weapon_armor_builds_detail_text_for_hover_tooltip():
+    """목록은 아이콘/이름/품질만 컴팩트하게 보여주고, 세부 스탯은 title 툴팁으로 몰아넣는다."""
+    result = parser.parse_weapon_armor(WEAPON_ARMOR_EQUIPMENT)
+    armor = next(i for i in result if i["type"] == "투구")
+    assert armor["detail_text"] == (
+        "물리 방어력 +9497\n마법 방어력 +10552\n힘 +114358\n체력 +11117\n생명 활성력 +1373\n진화 +24"
+    )
 
 
 # ── 전투특성 효과 (실제 API 응답 샘플 기반) ────────────────────
