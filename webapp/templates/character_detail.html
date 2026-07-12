@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-content">
+<div class="page-content page-wide">
 <a href="/expedition" class="party-back-link">&larr; 원정대 관리로</a>
 
 {% if detail.error %}
@@ -45,14 +45,13 @@
     <div class="armory-tabs" role="tablist">
       <button type="button" class="armory-tab is-active" data-armory-tab="equip">장비</button>
       <button type="button" class="armory-tab" data-armory-tab="skill">스킬</button>
-      <button type="button" class="armory-tab" data-armory-tab="arkgrid">아크그리드</button>
+      <button type="button" class="armory-tab" data-armory-tab="arkgrid">아크 그리드</button>
       <button type="button" class="armory-tab" data-armory-tab="gem">보석</button>
     </div>
 
     <!-- ── 장비 ── -->
     <div class="armory-panel is-active" data-armory-panel="equip">
-      <!-- 3열이 각자 독립적으로 이어지도록 구성 (한쪽 칸이 길어져도 다른 칸이 빈 채로
-           밀리지 않게) — 1열: 무기/방어구+아크그리드, 2열: 장신구+각인, 3열: 효과영수증+카드 -->
+      <!-- 상단 3열: 무기/방어구 | 장신구+팔찌+어빌리티 스톤 | 효과 영수증 (레퍼런스와 동일) -->
       <div class="equip-grid">
         <div class="equip-col">
           <div class="equip-zone">
@@ -63,9 +62,15 @@
                 {% if e.honing_level %}<span class="equip-honing-badge">+{{ e.honing_level }}</span>{% endif %}
               </div>
               <div class="equip-info">
-                <div class="equip-icon-name char-grade-text-{{ e.grade }}">{{ e.name }}</div>
+                <div class="equip-name-line">
+                  <span class="equip-icon-name char-grade-text-{{ e.grade }}">{{ e.name }}</span>
+                  {% if e.ark_passive_bonus %}<span class="equip-ark-bonus">{{ e.ark_passive_bonus }}</span>{% endif %}
+                </div>
                 {% if e.quality is not none %}
-                <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ e.quality_tier }}" style="width: {{ e.quality }}%;"></div></div>
+                <div class="equip-quality-line">
+                  <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ e.quality_tier }}" style="width: {{ e.quality }}%;"></div></div>
+                  <span class="equip-quality-num quality-text-{{ e.quality_tier }}">{{ e.quality }}</span>
+                </div>
                 {% endif %}
               </div>
             </div>
@@ -73,48 +78,176 @@
             <p class="dash-empty">무기/방어구 정보가 없습니다.</p>
             {% endfor %}
           </div>
-
-          <div class="equip-zone">
-            <h2 class="char-detail-title">아크그리드</h2>
-            <div class="char-arkgrid-mini-list">
-              {% for c in detail.ark_grid.cores %}
-              {% if c.icon %}<img src="{{ c.icon }}" alt="{{ c.name }}" title="{{ c.name }} ({{ c.point }}P)" class="char-arkgrid-mini-icon char-grade-{{ c.grade }}">{% endif %}
-              {% endfor %}
-            </div>
-            {% if detail.ark_grid.effects %}
-            <ul class="char-honing-list">
-              {% for e in detail.ark_grid.effects %}
-              <li>{{ e.name }} <span class="char-engraving-level">Lv.{{ e.level }}</span> — {{ e.text }}</li>
-              {% endfor %}
-            </ul>
-            {% endif %}
-          </div>
         </div>
 
         <div class="equip-col">
           <div class="equip-zone">
             {% for a in detail.accessories %}
-            <div class="equip-icon-card" title="{{ a.detail_text }}">
+            <div class="equip-acc-card">
               <div class="equip-icon-wrap">
                 {% if a.icon %}<img src="{{ a.icon }}" alt="" class="equip-icon char-grade-{{ a.grade }}">{% endif %}
               </div>
               <div class="equip-info">
-                <div class="equip-icon-name char-grade-text-{{ a.grade }}">{{ a.name }}</div>
+                <div class="equip-name-line">
+                  <span class="equip-icon-name char-grade-text-{{ a.grade }}">{{ a.name }}</span>
+                  {% if a.ark_passive_bonus %}<span class="equip-ark-bonus">{{ a.ark_passive_bonus }}</span>{% endif %}
+                </div>
                 {% if a.quality is not none %}
-                <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ a.quality_tier }}" style="width: {{ a.quality }}%;"></div></div>
+                <div class="equip-quality-line">
+                  <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ a.quality_tier }}" style="width: {{ a.quality }}%;"></div></div>
+                  <span class="equip-quality-num quality-text-{{ a.quality_tier }}">{{ a.quality }}</span>
+                </div>
+                {% endif %}
+                {% if a.honing_effects %}
+                <div class="acc-effect-lines">
+                  {% for line in a.honing_effects %}
+                  <span class="acc-effect-line">{{ line }}</span>
+                  {% endfor %}
+                </div>
                 {% endif %}
               </div>
             </div>
             {% else %}
             <p class="dash-empty">장신구 정보가 없습니다.</p>
             {% endfor %}
-          </div>
 
-          <div class="equip-zone">
+            {% for x in detail.extra_equipment or [] %}
+            <div class="equip-acc-card">
+              <div class="equip-icon-wrap">
+                {% if x.icon %}<img src="{{ x.icon }}" alt="" class="equip-icon char-grade-{{ x.grade }}">{% endif %}
+              </div>
+              <div class="equip-info">
+                <div class="equip-name-line">
+                  <span class="equip-type-tag">{{ x.type }}</span>
+                  <span class="equip-icon-name char-grade-text-{{ x.grade }}">{{ x.name }}</span>
+                </div>
+                {% for section in x.sections %}
+                <div class="acc-effect-lines">
+                  {% for line in section.lines %}
+                  <span class="acc-effect-line">{{ line }}</span>
+                  {% endfor %}
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="equip-col">
+          <div class="equip-zone equip-summary-box">
+            <h2 class="char-detail-title">효과 영수증</h2>
+            <p class="equip-summary-caption">전투특성·각인·장비·장신구·팔찌 효과를 합산한 참고용 수치입니다.</p>
+            {% if detail.aggregate_effects %}
+            <div class="equip-receipt">
+              {% for e in detail.aggregate_effects %}
+              <div class="equip-receipt-row">
+                <span class="k">{{ e.name }}</span>
+                <span class="v">{{ e.value_text if e.value_text else e.text }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="dash-empty">효과 정보가 없습니다.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- 보석 요약 밴드: 피해/쿨감 보석 아이콘 + 광휘 보석 총합 (레퍼런스 중단 밴드) -->
+      {% if detail.gem_summary and detail.gems %}
+      <div class="equip-gem-band">
+        {% if detail.gem_summary.damage %}
+        <div class="gem-band-group">
+          <span class="gem-band-label damage">피해</span>
+          {% for g in detail.gem_summary.damage %}
+          <span class="gem-band-icon-wrap" title="{% if g.skill_name %}[{{ g.skill_name }}] {% endif %}Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
+            {% if g.icon %}<img src="{{ g.icon }}" alt="" class="gem-band-icon">{% endif %}
+            <span class="gem-level-badge">{{ g.level }}</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if detail.gem_summary.cooldown %}
+        <div class="gem-band-group">
+          <span class="gem-band-label cooldown">쿨감</span>
+          {% for g in detail.gem_summary.cooldown %}
+          <span class="gem-band-icon-wrap" title="{% if g.skill_name %}[{{ g.skill_name }}] {% endif %}Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
+            {% if g.icon %}<img src="{{ g.icon }}" alt="" class="gem-band-icon">{% endif %}
+            <span class="gem-level-badge">{{ g.level }}</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if detail.gem_summary.etc %}
+        <div class="gem-band-group">
+          <span class="gem-band-label">기타</span>
+          {% for g in detail.gem_summary.etc %}
+          <span class="gem-band-icon-wrap" title="Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
+            {% if g.icon %}<img src="{{ g.icon }}" alt="" class="gem-band-icon">{% endif %}
+            <span class="gem-level-badge">{{ g.level }}</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if detail.gem_summary.base_attack_total or detail.gem_summary.support_total %}
+        <div class="gem-band-totals">
+          {% if detail.gem_summary.base_attack_total %}<span>기본 공격력 <strong class="total-atk">{{ detail.gem_summary.base_attack_total }}</strong></span>{% endif %}
+          {% if detail.gem_summary.support_total %}<span>지원 효과 <strong class="total-sup">{{ detail.gem_summary.support_total }}</strong></span>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- 하단 3열: 스탯+아크 그리드 | 각인+카드 | 진화/깨달음/도약 (레퍼런스와 동일) -->
+      <div class="equip-grid equip-bottom">
+        <div class="equip-col">
+          {% if detail.profile_stats %}
+          <div class="equip-zone equip-box">
+            <div class="stat-hero">
+              {% if detail.profile_stats.attack_power %}
+              <div class="stat-hero-item"><span class="k">공격력</span><span class="v atk">{{ detail.profile_stats.attack_power }}</span></div>
+              {% endif %}
+              {% if detail.profile_stats.max_hp %}
+              <div class="stat-hero-item"><span class="k">최대 생명력</span><span class="v">{{ detail.profile_stats.max_hp }}</span></div>
+              {% endif %}
+            </div>
+            {% if detail.profile_stats.combat %}
+            <div class="stat-grid-6">
+              {% for s in detail.profile_stats.combat %}
+              <div class="stat-cell"><span class="k">{{ s.type }}</span><span class="v">{{ s.value }}</span></div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <div class="equip-zone equip-box">
+            <h2 class="char-detail-title">아크 그리드</h2>
+            <div class="char-arkgrid-mini-list">
+              {% for c in detail.ark_grid.cores %}
+              {% if c.icon %}<img src="{{ c.icon }}" alt="{{ c.name }}" title="{{ c.name }} ({{ c.point }}P)" class="char-arkgrid-mini-icon char-grade-{{ c.grade }}">{% endif %}
+              {% endfor %}
+            </div>
+            {% if detail.ark_grid.effects %}
+            <div class="arkgrid-effect-rows">
+              {% for e in detail.ark_grid.effects %}
+              <div class="arkgrid-effect-row">
+                <span class="k">{{ e.name }}{% if e.level is not none %} <em>Lv.{{ e.level }}</em>{% endif %}</span>
+                <span class="v">{{ (e.text | replace(e.name, '') | trim) if e.name else e.text }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="equip-col">
+          <div class="equip-zone equip-box">
             <h2 class="char-detail-title">각인</h2>
             <div class="char-engraving-list">
               {% for eng in detail.engravings %}
-              <div class="char-engraving-row">
+              <div class="char-engraving-row" title="{{ eng.description }}">
                 <span class="char-engraving-name char-grade-text-{{ eng.grade }}">{{ eng.name }}</span>
                 <span class="char-engraving-level">Lv.{{ eng.level }}</span>
               </div>
@@ -123,24 +256,8 @@
               {% endfor %}
             </div>
           </div>
-        </div>
 
-        <div class="equip-col">
-          <div class="equip-zone equip-summary-box">
-            <h2 class="char-detail-title">효과 영수증</h2>
-            <p class="equip-summary-caption">전투특성·각인·장비·장신구 효과를 합산한 참고용 수치입니다.</p>
-            {% if detail.aggregate_effects %}
-            <div class="char-arkgrid-summary-list">
-              {% for e in detail.aggregate_effects %}
-              <span class="char-arkgrid-stat-chip">{{ e.text }}</span>
-              {% endfor %}
-            </div>
-            {% else %}
-            <p class="dash-empty">효과 정보가 없습니다.</p>
-            {% endif %}
-          </div>
-
-          <div class="equip-zone">
+          <div class="equip-zone equip-box">
             <h2 class="char-detail-title">카드</h2>
             {% if detail.cards.cards %}
             <div class="char-card-icon-list">
@@ -160,44 +277,60 @@
             {% endif %}
           </div>
         </div>
+
+        <div class="equip-col">
+          {% if detail.ark_passive.nodes_by_category %}
+          {% for category, nodes in detail.ark_passive.nodes_by_category.items() %}
+          <div class="equip-zone equip-box arkp-box">
+            <div class="arkp-head">
+              <span class="arkp-category arkp-category-{{ category }}">{{ category }}</span>
+              {% for p in detail.ark_passive.points %}{% if p.name == category %}
+              <span class="arkp-desc">{{ p.description }}</span>
+              <span class="arkp-point">{{ p.value }}P</span>
+              {% endif %}{% endfor %}
+            </div>
+            <div class="arkp-node-list">
+              {% for n in nodes %}
+              <div class="arkp-node-row">
+                {% if n.icon %}<img src="{{ n.icon }}" alt="" class="arkp-node-icon">{% endif %}
+                {% if n.tier %}<span class="arkp-tier-badge">{{ n.tier }}티어</span>{% endif %}
+                <span class="arkp-node-name">{{ n.name }}</span>
+                {% if n.level %}<span class="arkp-node-level">Lv.{{ n.level }}</span>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+          {% endif %}
+        </div>
       </div>
     </div>
 
     <!-- ── 스킬 ── -->
     <div class="armory-panel" data-armory-panel="skill">
-      <div class="char-detail-section">
-        <h2 class="char-detail-title">아크패시브</h2>
-        <div class="char-arkpassive-points">
-          {% for p in detail.ark_passive.points %}
-          <div class="char-arkpassive-point-card">
-            <span class="char-arkpassive-point-name">{{ p.name }}</span>
-            <span class="char-arkpassive-point-desc">{{ p.description }}</span>
-          </div>
-          {% endfor %}
-        </div>
-        <div class="char-arkpassive-categories">
-          {% for category, effects in detail.ark_passive.effects_by_category.items() %}
-          <div class="char-arkpassive-category">
-            <h3 class="char-arkpassive-category-title">{{ category }}</h3>
-            <ul class="char-arkpassive-effect-list">
-              {% for e in effects %}
-              <li>{{ e }}</li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% endfor %}
-        </div>
+      {% if detail.total_skill_point %}
+      <div class="skill-sp-bar">
+        <span class="skill-sp-label">SP</span>
+        <strong>{{ detail.using_skill_point if detail.using_skill_point else "?" }}</strong>
+        <span class="skill-sp-total">/ {{ detail.total_skill_point }}</span>
       </div>
-
-      <div class="char-detail-section">
-        <h2 class="char-detail-title">스킬</h2>
-        <div class="char-skill-list">
-          {% for s in detail.skills %}
-          <div class="char-skill-card">
-            <div class="char-skill-header">
-              {% if s.icon %}<img src="{{ s.icon }}" alt="" class="char-skill-icon">{% endif %}
+      {% endif %}
+      <div class="skill-rows">
+        {% for s in detail.skills %}
+        <div class="skill-row">
+          <div class="skill-row-iconwrap">
+            {% if s.icon %}<img src="{{ s.icon }}" alt="" class="skill-row-icon">{% endif %}
+            <span class="skill-row-level">{{ s.level }}</span>
+          </div>
+          <div class="skill-row-main">
+            <div class="skill-row-title">
               <span class="char-skill-name">{{ s.name }}</span>
-              <span class="char-skill-level">Lv.{{ s.level }}</span>
+              {% if s.rune %}
+              <span class="char-rune-badge char-grade-text-{{ s.rune.grade }}" title="{{ s.rune.effect or '' }}">{{ s.rune.name }}</span>
+              {% endif %}
+              {% for g in s.gems or [] %}
+              <span class="skill-gem-badge {{ 'damage' if g.kind == '피해' else 'cooldown' if g.kind == '쿨감' else '' }}">{{ g.level }}레벨 {{ g.kind if g.kind != '기타' else g.name }}</span>
+              {% endfor %}
             </div>
             <div class="char-skill-tripods">
               {% for t in s.tripods %}
@@ -207,30 +340,23 @@
               </span>
               {% endfor %}
             </div>
-            {% if s.rune %}
-            <div class="char-skill-rune">
-              <span class="char-rune-badge">{{ s.rune.grade }}</span>
-              <span class="char-rune-name">{{ s.rune.name }}</span>
-              {% if s.rune.effect %}<span class="char-rune-effect">{{ s.rune.effect }}</span>{% endif %}
-            </div>
-            {% endif %}
           </div>
-          {% else %}
-          <p class="dash-empty">사용 중인 스킬 정보가 없습니다.</p>
-          {% endfor %}
         </div>
+        {% else %}
+        <p class="dash-empty">사용 중인 스킬 정보가 없습니다.</p>
+        {% endfor %}
       </div>
     </div>
 
-    <!-- ── 아크그리드 ── -->
+    <!-- ── 아크 그리드 ── -->
     <div class="armory-panel" data-armory-panel="arkgrid">
       <div class="char-detail-section">
         {% if detail.ark_grid.effects %}
         <div class="char-arkgrid-summary">
-          <h3 class="char-arkgrid-summary-title">착용 젬 종합 스탯</h3>
+          <h3 class="char-arkgrid-summary-title">활성화된 효과</h3>
           <div class="char-arkgrid-summary-list">
             {% for e in detail.ark_grid.effects %}
-            <span class="char-arkgrid-stat-chip">{{ e.text }}</span>
+            <span class="char-arkgrid-stat-chip">{% if e.level is not none %}<em class="chip-level">Lv.{{ e.level }}</em> {% endif %}{{ e.text }}</span>
             {% endfor %}
           </div>
         </div>
@@ -241,16 +367,18 @@
             <div class="char-arkgrid-core-header">
               {% if c.icon %}<img src="{{ c.icon }}" alt="" class="char-arkgrid-core-icon char-grade-{{ c.grade }}">{% endif %}
               <div class="char-arkgrid-core-title">
-                <span class="char-arkgrid-core-system char-arkgrid-system-{{ c.system }}">{{ c.system }}</span>
-                <span class="char-arkgrid-core-name char-grade-text-{{ c.grade }}">{{ c.core_name }} 코어</span>
-                <span class="char-arkgrid-core-point">{{ c.point }}P</span>
+                <span class="char-arkgrid-core-system char-arkgrid-system-{{ c.system }}">{{ c.system }}{% if c.core_name %} - {{ c.core_name }}{% endif %}</span>
+                <span class="char-arkgrid-core-name char-grade-text-{{ c.grade }}">{{ c.core_name }} 코어{% if c.flavor %} : {{ c.flavor }}{% endif %}</span>
+              </div>
+              <div class="char-arkgrid-core-meta">
+                {% if c.willpower %}<span>의지력: {{ c.willpower }}</span>{% endif %}
+                <span class="char-arkgrid-core-point">합산 {{ c.point }}P</span>
               </div>
             </div>
-            {% if c.flavor %}<p class="char-arkgrid-core-flavor">{{ c.flavor }}</p>{% endif %}
             {% if c.option_lines %}
             <ul class="char-arkgrid-core-options">
               {% for line in c.option_lines %}
-              <li>{{ line }}</li>
+              <li{% if c.point is not none and line.startswith('[') and (line.split(']')[0][1:-1] | int(999)) <= c.point %} class="is-active"{% endif %}>{{ line }}</li>
               {% endfor %}
             </ul>
             {% endif %}
@@ -264,21 +392,62 @@
 
     <!-- ── 보석 ── -->
     <div class="armory-panel" data-armory-panel="gem">
-      <div class="char-detail-section">
-        <div class="char-gem-list">
-          {% for g in detail.gems %}
-          <div class="char-gem-card">
-            {% if g.icon %}<img src="{{ g.icon }}" alt="" class="char-gem-icon">{% endif %}
-            <div class="char-gem-info">
-              <span class="char-gem-name">Lv.{{ g.level }} {{ g.name }}</span>
-              {% if g.effect %}<span class="char-gem-effect">{{ g.effect }}</span>{% endif %}
+      {% if detail.gem_summary %}
+      {% if detail.gem_summary.base_attack_total or detail.gem_summary.support_total %}
+      <div class="gem-totals">
+        {% if detail.gem_summary.base_attack_total %}<span class="gem-total-chip"><i class="dot atk"></i>기본 공격력 총합 <strong>{{ detail.gem_summary.base_attack_total }}</strong></span>{% endif %}
+        {% if detail.gem_summary.support_total %}<span class="gem-total-chip"><i class="dot sup"></i>지원 효과 총합 <strong>{{ detail.gem_summary.support_total }}</strong></span>{% endif %}
+      </div>
+      {% endif %}
+      {% for title, group in [("피해 증가 보석", detail.gem_summary.damage), ("쿨타임 감소 보석", detail.gem_summary.cooldown), ("기타 보석", detail.gem_summary.etc)] %}
+      {% if group %}
+      <div class="gem-group">
+        <h2 class="gem-group-title {{ 'damage' if title.startswith('피해') else 'cooldown' if title.startswith('쿨타임') else '' }}">{{ title }} <span class="gem-group-count">{{ group | length }}개</span></h2>
+        <div class="gem-group-rows">
+          {% for g in group %}
+          <div class="gem-row">
+            <div class="gem-row-gem">
+              <span class="gem-band-icon-wrap">
+                {% if g.icon %}<img src="{{ g.icon }}" alt="" class="gem-band-icon">{% endif %}
+                <span class="gem-level-badge">{{ g.level }}</span>
+              </span>
+              <span class="gem-row-name">Lv.{{ g.level }} {{ g.name }}</span>
+            </div>
+            {% if g.skill_name %}
+            <div class="gem-row-skill">
+              {% if g.skill_icon %}<img src="{{ g.skill_icon }}" alt="" class="gem-row-skill-icon">{% endif %}
+              <span>{{ g.skill_name }}</span>
+            </div>
+            {% endif %}
+            <div class="gem-row-effects">
+              {% for line in g.effect_lines or ([g.effect] if g.effect else []) %}
+              <span class="gem-effect-chip">{{ line }}</span>
+              {% endfor %}
             </div>
           </div>
-          {% else %}
-          <p class="dash-empty">장착된 보석이 없습니다.</p>
           {% endfor %}
         </div>
       </div>
+      {% endif %}
+      {% endfor %}
+      {% if not detail.gems %}
+      <p class="dash-empty">장착된 보석이 없습니다.</p>
+      {% endif %}
+      {% else %}
+      <div class="char-gem-list">
+        {% for g in detail.gems %}
+        <div class="char-gem-card">
+          {% if g.icon %}<img src="{{ g.icon }}" alt="" class="char-gem-icon">{% endif %}
+          <div class="char-gem-info">
+            <span class="char-gem-name">Lv.{{ g.level }} {{ g.name }}</span>
+            {% if g.effect %}<span class="char-gem-effect">{{ g.effect }}</span>{% endif %}
+          </div>
+        </div>
+        {% else %}
+        <p class="dash-empty">장착된 보석이 없습니다.</p>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>

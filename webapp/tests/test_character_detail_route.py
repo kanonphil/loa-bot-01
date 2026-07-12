@@ -9,6 +9,20 @@ from webapp.tests.conftest import log_in
 
 ARMORY_URL = "http://bot-server.internal/api/internal/armory-detail"
 
+# 보석은 detail["gems"]와 detail["gem_summary"]의 그룹 양쪽에 같은 객체가 들어간다
+GEM = {
+    "slot": 0,
+    "name": "광휘의 보석",
+    "level": 8,
+    "grade": "유물",
+    "icon": "https://cdn-lostark.game.onstove.com/gem.png",
+    "effect": "재사용 대기시간 20.00% 감소",
+    "skill_name": "심판의 빛",
+    "skill_icon": "https://cdn-lostark.game.onstove.com/skill.png",
+    "effect_lines": ["재사용 대기시간 20.00% 감소", "기본 공격력 0.80% 증가"],
+    "kind": "쿨감",
+}
+
 DETAIL = {
     "character_name": "발키리",
     "character_class": "홀리나이트",
@@ -23,13 +37,25 @@ DETAIL = {
     "town_level": 70,
     "town_name": "졸타뉴 마을",
     "server_name": "루페온",
+    "using_skill_point": 480,
+    "total_skill_point": 483,
+    "profile_stats": {
+        "attack_power": "184,894",
+        "max_hp": "405,670",
+        "combat": [
+            {"type": "치명", "value": "76"},
+            {"type": "특화", "value": "575"},
+            {"type": "신속", "value": "1804"},
+        ],
+    },
     "stat_effects": [
         {"stat": "신속", "text": "공격 속도 +30.99%"},
         {"stat": "신속", "text": "이동 속도 +30.99%"},
     ],
     "aggregate_effects": [
-        {"name": "공격 속도", "text": "공격 속도 +30.99%"},
-        {"name": "추가 피해", "text": "추가 피해 +30.00%"},
+        {"name": "공격 속도", "value_text": "+30.99%", "text": "공격 속도 +30.99%"},
+        {"name": "추가 피해", "value_text": "+30.00%", "text": "추가 피해 +30.00%"},
+        {"name": "최대 마나", "value_text": "+6", "text": "최대 마나 +6"},
     ],
     "engravings": [
         {"name": "각성", "grade": "유물", "level": 4, "description": "각성기의 재사용 대기시간이 60.50% 감소한다."},
@@ -66,6 +92,7 @@ DETAIL = {
                 {"tier": 0, "name": "선택된 트라이포드", "icon": "https://cdn-lostark.game.onstove.com/tripod.png"}
             ],
             "rune": {"name": "속행", "grade": "영웅", "effect": "재사용 대기시간 12% 감소"},
+            "gems": [{"level": 8, "kind": "쿨감", "name": "광휘의 보석"}],
         }
     ],
     "ark_passive": {
@@ -76,6 +103,9 @@ DETAIL = {
             {"name": "도약", "value": 70, "description": "6랭크 21레벨"},
         ],
         "effects_by_category": {"깨달음": ["깨달음 1티어 해방자 Lv.1"]},
+        "nodes_by_category": {
+            "깨달음": [{"tier": 1, "name": "해방자", "level": 1, "icon": None}],
+        },
     },
     "accessories": [
         {
@@ -90,7 +120,25 @@ DETAIL = {
             "detail_text": "낙인력 +8.00%\n최대 마나 +6\n깨달음 +13",
         }
     ],
-    "gems": [{"slot": 0, "name": "8레벨 광휘의 보석", "level": 8, "grade": "유물", "icon": None, "effect": "추가 피해 +8.00%"}],
+    "extra_equipment": [
+        {
+            "type": "팔찌",
+            "name": "천선의 구슬치",
+            "icon": "https://cdn-lostark.game.onstove.com/bracelet.png",
+            "grade": "고대",
+            "quality": None,
+            "quality_tier": None,
+            "sections": [{"header": "팔찌 효과", "lines": ["체력 +15000", "신속 +100"]}],
+        }
+    ],
+    "gems": [GEM],
+    "gem_summary": {
+        "damage": [],
+        "cooldown": [GEM],
+        "etc": [],
+        "base_attack_total": "0.80%",
+        "support_total": "9.00%",
+    },
     "ark_grid": {
         "cores": [
             {
@@ -128,13 +176,34 @@ def test_renders_character_detail(client):
     assert "심판의 빛" in resp.text
     assert "선택된 트라이포드" in resp.text
     assert "속행" in resp.text
-    assert "6랭크 27레벨" in resp.text
-    assert "깨달음 1티어 해방자 Lv.1" in resp.text
+    # 진화/깨달음/도약 패널 머리글 — 노드가 있는 카테고리(깨달음)의 포인트 요약이 나와야 한다
+    assert "6랭크 28레벨" in resp.text
+    assert "101P" in resp.text
+    # 아크패시브 노드는 구조화된 형태(티어 배지 + 이름 + 레벨)로 렌더링
+    assert "해방자" in resp.text
+    assert "1티어" in resp.text
     assert "도래한 결전의 목걸이" in resp.text
     assert "width: 96%;" in resp.text  # 품질은 텍스트 배지 대신 색상 바 너비로 표현
-    assert "낙인력 +8.00%" in resp.text  # 세부 효과는 title 툴팁 안에 포함
-    assert "8레벨 광휘의 보석" in resp.text
-    assert "추가 피해 +8.00%" in resp.text
+    assert "낙인력 +8.00%" in resp.text  # 연마 효과는 장신구 카드에 바로 노출
+    assert "광휘의 보석" in resp.text
+    assert "재사용 대기시간 20.00% 감소" in resp.text
+    # 보석 탭: 쿨타임 그룹 + 적용 스킬 + 총합
+    assert "쿨타임 감소 보석" in resp.text
+    assert "기본 공격력 총합" in resp.text
+    assert "0.80%" in resp.text
+    assert "지원 효과 총합" in resp.text
+    # 스킬 탭: SP + 보석 배지
+    assert "480" in resp.text and "483" in resp.text
+    assert "8레벨 쿨감" in resp.text
+    # 장비 탭 하단: 전투특성/공격력/최대 생명력 + 팔찌
+    assert "184,894" in resp.text
+    assert "405,670" in resp.text
+    assert "1804" in resp.text
+    assert "천선의 구슬치" in resp.text
+    assert "체력 +15000" in resp.text
+    # 효과 영수증은 이름/수치 분리 렌더링
+    assert "+30.99%" in resp.text
+    assert "최대 마나" in resp.text
     assert 'src="https://cdn-lostark.game.onstove.com/skill.png"' in resp.text
     assert 'src="https://cdn-lostark.game.onstove.com/tripod.png"' in resp.text
     assert "빛이 생명을 새긴다" in resp.text
@@ -160,7 +229,7 @@ def test_renders_character_detail(client):
     assert "+18" in resp.text
     assert "무기 공격력 +203054" in resp.text
     assert "추가 피해 +30.00%" in resp.text
-    assert "공격 속도 +30.99%" in resp.text
+    assert "공격 속도" in resp.text  # 효과 영수증 — 이름/수치가 분리 렌더링됨
     # 각인 + 카드
     assert "각성" in resp.text
     assert "Lv.4" in resp.text

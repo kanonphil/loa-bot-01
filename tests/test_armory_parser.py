@@ -629,3 +629,211 @@ def test_parse_aggregate_effects_sums_same_named_stat_across_sources():
 
 def test_parse_aggregate_effects_handles_all_none():
     assert parser.parse_aggregate_effects(None, None, None, None) == []
+
+
+def test_parse_aggregate_effects_includes_flat_values_and_value_text():
+    """레퍼런스 "효과 영수증"처럼 %가 아닌 고정 수치(최대 마나 +6, 치명 +195)도 합산하고,
+    우측 정렬 표시용 value_text를 제공해야 한다."""
+    accessories = [{"honing_effects": ["낙인력 +8.00%", "최대 마나 +6"]}]
+    extras = [{"sections": [{"header": "팔찌 효과", "lines": ["치명 +100", "치명 +95"]}]}]
+
+    result = parser.parse_aggregate_effects(None, None, None, accessories, extras)
+    by_name = {r["name"]: r["value_text"] for r in result}
+    assert by_name["낙인력"] == "+8.00%"
+    assert by_name["최대 마나"] == "+6"
+    assert by_name["치명"] == "+195"
+
+
+# ── 팔찌/어빌리티 스톤 등 기타 장착 장비 ────────────────────
+
+BRACELET_TOOLTIP = json.dumps(
+    {
+        "Element_001": {"type": "ItemTitle", "value": {"qualityValue": -1}},
+        "Element_004": {
+            "type": "ItemPartBox",
+            "value": {
+                "Element_000": "<FONT COLOR='#A9D0F5'>팔찌 효과</FONT>",
+                "Element_001": "체력 +15000<BR>신속 +100<BR>[정밀] 치명타 적중률이 4.20% 증가한다.",
+            },
+        },
+        "Element_005": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "아이템 획득처", "Element_001": "쿠르잔 전선"},
+        },
+    }
+)
+
+STONE_TOOLTIP = json.dumps(
+    {
+        "Element_001": {"type": "ItemTitle", "value": {"qualityValue": -1}},
+        "Element_004": {
+            "type": "ItemPartBox",
+            "value": {"Element_000": "<FONT COLOR='#A9D0F5'>기본 효과</FONT>", "Element_001": "체력 +30000"},
+        },
+        "Element_005": {
+            "type": "ItemPartBox",
+            "value": {
+                "Element_000": "<FONT COLOR='#A9D0F5'>세공 단계 보너스</FONT>",
+                "Element_001": "각성 Lv.4<BR>구원 Lv.3",
+            },
+        },
+    }
+)
+
+EXTRA_EQUIPMENT = [
+    {"Type": "무기", "Name": "무기는 제외", "Grade": "고대", "Tooltip": "{}"},
+    {"Type": "어빌리티 스톤", "Name": "위대한 비상", "Icon": "https://example.com/stone.png", "Grade": "유물", "Tooltip": STONE_TOOLTIP},
+    {"Type": "팔찌", "Name": "천선의 구슬치", "Icon": "https://example.com/bracelet.png", "Grade": "고대", "Tooltip": BRACELET_TOOLTIP},
+]
+
+
+def test_parse_extra_equipment_extracts_bracelet_and_stone_in_fixed_order():
+    result = parser.parse_extra_equipment(EXTRA_EQUIPMENT)
+    assert [x["type"] for x in result] == ["팔찌", "어빌리티 스톤"]  # 무기/방어구/장신구 제외, 팔찌 먼저
+    bracelet = result[0]
+    assert bracelet["name"] == "천선의 구슬치"
+    assert bracelet["grade"] == "고대"
+    assert bracelet["sections"][0]["header"] == "팔찌 효과"
+    assert bracelet["sections"][0]["lines"][0] == "체력 +15000"
+
+
+def test_parse_extra_equipment_skips_non_effect_sections():
+    """아이템 획득처 같은 잡다한 섹션은 제외돼야 한다."""
+    result = parser.parse_extra_equipment(EXTRA_EQUIPMENT)
+    bracelet = result[0]
+    assert all("획득처" not in s["header"] for s in bracelet["sections"])
+
+
+def test_parse_extra_equipment_handles_none():
+    assert parser.parse_extra_equipment(None) == []
+
+
+# ── 프로필 전투특성 수치 ─────────────────────────────────
+
+PROFILE_STATS = [
+    {"Type": "치명", "Value": "76", "Tooltip": []},
+    {"Type": "특화", "Value": "575", "Tooltip": []},
+    {"Type": "신속", "Value": "1804", "Tooltip": []},
+    {"Type": "제압", "Value": "75", "Tooltip": []},
+    {"Type": "인내", "Value": "71", "Tooltip": []},
+    {"Type": "숙련", "Value": "71", "Tooltip": []},
+    {"Type": "최대 생명력", "Value": "405670", "Tooltip": []},
+    {"Type": "공격력", "Value": "184894", "Tooltip": []},
+]
+
+
+def test_parse_profile_stats_extracts_attack_hp_and_combat_stats_in_game_order():
+    result = parser.parse_profile_stats(PROFILE_STATS)
+    assert result["attack_power"] == "184,894"
+    assert result["max_hp"] == "405,670"
+    assert [s["type"] for s in result["combat"]] == ["치명", "특화", "신속", "제압", "인내", "숙련"]
+    assert result["combat"][0]["value"] == "76"
+
+
+def test_parse_profile_stats_handles_none():
+    result = parser.parse_profile_stats(None)
+    assert result == {"attack_power": None, "max_hp": None, "combat": []}
+
+
+# ── 보석: 스킬 매핑 + 피해/쿨감 분류 + 총합 ─────────────────
+
+GEM_DATA_WITH_SKILLS = {
+    "Gems": [
+        {"Slot": 0, "Name": "9레벨 광휘의 보석", "Level": 9, "Grade": "유물", "Icon": "https://example.com/g0.png", "Tooltip": "{}"},
+        {"Slot": 1, "Name": "8레벨 광휘의 보석", "Level": 8, "Grade": "유물", "Icon": "https://example.com/g1.png", "Tooltip": "{}"},
+    ],
+    "Effects": {
+        "Description": "장착 중인 보석 효과",
+        "Skills": [
+            {
+                "GemSlot": 0,
+                "Name": "송고한 도약",
+                "Icon": "https://example.com/skill-doyak.png",
+                "Description": ["피해 40.00% 증가", "지원 효과 9.00% 증가", "기본 공격력 1.00% 증가"],
+            },
+            {
+                "GemSlot": 1,
+                "Name": "계시의 검",
+                "Icon": "https://example.com/skill-gyesi.png",
+                "Description": ["재사용 대기시간 20.00% 감소", "기본 공격력 0.80% 증가"],
+            },
+        ],
+    },
+}
+
+
+def test_parse_gems_maps_skill_name_and_icon_from_effects():
+    result = parser.parse_gems(GEM_DATA_WITH_SKILLS)
+    assert result[0]["skill_name"] == "송고한 도약"
+    assert result[0]["skill_icon"] == "https://example.com/skill-doyak.png"
+    assert result[1]["skill_name"] == "계시의 검"
+
+
+def test_parse_gems_classifies_damage_vs_cooldown():
+    result = parser.parse_gems(GEM_DATA_WITH_SKILLS)
+    assert result[0]["kind"] == "피해"
+    assert result[1]["kind"] == "쿨감"
+
+
+def test_parse_gems_classifies_by_name_when_no_effect_text():
+    gem_data = {"Gems": [{"Slot": 0, "Name": "10레벨 겁화의 보석", "Level": 10, "Grade": "고대", "Tooltip": "{}"}]}
+    result = parser.parse_gems(gem_data)
+    assert result[0]["kind"] == "피해"
+
+
+def test_summarize_gems_groups_and_totals():
+    gems = parser.parse_gems(GEM_DATA_WITH_SKILLS)
+    summary = parser.summarize_gems(gems)
+    assert len(summary["damage"]) == 1
+    assert len(summary["cooldown"]) == 1
+    assert summary["base_attack_total"] == "1.80%"  # 1.00 + 0.80
+    assert summary["support_total"] == "9.00%"
+
+
+def test_summarize_gems_handles_empty():
+    summary = parser.summarize_gems([])
+    assert summary["damage"] == []
+    assert summary["base_attack_total"] is None
+
+
+# ── 아크패시브 구조화 노드 ───────────────────────────────
+
+def test_parse_ark_passive_builds_structured_nodes():
+    result = parser.parse_ark_passive(ARK_PASSIVE)
+    nodes = result["nodes_by_category"]["진화"]
+    assert nodes[0] == {"tier": 1, "name": "예리한 둔기", "level": 2, "icon": None}
+    realization = result["nodes_by_category"]["깨달음"]
+    assert realization[0]["tier"] == 1
+    assert realization[0]["name"] == "해방자"
+    assert realization[0]["level"] == 1
+
+
+def test_parse_ark_passive_node_falls_back_to_raw_text_when_unparsable():
+    ark = {"Effects": [{"Name": "진화", "Description": "특이한 형식의 효과"}]}
+    result = parser.parse_ark_passive(ark)
+    node = result["nodes_by_category"]["진화"][0]
+    assert node["tier"] is None
+    assert node["name"] == "특이한 형식의 효과"
+
+
+# ── parse_armory_detail: 스킬-보석 배지 연결 ─────────────────
+
+def test_parse_armory_detail_attaches_gems_to_matching_skills():
+    raw = {
+        "ArmoryProfile": {"CharacterName": "테스트", "UsingSkillPoint": 480, "TotalSkillPoint": 483},
+        "ArmorySkills": SKILLS,
+        "ArmoryGem": {
+            "Gems": [{"Slot": 0, "Name": "8레벨 광휘의 보석", "Level": 8, "Grade": "유물", "Tooltip": "{}"}],
+            "Effects": {
+                "Skills": [
+                    {"GemSlot": 0, "Name": "계시의 검", "Icon": "x", "Description": ["재사용 대기시간 20.00% 감소"]}
+                ]
+            },
+        },
+    }
+    result = parser.parse_armory_detail(raw)
+    skill = next(s for s in result["skills"] if s["name"] == "계시의 검")
+    assert skill["gems"] == [{"level": 8, "kind": "쿨감", "name": "광휘의 보석"}]
+    assert result["using_skill_point"] == 480
+    assert result["total_skill_point"] == 483
+    assert result["gem_summary"]["cooldown"][0]["skill_name"] == "계시의 검"

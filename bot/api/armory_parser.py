@@ -15,6 +15,8 @@ _GEM_LEVEL_PREFIX_RE = re.compile(r"^\d+레벨\s*")
 _HONING_LEVEL_RE = re.compile(r"^\+(\d+)\s*")
 _STAT_PERCENT_RE = re.compile(r"([^,.\n]+?)(?:이|가)\s*([\d.]+)%\s*(증가|감소)")
 _SIMPLE_PERCENT_RE = re.compile(r"^(.+?)\s*([+-][\d.]+)%")
+# "최대 마나 +6", "치명 +195" 같은 고정 수치 라인 (%가 붙으면 위 규칙이 먼저 잡는다)
+_SIMPLE_FLAT_RE = re.compile(r"^(.+?)\s*\+([\d,]+)$")
 
 
 def strip_html(text: str | None) -> str:
@@ -105,11 +107,24 @@ def parse_skills(skills: list[dict]) -> list[dict]:
 
 
 _ARK_PASSIVE_CATEGORY_ORDER = ["진화", "깨달음", "도약"]
+# "진화 1티어 예리한 둔기 Lv.2" / "1티어 신속 Lv.30" — 카테고리 접두어는 있을 수도 없을 수도 있다.
+_ARK_NODE_RE = re.compile(r"(?:진화|깨달음|도약)?\s*(\d+)티어\s*(.+?)\s*Lv\.(\d+)")
+
+
+def _sorted_by_category(raw_by_category: dict[str, list]) -> dict[str, list]:
+    """API가 내려주는 순서(등장 순)와 무관하게 항상 진화/깨달음/도약 고정 순서로 정렬한다."""
+    ordered: dict[str, list] = {}
+    for category in _ARK_PASSIVE_CATEGORY_ORDER:
+        if category in raw_by_category:
+            ordered[category] = raw_by_category.pop(category)
+    ordered.update(raw_by_category)  # 예상 못한 카테고리가 있으면 뒤에 붙인다
+    return ordered
 
 
 def parse_ark_passive(ark_passive: dict | None) -> dict:
     """진화/깨달음/도약 포인트 요약 + 카테고리별로 실제 선택한 노드 목록.
-    카테고리는 API가 내려주는 순서(등장 순)가 아니라 항상 진화/깨달음/도약 고정 순서로 정렬한다."""
+    노드는 "N티어 이름 Lv.X" 문장을 구조화(nodes_by_category)해서 레퍼런스처럼
+    티어 배지 + 이름 + 레벨로 보여줄 수 있게 하고, 원문(effects_by_category)도 유지한다."""
     ark_passive = ark_passive or {}
     points = [
         {"name": p.get("Name"), "value": p.get("Value"), "description": p.get("Description")}
@@ -117,17 +132,24 @@ def parse_ark_passive(ark_passive: dict | None) -> dict:
     ]
 
     raw_by_category: dict[str, list[str]] = {}
+    nodes_by_category: dict[str, list[dict]] = {}
     for effect in ark_passive.get("Effects") or []:
         category = effect.get("Name", "기타")
-        raw_by_category.setdefault(category, []).append(strip_html(effect.get("Description", "")))
+        text = strip_html(effect.get("Description", ""))
+        raw_by_category.setdefault(category, []).append(text)
 
-    effects_by_category: dict[str, list[str]] = {}
-    for category in _ARK_PASSIVE_CATEGORY_ORDER:
-        if category in raw_by_category:
-            effects_by_category[category] = raw_by_category.pop(category)
-    effects_by_category.update(raw_by_category)  # 예상 못한 카테고리가 있으면 뒤에 붙인다
+        match = _ARK_NODE_RE.search(text)
+        node = {"tier": None, "name": text, "level": None, "icon": effect.get("Icon")}
+        if match:
+            node.update(tier=int(match.group(1)), name=match.group(2), level=int(match.group(3)))
+        nodes_by_category.setdefault(category, []).append(node)
 
-    return {"title": ark_passive.get("Title"), "points": points, "effects_by_category": effects_by_category}
+    return {
+        "title": ark_passive.get("Title"),
+        "points": points,
+        "effects_by_category": _sorted_by_category(raw_by_category),
+        "nodes_by_category": _sorted_by_category(nodes_by_category),
+    }
 
 
 def parse_accessories(equipment: list[dict]) -> list[dict]:
@@ -207,6 +229,79 @@ def parse_weapon_armor(equipment: list[dict]) -> list[dict]:
     return result
 
 
+# 레퍼런스 사이트가 장신구 칸 아래에 팔찌 → 어빌리티 스톤 순으로 보여줘서 같은 순서를 쓴다.
+_EXTRA_EQUIP_ORDER = ["팔찌", "어빌리티 스톤"]
+# 장비 획득처/상인 판매 안내 같은 잡다한 섹션은 빼고, 실제 효과만 보여준다.
+_EXTRA_SECTION_KEYWORDS = ("효과", "각인", "보너스")
+
+
+def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
+    """무기/방어구/장신구에 안 잡히는 나머지 장착 아이템 — 팔찌/어빌리티 스톤(+나침반/부적 등).
+    아이템 종류마다 Tooltip 구조가 달라서, ItemPartBox 섹션 중 제목에 효과/각인/보너스가
+    들어간 것들을 (제목, 줄 목록) 그대로 수집하는 방어적 방식을 쓴다."""
+    handled = _ACCESSORY_TYPES | _WEAPON_ARMOR_TYPES
+    result = []
+    for item in equipment or []:
+        item_type = item.get("Type")
+        if not item_type or item_type in handled:
+            continue
+        tooltip = parse_tooltip_json(item.get("Tooltip"))
+        sections = []
+        for element in tooltip.values():
+            if not isinstance(element, dict) or element.get("type") != "ItemPartBox":
+                continue
+            value = element.get("value") or {}
+            header = strip_html(value.get("Element_000", ""))
+            body = strip_html(value.get("Element_001", ""))
+            if not header or not body:
+                continue
+            if not any(keyword in header for keyword in _EXTRA_SECTION_KEYWORDS):
+                continue
+            sections.append(
+                {"header": header, "lines": [line for line in body.split("\n") if line.strip()]}
+            )
+        quality = find_quality(tooltip)
+        result.append(
+            {
+                "type": item_type,
+                "name": strip_html(item.get("Name")),
+                "icon": item.get("Icon"),
+                "grade": item.get("Grade"),
+                "quality": quality,
+                "quality_tier": quality_tier(quality) if quality is not None else None,
+                "sections": sections,
+            }
+        )
+    order = {t: i for i, t in enumerate(_EXTRA_EQUIP_ORDER)}
+    result.sort(key=lambda x: order.get(x["type"], len(order)))
+    return result
+
+
+_COMBAT_STAT_ORDER = ["치명", "특화", "신속", "제압", "인내", "숙련"]
+
+
+def _format_int(raw) -> str | None:
+    if raw is None:
+        return None
+    try:
+        return f"{int(float(raw)):,}"
+    except (TypeError, ValueError):
+        return str(raw)
+
+
+def parse_profile_stats(stats: list[dict] | None) -> dict:
+    """프로필 Stats에서 공격력/최대 생명력과 전투특성 6종의 수치를 뽑는다.
+    전투특성은 게임 내 표기 순서(치명/특화/신속/제압/인내/숙련)로 고정한다."""
+    by_type = {s.get("Type"): s.get("Value") for s in stats or []}
+    return {
+        "attack_power": _format_int(by_type.get("공격력")),
+        "max_hp": _format_int(by_type.get("최대 생명력")),
+        "combat": [
+            {"type": t, "value": by_type[t]} for t in _COMBAT_STAT_ORDER if by_type.get(t) is not None
+        ],
+    }
+
+
 def parse_stat_effects(stats: list[dict] | None) -> list[dict]:
     """전투특성(특화/치명/신속/제압/인내/숙련) 툴팁에서 "OOO가 N% 증가/감소합니다" 형태의
     실제 효과 문장만 뽑아 정리한다. 보상/카드도감 안내 문구는 "%" 표기가 없어 자동으로 걸러진다."""
@@ -283,52 +378,127 @@ def _iter_percent_effects(text: str):
             yield name.strip(), float(value)
 
 
+def _iter_flat_effects(text: str):
+    """"최대 마나 +6", "치명 +195" 같은 %가 없는 고정 수치 라인을 (이름, 값)으로 내보낸다."""
+    for line in text.split("\n"):
+        line = line.strip()
+        if "%" in line:
+            continue
+        match = _SIMPLE_FLAT_RE.match(line)
+        if match:
+            name, value = match.groups()
+            try:
+                yield name.strip(), int(value.replace(",", ""))
+            except ValueError:
+                continue
+
+
 def parse_aggregate_effects(
     stats: list[dict] | None,
     engravings: list[dict] | None,
     equipment: list[dict] | None,
     accessories: list[dict] | None,
+    extras: list[dict] | None = None,
 ) -> list[dict]:
-    """전투특성 + 각인 + 장비/장신구 추가 효과에서 퍼센트 효과를 모아 이름별로 합산한다.
-    참고용 종합치다 — 카드 세트효과나 아크그리드 코어 옵션 등 조건부 효과까지 완벽히
-    반영한 것은 아니라 레퍼런스 사이트의 "효과 영수증"과 100% 일치하지 않을 수 있다."""
-    totals: dict[str, float] = {}
-    order: list[str] = []
+    """전투특성 + 각인 + 장비/장신구 추가 효과 + 팔찌/스톤에서 퍼센트·고정 수치 효과를
+    모아 이름별로 합산한다("효과 영수증"). 참고용 종합치다 — 카드 세트효과나 아크그리드
+    코어 옵션 등 조건부 효과까지 완벽히 반영한 것은 아니라 레퍼런스 사이트와 100%
+    일치하지 않을 수 있다. 반환 항목: name / value_text(우측 정렬용 값) / text(전체 문장)."""
+    pct_totals: dict[str, float] = {}
+    flat_totals: dict[str, int] = {}
+    order: list[tuple[str, str]] = []  # (이름, "pct"|"flat") — 등장 순서 유지
 
-    def add(name: str, value: float) -> None:
-        if name not in totals:
-            totals[name] = 0.0
-            order.append(name)
-        totals[name] += value
+    def add_pct(name: str, value: float) -> None:
+        if name not in pct_totals:
+            pct_totals[name] = 0.0
+            order.append((name, "pct"))
+        pct_totals[name] += value
+
+    def add_flat(name: str, value: int) -> None:
+        if name not in flat_totals:
+            flat_totals[name] = 0
+            order.append((name, "flat"))
+        flat_totals[name] += value
+
+    def add_all(text: str) -> None:
+        for name, value in _iter_percent_effects(text):
+            add_pct(name, value)
+        for name, value in _iter_flat_effects(text):
+            add_flat(name, value)
 
     for stat in stats or []:
         for raw_line in stat.get("Tooltip") or []:
             for name, value in _iter_percent_effects(strip_html(raw_line)):
-                add(name, value)
+                add_pct(name, value)
 
     for eng in engravings or []:
         for name, value in _iter_percent_effects(eng.get("description") or ""):
-            add(name, value)
+            add_pct(name, value)
 
     for item in equipment or []:
         if item.get("bonus_effect"):
-            for name, value in _iter_percent_effects(item["bonus_effect"]):
-                add(name, value)
+            add_all(item["bonus_effect"])
 
     for acc in accessories or []:
         for line in acc.get("honing_effects") or []:
-            for name, value in _iter_percent_effects(line):
-                add(name, value)
+            add_all(line)
 
-    return [
-        {"name": name, "text": f"{name} {'+' if totals[name] >= 0 else ''}{totals[name]:.2f}%"}
-        for name in order
-    ]
+    for extra in extras or []:
+        for section in extra.get("sections") or []:
+            for line in section.get("lines") or []:
+                add_all(line)
+
+    result = []
+    for name, kind in order:
+        if kind == "pct":
+            value_text = f"{'+' if pct_totals[name] >= 0 else ''}{pct_totals[name]:.2f}%"
+        else:
+            value_text = f"{'+' if flat_totals[name] >= 0 else ''}{flat_totals[name]:,}"
+        result.append({"name": name, "value_text": value_text, "text": f"{name} {value_text}"})
+    return result
+
+
+def _parse_gem_skill_map(gem_data: dict) -> dict:
+    """ArmoryGem.Effects — 보석 슬롯별로 어떤 스킬에 적용되는지 매핑.
+    문서 기준 {"Description": ..., "Skills": [{GemSlot, Name, Icon, Description: [...]}]} 형태지만,
+    구버전(리스트) 응답도 있어 두 형태 모두 방어적으로 처리한다."""
+    effects = gem_data.get("Effects")
+    skills = effects.get("Skills") if isinstance(effects, dict) else effects
+    mapping: dict[int, dict] = {}
+    for s in skills or []:
+        if not isinstance(s, dict):
+            continue
+        desc = s.get("Description")
+        if isinstance(desc, list):
+            lines = [strip_html(d) for d in desc]
+        else:
+            lines = [strip_html(desc)] if desc else []
+        mapping[s.get("GemSlot")] = {
+            "skill_name": strip_html(s.get("Name")),
+            "skill_icon": s.get("Icon"),
+            "effect_lines": [line for line in lines if line],
+        }
+    return mapping
+
+
+def _classify_gem(text: str, name: str) -> str:
+    """보석을 레퍼런스처럼 "피해 증가"/"쿨타임 감소" 그룹으로 분류.
+    효과 문구를 우선 보고, 문구가 없으면 보석 이름(겁화/멸화=피해, 작열/홍염=쿨감)으로 판단."""
+    if "재사용 대기시간" in text and "감소" in text:
+        return "쿨감"
+    if "피해" in text and "증가" in text:
+        return "피해"
+    if "겁화" in name or "멸화" in name:
+        return "피해"
+    if "작열" in name or "홍염" in name:
+        return "쿨감"
+    return "기타"
 
 
 def parse_gems(gem_data: dict | None) -> list[dict]:
-    """보석 슬롯/이름/레벨/등급/효과를 정리한다."""
+    """보석 슬롯/이름/레벨/등급/효과 + 적용 스킬(이름/아이콘)과 피해/쿨감 분류를 정리한다."""
     gem_data = gem_data or {}
+    skill_map = _parse_gem_skill_map(gem_data)
     result = []
     for gem in gem_data.get("Gems") or []:
         tooltip = parse_tooltip_json(gem.get("Tooltip"))
@@ -336,6 +506,10 @@ def parse_gems(gem_data: dict | None) -> list[dict]:
         # 이름에 이미 "N레벨"이 접두어로 붙어있어(예: "8레벨 광휘의 보석") level을 따로 보여줄 때
         # 중복되므로 제거한다.
         name = _GEM_LEVEL_PREFIX_RE.sub("", strip_html(gem.get("Name")))
+        mapped = skill_map.get(gem.get("Slot")) or {}
+        effect_lines = mapped.get("effect_lines") or [
+            line for line in (effect or "").split("\n") if line.strip()
+        ]
         result.append(
             {
                 "slot": gem.get("Slot"),
@@ -344,9 +518,37 @@ def parse_gems(gem_data: dict | None) -> list[dict]:
                 "grade": gem.get("Grade"),
                 "icon": gem.get("Icon"),
                 "effect": effect,
+                "skill_name": mapped.get("skill_name"),
+                "skill_icon": mapped.get("skill_icon"),
+                "effect_lines": effect_lines,
+                "kind": _classify_gem(" ".join(effect_lines) or (effect or ""), name),
             }
         )
     return result
+
+
+_GEM_BASE_ATK_RE = re.compile(r"기본 공격력\s*(?:이|가)?\s*\+?([\d.]+)\s*%")
+_GEM_SUPPORT_RE = re.compile(r"지원 효과\s*(?:이|가)?\s*\+?([\d.]+)\s*%")
+
+
+def summarize_gems(gems: list[dict]) -> dict:
+    """보석을 피해/쿨감/기타 그룹으로 나누고, 광휘 보석의 기본 공격력·지원 효과 총합을 계산한다.
+    (레퍼런스 사이트 보석 탭 상단의 "기본 공격력 총합 / 지원 효과 총합"에 대응)"""
+    base_atk = 0.0
+    support = 0.0
+    for gem in gems:
+        text = " ".join(gem.get("effect_lines") or []) or (gem.get("effect") or "")
+        for m in _GEM_BASE_ATK_RE.finditer(text):
+            base_atk += float(m.group(1))
+        for m in _GEM_SUPPORT_RE.finditer(text):
+            support += float(m.group(1))
+    return {
+        "damage": [g for g in gems if g["kind"] == "피해"],
+        "cooldown": [g for g in gems if g["kind"] == "쿨감"],
+        "etc": [g for g in gems if g["kind"] == "기타"],
+        "base_attack_total": f"{base_atk:.2f}%" if base_atk else None,
+        "support_total": f"{support:.2f}%" if support else None,
+    }
 
 
 def parse_ark_grid(ark_grid: dict | None) -> dict:
@@ -390,12 +592,7 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
 def _format_combat_power(raw) -> str | None:
     """전투력은 문자열 숫자로 내려오는데, 천단위 콤마 없이 그대로 보여주면 자릿수를
     가늠하기 어려워 콤마를 붙인다. 숫자가 아니면(예외적인 경우) 원본을 그대로 반환."""
-    if raw is None:
-        return None
-    try:
-        return f"{int(float(raw)):,}"
-    except (TypeError, ValueError):
-        return str(raw)
+    return _format_int(raw)
 
 
 def parse_armory_detail(raw: dict) -> dict:
@@ -405,7 +602,21 @@ def parse_armory_detail(raw: dict) -> dict:
     stats = profile.get("Stats")
     equipment = parse_weapon_armor(raw.get("ArmoryEquipment"))
     accessories = parse_accessories(raw.get("ArmoryEquipment"))
+    extra_equipment = parse_extra_equipment(raw.get("ArmoryEquipment"))
     engravings = parse_engravings(raw.get("ArmoryEngraving"))
+    gems = parse_gems(raw.get("ArmoryGem"))
+
+    # 보석이 적용된 스킬에 레벨/분류 배지를 달아주기 위한 스킬명 → 보석 매핑
+    skills = parse_skills(raw.get("ArmorySkills"))
+    gems_by_skill: dict[str, list[dict]] = {}
+    for gem in gems:
+        if gem.get("skill_name"):
+            gems_by_skill.setdefault(gem["skill_name"], []).append(gem)
+    for skill in skills:
+        skill["gems"] = [
+            {"level": g.get("level"), "kind": g.get("kind"), "name": g.get("name")}
+            for g in gems_by_skill.get(skill["name"], [])
+        ]
 
     return {
         "character_name": profile.get("CharacterName"),
@@ -421,14 +632,21 @@ def parse_armory_detail(raw: dict) -> dict:
         "town_level": profile.get("TownLevel"),
         "town_name": profile.get("TownName"),
         "server_name": profile.get("ServerName"),
-        "skills": parse_skills(raw.get("ArmorySkills")),
+        "using_skill_point": profile.get("UsingSkillPoint"),
+        "total_skill_point": profile.get("TotalSkillPoint"),
+        "profile_stats": parse_profile_stats(stats),
+        "skills": skills,
         "ark_passive": parse_ark_passive(raw.get("ArkPassive")),
         "equipment": equipment,
         "accessories": accessories,
-        "gems": parse_gems(raw.get("ArmoryGem")),
+        "extra_equipment": extra_equipment,
+        "gems": gems,
+        "gem_summary": summarize_gems(gems),
         "ark_grid": parse_ark_grid(raw.get("ArkGrid")),
         "stat_effects": parse_stat_effects(stats),
         "engravings": engravings,
         "cards": parse_cards(raw.get("ArmoryCard")),
-        "aggregate_effects": parse_aggregate_effects(stats, engravings, equipment, accessories),
+        "aggregate_effects": parse_aggregate_effects(
+            stats, engravings, equipment, accessories, extra_equipment
+        ),
     }
