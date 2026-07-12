@@ -1,5 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
+{# 목걸이/귀걸이/반지 카드 — 1열(목걸이+귀걸이)과 2열(반지)에서 재사용 #}
+{% macro accessory_card(a) %}
+<div class="equip-acc-card">
+  <div class="equip-icon-wrap">
+    {% if a.icon %}<img src="{{ a.icon }}" alt="" class="equip-icon char-grade-{{ a.grade }}">{% endif %}
+  </div>
+  <div class="equip-info">
+    <div class="equip-name-line">
+      <span class="equip-icon-name char-grade-text-{{ a.grade }}">{{ a.name }}</span>
+      {% if a.ark_passive_bonus %}<span class="equip-ark-bonus">{{ a.ark_passive_bonus }}</span>{% endif %}
+    </div>
+    {% if a.quality is not none %}
+    <div class="equip-quality-line">
+      <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ a.quality_tier }}" style="width: {{ a.quality }}%;"></div></div>
+      <span class="equip-quality-num quality-text-{{ a.quality_tier }}">{{ a.quality }}</span>
+    </div>
+    {% endif %}
+    {% if a.honing_effects %}
+    <div class="acc-effect-lines">
+      {% for line in a.honing_effects %}
+      <span class="acc-effect-line">{{ line }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
 {# 팔찌/어빌리티 스톤/나침반/부적/보주 등 기타 장착 장비 카드 — 두 열에서 재사용 #}
 {% macro extra_equip_card(x) %}
 <div class="equip-acc-card">
@@ -74,70 +101,28 @@
     <div class="armory-panel is-active" data-armory-panel="equip">
       <!-- 상단 3열: 무기/방어구 | 장신구+팔찌+어빌리티 스톤 | 효과 영수증 (레퍼런스와 동일) -->
       <div class="equip-grid">
+        {# 1열: 목걸이 → 귀걸이 ×2 → 보주(나침반/부적 포함 기타) #}
         <div class="equip-col">
           <div class="equip-zone">
-            {% for e in detail.equipment %}
-            <div class="equip-icon-card" title="{{ e.detail_text }}">
-              <div class="equip-icon-wrap">
-                {% if e.icon %}<img src="{{ e.icon }}" alt="" class="equip-icon char-grade-{{ e.grade }}">{% endif %}
-                {% if e.honing_level %}<span class="equip-honing-badge">+{{ e.honing_level }}</span>{% endif %}
-              </div>
-              <div class="equip-info">
-                <div class="equip-name-line">
-                  <span class="equip-icon-name char-grade-text-{{ e.grade }}">{{ e.name }}</span>
-                  {% if e.ark_passive_bonus %}<span class="equip-ark-bonus">{{ e.ark_passive_bonus }}</span>{% endif %}
-                </div>
-                {% if e.quality is not none %}
-                <div class="equip-quality-line">
-                  <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ e.quality_tier }}" style="width: {{ e.quality }}%;"></div></div>
-                  <span class="equip-quality-num quality-text-{{ e.quality_tier }}">{{ e.quality }}</span>
-                </div>
-                {% endif %}
-              </div>
-            </div>
+            {% for a in detail.accessories %}
+            {% if a.type in ("목걸이", "귀걸이") %}{{ accessory_card(a) }}{% endif %}
             {% else %}
-            <p class="dash-empty">무기/방어구 정보가 없습니다.</p>
+            <p class="dash-empty">장신구 정보가 없습니다.</p>
             {% endfor %}
 
-            {# 나침반/부적/보주 등은 레퍼런스처럼 장비 목록 바로 아래에 #}
             {% for x in detail.extra_equipment or [] %}
             {% if x.type not in ("팔찌", "어빌리티 스톤") %}{{ extra_equip_card(x) }}{% endif %}
             {% endfor %}
           </div>
         </div>
 
+        {# 2열: 반지 ×2 → 팔찌 → 어빌리티 스톤 #}
         <div class="equip-col">
           <div class="equip-zone">
             {% for a in detail.accessories %}
-            <div class="equip-acc-card">
-              <div class="equip-icon-wrap">
-                {% if a.icon %}<img src="{{ a.icon }}" alt="" class="equip-icon char-grade-{{ a.grade }}">{% endif %}
-              </div>
-              <div class="equip-info">
-                <div class="equip-name-line">
-                  <span class="equip-icon-name char-grade-text-{{ a.grade }}">{{ a.name }}</span>
-                  {% if a.ark_passive_bonus %}<span class="equip-ark-bonus">{{ a.ark_passive_bonus }}</span>{% endif %}
-                </div>
-                {% if a.quality is not none %}
-                <div class="equip-quality-line">
-                  <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ a.quality_tier }}" style="width: {{ a.quality }}%;"></div></div>
-                  <span class="equip-quality-num quality-text-{{ a.quality_tier }}">{{ a.quality }}</span>
-                </div>
-                {% endif %}
-                {% if a.honing_effects %}
-                <div class="acc-effect-lines">
-                  {% for line in a.honing_effects %}
-                  <span class="acc-effect-line">{{ line }}</span>
-                  {% endfor %}
-                </div>
-                {% endif %}
-              </div>
-            </div>
-            {% else %}
-            <p class="dash-empty">장신구 정보가 없습니다.</p>
+            {% if a.type == "반지" %}{{ accessory_card(a) }}{% endif %}
             {% endfor %}
 
-            {# 레퍼런스처럼 장신구 아래에는 팔찌와 어빌리티 스톤만 #}
             {% for x in detail.extra_equipment or [] %}
             {% if x.type in ("팔찌", "어빌리티 스톤") %}{{ extra_equip_card(x) }}{% endif %}
             {% endfor %}

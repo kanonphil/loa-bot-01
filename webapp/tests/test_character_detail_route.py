@@ -224,11 +224,10 @@ def test_renders_character_detail(client):
     assert 'data-armory-tab="gem"' in resp.text
     # 코어에 장착된 젬의 세부 정보는 너무 장황해서 보여주지 않기로 했다
     assert "char-arkgrid-gem" not in resp.text
-    # 무기/방어구 + 종합 효과(효과 영수증)
-    assert "운명의 전율 한손검" in resp.text
-    assert "+18" in resp.text
-    assert "무기 공격력 +203054" in resp.text
-    assert "추가 피해 +30.00%" in resp.text
+    # 무기/방어구 목록은 의도적으로 렌더링하지 않는다 — 장비 탭 상단은
+    # 장신구(목걸이/귀걸이 | 반지) + 팔찌/어빌리티 스톤/보주 배치로 재구성됐다.
+    # (equipment 데이터 자체는 효과 영수증 합산에는 계속 쓰인다)
+    assert "운명의 전율 한손검" not in resp.text
     assert "공격 속도" in resp.text  # 효과 영수증 — 이름/수치가 분리 렌더링됨
     # 각인 + 카드
     assert "각성" in resp.text

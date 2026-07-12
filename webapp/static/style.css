@@ -2528,18 +2528,6 @@ a.calendar-party:hover {
   min-width: 0;
 }
 
-.equip-icon-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  cursor: default;
-  margin-bottom: 6px;
-}
-
 .equip-icon-wrap {
   position: relative;
   width: 40px;
@@ -2554,20 +2542,6 @@ a.calendar-party:hover {
   box-sizing: border-box;
   border: 2px solid transparent;
   object-fit: cover;
-}
-
-.equip-honing-badge {
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  font-size: 9px;
-  font-weight: 800;
-  color: var(--text);
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  padding: 0 4px;
-  border-radius: 999px;
-  line-height: 1.4;
 }
 
 .equip-info {

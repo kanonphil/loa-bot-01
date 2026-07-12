@@ -229,8 +229,9 @@ def parse_weapon_armor(equipment: list[dict]) -> list[dict]:
     return result
 
 
-# 레퍼런스 사이트가 장신구 칸 아래에 팔찌 → 어빌리티 스톤 순으로 보여줘서 같은 순서를 쓴다.
-_EXTRA_EQUIP_ORDER = ["팔찌", "어빌리티 스톤"]
+# 화면 배치 순서 — 팔찌/어빌리티 스톤은 반지 열 아래, 보주는 귀걸이 열 아래 첫 번째로
+# 오도록 나침반/부적보다 앞세운다 (템플릿이 이 정렬 순서를 그대로 쓴다).
+_EXTRA_EQUIP_ORDER = ["팔찌", "어빌리티 스톤", "보주"]
 # 장비 획득처/상인 판매 안내 같은 잡다한 섹션은 빼고, 실제 효과만 보여준다.
 _EXTRA_SECTION_KEYWORDS = ("효과", "각인", "보너스")
 

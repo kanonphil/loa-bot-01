@@ -705,14 +705,18 @@ STONE_TOOLTIP = json.dumps(
 
 EXTRA_EQUIPMENT = [
     {"Type": "무기", "Name": "무기는 제외", "Grade": "고대", "Tooltip": "{}"},
+    {"Type": "나침반", "Name": "복래 확장 나침반", "Grade": "유물", "Tooltip": "{}"},
+    {"Type": "보주", "Name": "생명의 대지 보주", "Grade": "유물", "Tooltip": "{}"},
     {"Type": "어빌리티 스톤", "Name": "위대한 비상", "Icon": "https://example.com/stone.png", "Grade": "유물", "Tooltip": STONE_TOOLTIP},
     {"Type": "팔찌", "Name": "천선의 구슬치", "Icon": "https://example.com/bracelet.png", "Grade": "고대", "Tooltip": BRACELET_TOOLTIP},
 ]
 
 
 def test_parse_extra_equipment_extracts_bracelet_and_stone_in_fixed_order():
+    """팔찌/어빌리티 스톤은 반지 열 아래, 보주는 귀걸이 열 아래 첫 번째로 배치되므로
+    파서가 팔찌 → 스톤 → 보주 → 나머지(나침반/부적) 순으로 정렬해줘야 한다."""
     result = parser.parse_extra_equipment(EXTRA_EQUIPMENT)
-    assert [x["type"] for x in result] == ["팔찌", "어빌리티 스톤"]  # 무기/방어구/장신구 제외, 팔찌 먼저
+    assert [x["type"] for x in result] == ["팔찌", "어빌리티 스톤", "보주", "나침반"]
     bracelet = result[0]
     assert bracelet["name"] == "천선의 구슬치"
     assert bracelet["grade"] == "고대"
