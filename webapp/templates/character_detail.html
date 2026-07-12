@@ -1,5 +1,26 @@
 {% extends "base.html" %}
 {% block content %}
+{# 팔찌/어빌리티 스톤/나침반/부적/보주 등 기타 장착 장비 카드 — 두 열에서 재사용 #}
+{% macro extra_equip_card(x) %}
+<div class="equip-acc-card">
+  <div class="equip-icon-wrap">
+    {% if x.icon %}<img src="{{ x.icon }}" alt="" class="equip-icon char-grade-{{ x.grade }}">{% endif %}
+  </div>
+  <div class="equip-info">
+    <div class="equip-name-line">
+      <span class="equip-type-tag">{{ x.type }}</span>
+      <span class="equip-icon-name char-grade-text-{{ x.grade }}">{{ x.name }}</span>
+    </div>
+    {% for section in x.sections %}
+    <div class="acc-effect-lines">
+      {% for line in section.lines %}
+      <span class="acc-effect-line">{{ line }}</span>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
 <div class="page-content page-wide">
 <a href="/expedition" class="party-back-link">&larr; 원정대 관리로</a>
 
@@ -77,6 +98,11 @@
             {% else %}
             <p class="dash-empty">무기/방어구 정보가 없습니다.</p>
             {% endfor %}
+
+            {# 나침반/부적/보주 등은 레퍼런스처럼 장비 목록 바로 아래에 #}
+            {% for x in detail.extra_equipment or [] %}
+            {% if x.type not in ("팔찌", "어빌리티 스톤") %}{{ extra_equip_card(x) }}{% endif %}
+            {% endfor %}
           </div>
         </div>
 
@@ -111,25 +137,9 @@
             <p class="dash-empty">장신구 정보가 없습니다.</p>
             {% endfor %}
 
+            {# 레퍼런스처럼 장신구 아래에는 팔찌와 어빌리티 스톤만 #}
             {% for x in detail.extra_equipment or [] %}
-            <div class="equip-acc-card">
-              <div class="equip-icon-wrap">
-                {% if x.icon %}<img src="{{ x.icon }}" alt="" class="equip-icon char-grade-{{ x.grade }}">{% endif %}
-              </div>
-              <div class="equip-info">
-                <div class="equip-name-line">
-                  <span class="equip-type-tag">{{ x.type }}</span>
-                  <span class="equip-icon-name char-grade-text-{{ x.grade }}">{{ x.name }}</span>
-                </div>
-                {% for section in x.sections %}
-                <div class="acc-effect-lines">
-                  {% for line in section.lines %}
-                  <span class="acc-effect-line">{{ line }}</span>
-                  {% endfor %}
-                </div>
-                {% endfor %}
-              </div>
-            </div>
+            {% if x.type in ("팔찌", "어빌리티 스톤") %}{{ extra_equip_card(x) }}{% endif %}
             {% endfor %}
           </div>
         </div>

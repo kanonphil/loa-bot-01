@@ -631,6 +631,29 @@ def test_parse_aggregate_effects_handles_all_none():
     assert parser.parse_aggregate_effects(None, None, None, None) == []
 
 
+def test_parse_aggregate_effects_drops_sentence_fragments_and_strips_bracket_tags():
+    """팔찌 특수효과 같은 긴 설명 문장이 영수증 항목으로 새어 들어오면 화면이 세로로
+    한없이 길어진다 — 이름이 스탯명 길이를 넘는 항목은 버리고, "[비수] 무기 공격력"
+    같은 대괄호 태그 접두어는 떼고 합산해야 한다."""
+    extras = [
+        {
+            "sections": [
+                {
+                    "header": "팔찌 효과",
+                    "lines": [
+                        "[비수] 무기 공격력 +3000",
+                        "공격 적중 시 대상이 자신 및 파티원에게 받는 성속성 피해량 강화 효과가 3.5% 증가한다.",
+                    ],
+                }
+            ]
+        }
+    ]
+    result = parser.parse_aggregate_effects(None, None, None, None, extras)
+    names = [r["name"] for r in result]
+    assert "무기 공격력" in names  # 대괄호 태그 제거 후 합산
+    assert all(len(n) <= 20 for n in names)  # 문장 조각은 통째로 제외
+
+
 def test_parse_aggregate_effects_includes_flat_values_and_value_text():
     """레퍼런스 "효과 영수증"처럼 %가 아닌 고정 수치(최대 마나 +6, 치명 +195)도 합산하고,
     우측 정렬 표시용 value_text를 제공해야 한다."""

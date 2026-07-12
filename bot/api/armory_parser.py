@@ -378,6 +378,17 @@ def _iter_percent_effects(text: str):
             yield name.strip(), float(value)
 
 
+# 효과 영수증에 넣기엔 이름이 아닌 문장 조각(팔찌 특수효과 설명 등)인 항목을 걸러내는 기준.
+# 실제 스탯 이름은 "상태이상 공격 지속시간"(12자) 정도가 최장이라 20자면 충분하다.
+_EFFECT_NAME_MAX_LEN = 20
+_BRACKET_PREFIX_RE = re.compile(r"^\[[^\]]+\]\s*")
+
+
+def _clean_effect_name(name: str) -> str:
+    """팔찌 효과의 "[비수] 무기 공격력" 같은 대괄호 태그 접두어를 제거한다."""
+    return _BRACKET_PREFIX_RE.sub("", name).strip()
+
+
 def _iter_flat_effects(text: str):
     """"최대 마나 +6", "치명 +195" 같은 %가 없는 고정 수치 라인을 (이름, 값)으로 내보낸다."""
     for line in text.split("\n"):
@@ -409,12 +420,18 @@ def parse_aggregate_effects(
     order: list[tuple[str, str]] = []  # (이름, "pct"|"flat") — 등장 순서 유지
 
     def add_pct(name: str, value: float) -> None:
+        name = _clean_effect_name(name)
+        if not name or len(name) > _EFFECT_NAME_MAX_LEN:
+            return  # 스탯 이름이 아니라 문장 조각 — 영수증만 지저분해지므로 버린다
         if name not in pct_totals:
             pct_totals[name] = 0.0
             order.append((name, "pct"))
         pct_totals[name] += value
 
     def add_flat(name: str, value: int) -> None:
+        name = _clean_effect_name(name)
+        if not name or len(name) > _EFFECT_NAME_MAX_LEN:
+            return
         if name not in flat_totals:
             flat_totals[name] = 0
             order.append((name, "flat"))
