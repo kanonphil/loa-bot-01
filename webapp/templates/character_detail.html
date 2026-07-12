@@ -51,8 +51,9 @@
 
     <!-- ── 장비 ── -->
     <div class="armory-panel is-active" data-armory-panel="equip">
-      <div class="equip-columns">
-        <div class="equip-block">
+      <!-- 1행: 무기/방어구 | 장신구 | 효과 영수증 -->
+      <div class="equip-grid">
+        <div class="equip-zone">
           {% for e in detail.equipment %}
           <div class="equip-icon-card" title="{{ e.detail_text }}">
             <div class="equip-icon-wrap">
@@ -71,7 +72,7 @@
           {% endfor %}
         </div>
 
-        <div class="equip-block">
+        <div class="equip-zone">
           {% for a in detail.accessories %}
           <div class="equip-icon-card" title="{{ a.detail_text }}">
             <div class="equip-icon-wrap">
@@ -89,19 +90,40 @@
           {% endfor %}
         </div>
 
-        {% if detail.aggregate_effects %}
-        <div class="equip-block equip-summary-box">
-          <h2 class="char-detail-title">효과 양수지</h2>
+        <div class="equip-zone equip-summary-box">
+          <h2 class="char-detail-title">효과 영수증</h2>
           <p class="equip-summary-caption">전투특성·각인·장비·장신구 효과를 합산한 참고용 수치입니다.</p>
+          {% if detail.aggregate_effects %}
           <div class="char-arkgrid-summary-list">
             {% for e in detail.aggregate_effects %}
             <span class="char-arkgrid-stat-chip">{{ e.text }}</span>
             {% endfor %}
           </div>
+          {% else %}
+          <p class="dash-empty">효과 정보가 없습니다.</p>
+          {% endif %}
         </div>
-        {% endif %}
+      </div>
 
-        <div class="equip-block">
+      <!-- 2행: 아크그리드 요약 | 각인 | 카드 -->
+      <div class="equip-grid">
+        <div class="equip-zone">
+          <h2 class="char-detail-title">아크그리드</h2>
+          <div class="char-arkgrid-mini-list">
+            {% for c in detail.ark_grid.cores %}
+            {% if c.icon %}<img src="{{ c.icon }}" alt="{{ c.name }}" title="{{ c.name }} ({{ c.point }}P)" class="char-arkgrid-mini-icon char-grade-{{ c.grade }}">{% endif %}
+            {% endfor %}
+          </div>
+          {% if detail.ark_grid.effects %}
+          <ul class="char-honing-list">
+            {% for e in detail.ark_grid.effects %}
+            <li>{{ e.name }} <span class="char-engraving-level">Lv.{{ e.level }}</span> — {{ e.text }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+
+        <div class="equip-zone">
           <h2 class="char-detail-title">각인</h2>
           <div class="char-engraving-list">
             {% for eng in detail.engravings %}
@@ -115,7 +137,7 @@
           </div>
         </div>
 
-        <div class="equip-block">
+        <div class="equip-zone">
           <h2 class="char-detail-title">카드</h2>
           {% if detail.cards.cards %}
           <div class="char-card-icon-list">

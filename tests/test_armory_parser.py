@@ -604,7 +604,7 @@ def test_parse_cards_handles_none():
     assert parser.parse_cards(None) == {"cards": [], "effects": []}
 
 
-# ── 종합 효과(효과 양수지) — 전투특성/각인/장비/장신구에서 % 효과를 모아 이름별로 합산 ──
+# ── 종합 효과(효과 영수증) — 전투특성/각인/장비/장신구에서 % 효과를 모아 이름별로 합산 ──
 
 def test_parse_aggregate_effects_sums_same_named_stat_across_sources():
     stats = [{"Type": "신속", "Tooltip": ["공격 속도가 <font>30.99%</font> 증가합니다."]}]

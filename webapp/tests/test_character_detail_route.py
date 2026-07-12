@@ -155,7 +155,7 @@ def test_renders_character_detail(client):
     assert 'data-armory-tab="gem"' in resp.text
     # 코어에 장착된 젬의 세부 정보는 너무 장황해서 보여주지 않기로 했다
     assert "char-arkgrid-gem" not in resp.text
-    # 무기/방어구 + 종합 효과(효과 양수지)
+    # 무기/방어구 + 종합 효과(효과 영수증)
     assert "운명의 전율 한손검" in resp.text
     assert "+18" in resp.text
     assert "무기 공격력 +203054" in resp.text

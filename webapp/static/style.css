@@ -2495,22 +2495,23 @@ a.calendar-party:hover {
   line-height: 1.6;
 }
 
-/* ── 장비 탭: 레퍼런스처럼 무기/방어구 → 장신구 → 효과 양수지 → 각인 → 카드를
-   한 흐름으로 두고 CSS 다단(2열)으로 컴팩트하게 흘려보낸다. ── */
-.equip-columns {
-  column-count: 2;
-  column-gap: 20px;
+/* ── 장비 탭: 레퍼런스(loawa.com)와 동일하게 3열 그리드 두 줄
+   (무기/방어구 | 장신구 | 효과영수증), (아크그리드 | 각인 | 카드) ── */
+.equip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-@media (max-width: 760px) {
-  .equip-columns {
-    column-count: 1;
+@media (max-width: 900px) {
+  .equip-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-.equip-block {
-  break-inside: avoid;
-  margin-bottom: 16px;
+.equip-zone {
+  min-width: 0;
 }
 
 .equip-icon-card {
@@ -2522,7 +2523,6 @@ a.calendar-party:hover {
   border: 1px solid var(--border);
   background: var(--panel);
   cursor: default;
-  break-inside: avoid;
   margin-bottom: 6px;
 }
 
@@ -2624,6 +2624,21 @@ a.calendar-party:hover {
 .char-engraving-level {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.char-arkgrid-mini-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.char-arkgrid-mini-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  box-sizing: border-box;
+  border: 2px solid transparent;
 }
 
 .char-card-icon-list {
