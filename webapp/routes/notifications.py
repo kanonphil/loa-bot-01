@@ -2,6 +2,7 @@
 구독자용 종 아이콘 이력/알림 설정."""
 import asyncio
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import RedirectResponse, StreamingResponse
@@ -13,6 +14,25 @@ from webapp.templating import templates
 router = APIRouter()
 
 KEEPALIVE_INTERVAL_SECONDS = 15
+
+
+def _time_ago(created_at_iso: str) -> str:
+    """알림 시각을 "방금 전 / N분 전 / N시간 전 / N일 전" 상대 표기로 변환.
+    파싱 실패(예상 못한 포맷)면 빈 문자열 — 시각 없이 텍스트만 보여준다."""
+    try:
+        created = datetime.fromisoformat(created_at_iso)
+    except (TypeError, ValueError):
+        return ""
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    seconds = (datetime.now(timezone.utc) - created).total_seconds()
+    if seconds < 60:
+        return "방금 전"
+    if seconds < 3600:
+        return f"{int(seconds // 60)}분 전"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}시간 전"
+    return f"{int(seconds // 86400)}일 전"
 
 
 async def _stream(request: Request):
@@ -46,6 +66,8 @@ async def notification_count(user: dict = Depends(get_current_user)):
 async def notification_panel(request: Request, user: dict = Depends(get_current_user)):
     subscribed = await notification_store.is_subscribed(user["discord_id"])
     items = await notification_store.list_unread(user["discord_id"]) if subscribed else []
+    for item in items:
+        item["time_ago"] = _time_ago(item.get("created_at"))
     return templates.TemplateResponse(
         request, "_notification_panel.html", {"subscribed": subscribed, "items": items}
     )

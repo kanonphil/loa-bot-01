@@ -94,6 +94,25 @@ def test_panel_lists_unread_when_subscribed(client):
     resp = client.get("/notifications/panel")
     assert "카멘 하드 공격대가 모집을 시작했습니다." in resp.text
     assert "/notifications/1/open" in resp.text
+    # 드롭다운 헤더 + 종류별 아이콘 칩 + 상대 시각
+    assert "notif-panel-header" in resp.text
+    assert "notif-icon-created" in resp.text
+    assert "방금 전" in resp.text
+
+
+def test_time_ago_buckets():
+    """알림 시각의 상대 표기 — 방금/분/시간/일 구간."""
+    from datetime import datetime, timedelta, timezone
+
+    from webapp.routes.notifications import _time_ago
+
+    now = datetime.now(timezone.utc)
+    assert _time_ago(now.isoformat()) == "방금 전"
+    assert _time_ago((now - timedelta(minutes=5)).isoformat()) == "5분 전"
+    assert _time_ago((now - timedelta(hours=3)).isoformat()) == "3시간 전"
+    assert _time_ago((now - timedelta(days=2)).isoformat()) == "2일 전"
+    assert _time_ago("이상한 값") == ""
+    assert _time_ago(None) == ""
 
 
 def test_open_marks_read_and_redirects_to_party(client):

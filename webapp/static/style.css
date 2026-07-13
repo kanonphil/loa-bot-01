@@ -72,7 +72,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   border-radius: 8px;
 }
 
-.sidebar-brand span {
+/* 길드명 — 직계 자식으로 한정 (알림 패널 안의 span까지 물들지 않게) */
+.sidebar-brand > span {
   font-weight: 600;
   font-size: 15px;
 }
@@ -3879,9 +3880,14 @@ a.calendar-party:hover {
   to { opacity: 0; transform: translateX(24px); }
 }
 
-/* ── 알림 종 아이콘 ────────────────────────────────────── */
+/* ── 알림 종 아이콘 + 드롭다운 ─────────────────────────── */
 
-.sidebar-brand span {
+/* 알림 패널의 absolute 기준점 — 이게 없으면 패널이 페이지 전체 폭으로 퍼진다 */
+.sidebar-brand {
+  position: relative;
+}
+
+.sidebar-brand > span {
   flex: 1;
 }
 
@@ -3912,30 +3918,54 @@ a.calendar-party:hover {
   text-align: center;
 }
 
+/* 데스크톱: 종 아이콘 아래에 붙는 320px 드롭다운 (사이드바 밖 본문 위로 펼쳐짐) */
 .notif-panel {
   position: absolute;
-  top: 56px;
-  left: 12px;
-  right: 12px;
-  z-index: 50;
+  top: calc(100% + 4px);
+  left: 8px;
+  width: 320px;
+  z-index: 220;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-  max-height: 360px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  max-height: 420px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.notif-panel-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.notif-panel-title {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .notif-panel-empty {
-  padding: 16px;
+  padding: 20px 16px;
   color: var(--text-muted);
   font-size: 13px;
   text-align: center;
 }
 
+.notif-panel-empty p {
+  margin: 0 0 6px;
+}
+
 .notif-panel-settings-link {
   color: var(--accent);
   text-decoration: none;
+  font-size: 12px;
 }
 
 .notif-panel-list {
@@ -3947,8 +3977,8 @@ a.calendar-party:hover {
 .notif-panel-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 9px 10px;
   border-radius: 8px;
   color: var(--text);
   text-decoration: none;
@@ -3959,8 +3989,56 @@ a.calendar-party:hover {
   background: var(--sidebar-bg);
 }
 
+/* 알림 종류별 색을 입힌 아이콘 칩 */
 .notif-panel-icon {
   flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--sidebar-bg);
+}
+
+.notif-icon-created { background: rgba(124, 140, 255, 0.14); }
+.notif-icon-cleared { background: rgba(255, 182, 76, 0.14); }
+.notif-icon-guest_joined { background: rgba(111, 214, 138, 0.14); }
+
+.notif-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.notif-panel-text {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.notif-panel-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 모바일: 오프캔버스 사이드바에 transform이 걸려있어 fixed/absolute 배치가 사이드바
+   기준으로 뒤틀린다 — 드롭다운 대신 사이드바 흐름 안에 인라인으로 펼친다(메뉴를 아래로 밀어냄).
+   패널은 brand(flex row)의 자식이라 wrap + 100% 폭으로 한 줄을 통째로 차지시킨다. */
+@media (max-width: 768px) {
+  .sidebar-brand {
+    flex-wrap: wrap;
+  }
+
+  .notif-panel {
+    position: static;
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 12px;
+    max-height: 320px;
+  }
 }
 
 /* ── 설정 페이지 ───────────────────────────────────────── */

@@ -1,3 +1,7 @@
+<div class="notif-panel-header">
+  <span class="notif-panel-title">알림</span>
+  <a href="/settings" class="notif-panel-settings-link">설정</a>
+</div>
 {% if not subscribed %}
 <div class="notif-panel-empty">
   <p>알림을 구독하면 여기서 이력을 볼 수 있어요.</p>
@@ -11,11 +15,14 @@
 <ul class="notif-panel-list">
   {% for n in items %}
   <li>
-    <a href="/notifications/{{ n.id }}/open" class="notif-panel-item notif-panel-item-{{ n.type }}">
-      <span class="notif-panel-icon">
+    <a href="/notifications/{{ n.id }}/open" class="notif-panel-item">
+      <span class="notif-panel-icon notif-icon-{{ n.type }}">
         {% if n.type == "created" %}📢{% elif n.type == "cleared" %}🏆{% elif n.type == "guest_joined" %}👤{% else %}🔔{% endif %}
       </span>
-      <span class="notif-panel-text">{{ n.text }}</span>
+      <span class="notif-panel-body">
+        <span class="notif-panel-text">{{ n.text }}</span>
+        {% if n.time_ago %}<span class="notif-panel-time">{{ n.time_ago }}</span>{% endif %}
+      </span>
     </a>
   </li>
   {% endfor %}
