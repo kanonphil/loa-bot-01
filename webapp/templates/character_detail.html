@@ -11,13 +11,18 @@
       <span class="equip-icon-name char-grade-text-{{ a.grade }}">{{ a.name }}</span>
       {% if a.ark_passive_bonus %}<span class="equip-ark-bonus">{{ a.ark_passive_bonus }}</span>{% endif %}
     </div>
-    {% if a.quality is not none %}
-    <div class="equip-quality-line">
-      <div class="equip-quality-bar"><div class="equip-quality-fill quality-bg-{{ a.quality_tier }}" style="width: {{ a.quality }}%;"></div></div>
-      <span class="equip-quality-num quality-text-{{ a.quality_tier }}">{{ a.quality }}</span>
+    {% if a.base_stat_lines %}
+    <div class="acc-base-stats">
+      {% for line in a.base_stat_lines %}<span>{{ line }}</span>{% endfor %}
     </div>
     {% endif %}
-    {% if a.honing_effects %}
+    {% if a.honing_options %}
+    <div class="acc-effect-lines">
+      {% for o in a.honing_options %}
+      <span class="acc-effect-line{% if o.tier %} grind-tier-{{ o.tier }}{% endif %}">{{ o.text }}</span>
+      {% endfor %}
+    </div>
+    {% elif a.honing_effects %}
     <div class="acc-effect-lines">
       {% for line in a.honing_effects %}
       <span class="acc-effect-line">{{ line }}</span>
@@ -101,23 +106,21 @@
     <div class="armory-panel is-active" data-armory-panel="equip">
       <!-- 상단 3열: 무기/방어구 | 장신구+팔찌+어빌리티 스톤 | 효과 영수증 (레퍼런스와 동일) -->
       <div class="equip-grid">
-        {# 1열: 목걸이 → 귀걸이 ×2 → 보주(나침반/부적 포함 기타) #}
-        <div class="equip-col">
+        {# 데스크톱: 1열(목걸이/귀걸이) 아래에 보주, 2열 반지/팔찌/스톤, 3열 영수증.
+           모바일(1열 스택): 목걸이/귀걸이 → 반지/팔찌/스톤 → 보주 순이 되도록
+           보주를 별도 블록으로 빼서 소스 순서상 뒤에 둔다 (배치는 CSS grid-column/row). #}
+        <div class="equip-col equip-col-a">
           <div class="equip-zone">
             {% for a in detail.accessories %}
             {% if a.type in ("목걸이", "귀걸이") %}{{ accessory_card(a) }}{% endif %}
             {% else %}
             <p class="dash-empty">장신구 정보가 없습니다.</p>
             {% endfor %}
-
-            {% for x in detail.extra_equipment or [] %}
-            {% if x.type not in ("팔찌", "어빌리티 스톤") %}{{ extra_equip_card(x) }}{% endif %}
-            {% endfor %}
           </div>
         </div>
 
         {# 2열: 반지 ×2 → 팔찌 → 어빌리티 스톤 #}
-        <div class="equip-col">
+        <div class="equip-col equip-col-b">
           <div class="equip-zone">
             {% for a in detail.accessories %}
             {% if a.type == "반지" %}{{ accessory_card(a) }}{% endif %}
@@ -129,7 +132,16 @@
           </div>
         </div>
 
-        <div class="equip-col">
+        {# 보주(및 기타) — 데스크톱에선 1열 아래, 모바일에선 맨 마지막 #}
+        <div class="equip-col equip-col-orb">
+          <div class="equip-zone">
+            {% for x in detail.extra_equipment or [] %}
+            {% if x.type not in ("팔찌", "어빌리티 스톤") %}{{ extra_equip_card(x) }}{% endif %}
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="equip-col equip-col-receipt">
           <div class="equip-zone equip-summary-box">
             <h2 class="char-detail-title">효과 영수증</h2>
             <p class="equip-summary-caption">전투특성·각인·장비·장신구·팔찌 효과를 합산한 참고용 수치입니다.</p>
@@ -278,11 +290,11 @@
             </div>
             {% endif %}
             {% if detail.cards.effects %}
-            <ul class="char-honing-list">
+            <div class="card-set-effects">
               {% for eff in detail.cards.effects %}
-              <li>{{ eff.text }}</li>
+              <div class="card-set-effect">{{ eff.text }}</div>
               {% endfor %}
-            </ul>
+            </div>
             {% elif not detail.cards.cards %}
             <p class="dash-empty">카드 정보가 없습니다.</p>
             {% endif %}
@@ -386,10 +398,19 @@
                 <span class="char-arkgrid-core-point">합산 {{ c.point }}P</span>
               </div>
             </div>
-            {% if c.option_lines %}
+            {% if c.options %}
+            <div class="core-opt-list">
+              {% for o in c.options %}
+              <div class="core-opt-row{% if o.point is not none and c.point is not none and o.point <= c.point %} is-active{% endif %}">
+                {% if o.point is not none %}<span class="core-opt-point">{{ o.point }}P</span>{% endif %}
+                <span class="core-opt-text">{{ o.text }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% elif c.option_lines %}
             <ul class="char-arkgrid-core-options">
               {% for line in c.option_lines %}
-              <li{% if c.point is not none and line.startswith('[') and (line.split(']')[0][1:-1] | int(999)) <= c.point %} class="is-active"{% endif %}>{{ line }}</li>
+              <li>{{ line }}</li>
               {% endfor %}
             </ul>
             {% endif %}

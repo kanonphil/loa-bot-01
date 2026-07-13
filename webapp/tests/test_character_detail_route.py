@@ -117,7 +117,12 @@ DETAIL = {
             "grade": "고대",
             "quality": 96,
             "quality_tier": "상",
+            "base_stat_lines": ["힘 +17697", "민첩 +17697", "지능 +17697"],
             "honing_effects": ["낙인력 +8.00%", "최대 마나 +6"],
+            "honing_options": [
+                {"text": "낙인력 +8.00%", "tier": "상"},
+                {"text": "최대 마나 +6", "tier": "하"},
+            ],
             "ark_passive_bonus": "깨달음 +13",
             "detail_text": "낙인력 +8.00%\n최대 마나 +6\n깨달음 +13",
         }
@@ -153,6 +158,7 @@ DETAIL = {
                 "core_name": "해",
                 "willpower": "15 포인트",
                 "option_lines": ["[10P] 아군 공격력 강화 효과 +1.3%"],
+                "options": [{"point": 10, "text": "아군 공격력 강화 효과 +1.3%"}],
             }
         ],
         "effects": [{"name": "공격력", "level": 29, "text": "공격력 +1.06%"}],
@@ -185,8 +191,12 @@ def test_renders_character_detail(client):
     assert "해방자" in resp.text
     assert "1티어" in resp.text
     assert "도래한 결전의 목걸이" in resp.text
-    assert "width: 96%;" in resp.text  # 품질은 텍스트 배지 대신 색상 바 너비로 표현
+    # 품질 대신 기본 효과(힘/민첩/지능)를 보여준다
+    assert "힘 +17697" in resp.text
+    assert "width: 96%;" not in resp.text
     assert "낙인력 +8.00%" in resp.text  # 연마 효과는 장신구 카드에 바로 노출
+    assert "grind-tier-상" in resp.text  # 연마 단계(상/중/하)별 색상 클래스
+    assert "grind-tier-하" in resp.text
     assert "광휘의 보석" in resp.text
     assert "재사용 대기시간 20.00% 감소" in resp.text
     # 보석 탭: 쿨타임 그룹 + 적용 스킬 + 총합
@@ -209,7 +219,10 @@ def test_renders_character_detail(client):
     assert 'src="https://cdn-lostark.game.onstove.com/skill.png"' in resp.text
     assert 'src="https://cdn-lostark.game.onstove.com/tripod.png"' in resp.text
     assert "빛이 생명을 새긴다" in resp.text
-    assert "[10P] 아군 공격력 강화 효과 +1.3%" in resp.text
+    # 코어 옵션은 "[10P] 설명" 한 덩어리가 아니라 포인트 칩 + 설명으로 분리 렌더링
+    assert "core-opt-point" in resp.text
+    assert "10P" in resp.text
+    assert "아군 공격력 강화 효과 +1.3%" in resp.text
     assert "공격력 +1.06%" in resp.text
     # 등급은 텍스트로 적지 않고 아이콘 테두리/이름 글자색(CSS 클래스)으로만 표현
     assert 'class="char-arkgrid-core-icon char-grade-유물"' in resp.text

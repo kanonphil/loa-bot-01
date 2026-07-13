@@ -19,6 +19,8 @@ _SIMPLE_PERCENT_RE = re.compile(r"^(.+?)\s*([+-][\d.]+)%")
 _SIMPLE_FLAT_RE = re.compile(r"^(.+?)\s*\+([\d,]+)$")
 # 문장 안의 "+1.99%" / "-6.00%" 같은 수치 토큰
 _VALUE_TOKEN_RE = re.compile(r"[+-][\d.,]+%?")
+# 아크그리드 코어 옵션의 "[10P] 효과 설명" 형식
+_CORE_OPTION_RE = re.compile(r"^\[(\d+)P\]\s*(.*)$")
 
 
 def strip_html(text: str | None) -> str:
@@ -154,16 +156,64 @@ def parse_ark_passive(ark_passive: dict | None) -> dict:
     }
 
 
+# T4 장신구 연마 효과의 옵션별 (하/중/상) 수치표 — 값이 어느 단계 롤인지로 색을 입힌다.
+# 이름이 겹치는 항목("아군 공격력 강화 효과" ⊃ "공격력")이 있어 긴 이름부터 매칭한다.
+_GRIND_PCT_TIERS = {
+    "추가 피해": (0.70, 1.60, 2.60),
+    "적에게 주는 피해": (0.55, 1.20, 2.00),
+    "낙인력": (2.15, 4.80, 8.00),
+    "게이지 획득량": (1.60, 3.60, 6.00),  # 세레나데, 신앙, 조화 게이지 획득량
+    "치명타 적중률": (0.40, 0.95, 1.55),
+    "치명타 피해": (1.10, 2.40, 4.00),
+    "무기 공격력": (0.90, 1.80, 3.00),
+    "공격력": (0.40, 0.95, 1.55),
+    "파티원 회복 효과": (0.95, 2.10, 3.50),
+    "파티원 보호막 효과": (0.95, 2.10, 3.50),
+    "아군 공격력 강화 효과": (1.35, 3.00, 5.00),
+    "아군 피해량 강화 효과": (2.00, 4.50, 7.50),
+    "상태이상 공격 지속시간": (0.20, 0.50, 1.00),
+}
+_GRIND_FLAT_TIERS = {
+    "무기 공격력": (195, 480, 960),
+    "공격력": (80, 195, 390),
+    "최대 생명력": (1300, 3250, 6500),
+    "최대 마나": (6, 15, 30),
+    "전투 중 생명력 회복량": (10, 25, 50),
+}
+_GRIND_TIER_NAMES = ("하", "중", "상")
+_GRIND_VALUE_RE = re.compile(r"\+([\d.,]+)\s*(%?)")
+
+
+def grind_tier(line: str) -> str | None:
+    """연마 효과 한 줄("낙인력 +8.00%")이 하/중/상 어느 단계 롤인지 판별.
+    수치표에 없는 옵션이거나 값이 표와 안 맞으면(밸런스 패치 등) None — 색 없이 보여준다."""
+    match = _GRIND_VALUE_RE.search(line)
+    if not match:
+        return None
+    value = float(match.group(1).replace(",", ""))
+    table = _GRIND_PCT_TIERS if match.group(2) else _GRIND_FLAT_TIERS
+    for name in sorted(table, key=len, reverse=True):
+        if name in line:
+            for tier_name, tier_value in zip(_GRIND_TIER_NAMES, table[name]):
+                if abs(value - tier_value) < 0.011:
+                    return tier_name
+            return None
+    return None
+
+
 def parse_accessories(equipment: list[dict]) -> list[dict]:
-    """목걸이/귀걸이/반지만 골라 품질/연마 효과/아크패시브 포인트 기여를 정리한다."""
+    """목걸이/귀걸이/반지만 골라 기본 효과(힘/민첩/지능)/연마 효과(+단계)/아크패시브
+    포인트 기여를 정리한다."""
     result = []
     for item in equipment or []:
         if item.get("Type") not in _ACCESSORY_TYPES:
             continue
         tooltip = parse_tooltip_json(item.get("Tooltip"))
         quality = find_quality(tooltip)
+        base_stats = find_item_part(tooltip, "기본 효과")
         honing = find_item_part(tooltip, "연마 효과")
         ark_passive_bonus = find_item_part(tooltip, "아크 패시브 포인트 효과")
+        base_stat_lines = [line for line in (base_stats or "").split("\n") if line.strip()]
         honing_effects = [line for line in (honing or "").split("\n") if line.strip()]
 
         detail_lines = list(honing_effects)
@@ -178,7 +228,9 @@ def parse_accessories(equipment: list[dict]) -> list[dict]:
                 "grade": item.get("Grade"),
                 "quality": quality,
                 "quality_tier": quality_tier(quality) if quality is not None else None,
+                "base_stat_lines": base_stat_lines,
                 "honing_effects": honing_effects,
+                "honing_options": [{"text": line, "tier": grind_tier(line)} for line in honing_effects],
                 "ark_passive_bonus": ark_passive_bonus,
                 "detail_text": "\n".join(detail_lines),
             }
@@ -614,6 +666,16 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
         # 콜론으로 구분된 플레이버 텍스트가 붙어있다 — 부제로 따로 보여준다.
         _, _, flavor = (slot.get("Name") or "").partition(" : ")
 
+        option_lines = [line for line in option_text.split("\n") if line.strip()]
+        # "[10P] 효과 설명"을 (달성 포인트, 설명)으로 분리 — 달성 여부 강조 표시에 쓴다
+        options = []
+        for line in option_lines:
+            match = _CORE_OPTION_RE.match(line)
+            if match:
+                options.append({"point": int(match.group(1)), "text": match.group(2).strip()})
+            else:
+                options.append({"point": None, "text": line})
+
         cores.append(
             {
                 "name": slot.get("Name"),
@@ -624,7 +686,8 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
                 "system": system or None,
                 "core_name": core_name or None,
                 "willpower": find_item_part(tooltip, "코어 공급 의지력"),
-                "option_lines": [line for line in option_text.split("\n") if line.strip()],
+                "option_lines": option_lines,
+                "options": options,
             }
         )
 

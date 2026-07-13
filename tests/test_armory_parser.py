@@ -103,9 +103,30 @@ def test_parse_accessories_extracts_quality_honing_and_ark_passive_bonus():
     assert acc["grade"] == "고대"
     assert acc["quality"] == 96
     assert acc["quality_tier"] == "상"
+    assert acc["base_stat_lines"] == ["힘 +17697"]  # 품질 대신 화면에 보여줄 기본 효과
     assert acc["honing_effects"] == ["낙인력 +8.00%", "최대 마나 +6"]
+    assert acc["honing_options"] == [
+        {"text": "낙인력 +8.00%", "tier": "상"},
+        {"text": "최대 마나 +6", "tier": "하"},
+    ]
     assert acc["ark_passive_bonus"] == "깨달음 +13"
     assert acc["detail_text"] == "낙인력 +8.00%\n최대 마나 +6\n깨달음 +13"
+
+
+def test_grind_tier_classifies_low_mid_high_rolls():
+    """연마 효과 수치가 하/중/상 어느 단계 롤인지 — 게임 수치표 기반."""
+    assert parser.grind_tier("낙인력 +8.00%") == "상"
+    assert parser.grind_tier("아군 피해량 강화 효과 +4.50%") == "중"
+    assert parser.grind_tier("상태이상 공격 지속시간 +0.20%") == "하"
+    assert parser.grind_tier("무기 공격력 +3.00%") == "상"  # "공격력"보다 긴 이름이 먼저 매칭
+    assert parser.grind_tier("공격력 +195") == "중"  # 고정 수치 표
+    assert parser.grind_tier("최대 생명력 +1300") == "하"
+
+
+def test_grind_tier_returns_none_for_unknown_options_or_values():
+    assert parser.grind_tier("알 수 없는 옵션 +1.00%") is None
+    assert parser.grind_tier("낙인력 +5.55%") is None  # 표에 없는 값(밸런스 패치 등)
+    assert parser.grind_tier("수치 없는 줄") is None
 
 
 RUNE_TOOLTIP = json.dumps(
@@ -320,6 +341,11 @@ def test_parse_ark_grid_extracts_core_type_point_and_options():
     assert core["option_lines"] == [
         "[10P] 아군 공격력 강화 효과 +1.3%",
         "[18P] 아군 공격력 강화 효과 +0.15%",
+    ]
+    # "[NP] 설명"을 (포인트, 설명)으로 분리 — 달성 여부 강조 표시에 쓴다
+    assert core["options"] == [
+        {"point": 10, "text": "아군 공격력 강화 효과 +1.3%"},
+        {"point": 18, "text": "아군 공격력 강화 효과 +0.15%"},
     ]
 
 
