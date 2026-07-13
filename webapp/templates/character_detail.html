@@ -233,7 +233,7 @@
               {% for e in detail.ark_grid.effects %}
               <div class="arkgrid-effect-row">
                 <span class="k">{{ e.name }}{% if e.level is not none %} <em>Lv.{{ e.level }}</em>{% endif %}</span>
-                <span class="v">{{ (e.text | replace(e.name, '') | trim) if e.name else e.text }}</span>
+                <span class="v">{{ e.value_text or ((e.text | replace(e.name, '') | trim) if e.name else e.text) }}</span>
               </div>
               {% endfor %}
             </div>
@@ -249,7 +249,7 @@
               <div class="char-engraving-row" title="{{ eng.description }}">
                 <span class="char-engraving-name char-grade-text-{{ eng.grade }}">{{ eng.name }}</span>
                 <span class="char-engraving-meta">
-                  {% if eng.ability_stone_level %}<span class="char-engraving-stone">스톤 Lv.{{ eng.ability_stone_level }}</span>{% endif %}
+                  {% if eng.ability_stone_level %}<span class="char-engraving-stone" title="어빌리티 스톤 세공 레벨"><i class="stone-gem"></i>Lv.{{ eng.ability_stone_level }}</span>{% endif %}
                   <span class="char-engraving-level">Lv.{{ eng.level }}</span>
                 </span>
               </div>
@@ -260,9 +260,7 @@
           </div>
 
           <div class="equip-zone equip-box">
-            <h2 class="char-detail-title">카드
-              {% if detail.cards.total_awake %}<span class="card-awake-total">{{ detail.cards.total_awake }}각성</span>{% endif %}
-            </h2>
+            <h2 class="char-detail-title">카드</h2>
             {% if detail.cards.cards %}
             <div class="char-card-icon-list">
               {% for c in detail.cards.cards %}
@@ -273,10 +271,16 @@
               {% endfor %}
             </div>
             {% endif %}
+            {% if detail.cards.set_name %}
+            <div class="card-set-line">
+              <span class="card-set-name">{{ detail.cards.set_name }}</span>
+              {% if detail.cards.total_awake %}<span class="card-awake-total">{{ detail.cards.total_awake }}각</span>{% endif %}
+            </div>
+            {% endif %}
             {% if detail.cards.effects %}
             <ul class="char-honing-list">
               {% for eff in detail.cards.effects %}
-              <li>{% if eff.name %}<strong>{{ eff.name }}</strong> — {% endif %}{{ eff.text }}</li>
+              <li>{{ eff.text }}</li>
               {% endfor %}
             </ul>
             {% elif not detail.cards.cards %}

@@ -2621,14 +2621,23 @@ a.calendar-party:hover {
   color: var(--text-muted);
 }
 
-/* 어빌리티 스톤으로 활성화된 각인의 스톤 세공 레벨 */
+/* 어빌리티 스톤으로 활성화된 각인의 스톤 세공 레벨 — 파란 다이아(스톤) + Lv */
 .char-engraving-stone {
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(177, 108, 240, 0.16);
-  color: #b16cf0;
+  color: #5cc9ff;
+}
+
+.char-engraving-stone .stone-gem {
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, #8fdcff, #2f9dde);
+  transform: rotate(45deg);
+  border-radius: 2px;
+  display: inline-block;
 }
 
 /* 장비 탭 아크 그리드 요약 — 코어 하나당 한 줄(아이콘 + 이름 + 포인트) */
@@ -2647,11 +2656,12 @@ a.calendar-party:hover {
 }
 
 .arkgrid-core-mini-name {
-  font-size: 12px;
+  /* 가장 긴 코어 이름(여명이 세상을 깨우는 순간)도 한 줄에 들어가도록 살짝 작게 */
+  font-size: 11px;
   font-weight: 600;
   min-width: 0;
   line-height: 1.35;
-  /* 긴 코어 이름은 말줄임으로 자르지 않고 두 줄로 줄바꿈 */
+  /* 그래도 넘치면 말줄임 대신 줄바꿈 */
   overflow-wrap: anywhere;
 }
 
@@ -2700,15 +2710,26 @@ a.calendar-party:hover {
   color: #ffb64c;
 }
 
+/* 카드 아이콘 아래 "세트 이름 + 총 각성" 한 줄 */
+.card-set-line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+
+.card-set-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .card-awake-total {
-  margin-left: 6px;
   font-size: 11px;
   font-weight: 700;
   padding: 1px 8px;
   border-radius: 999px;
   background: rgba(255, 182, 76, 0.14);
   color: #ffb64c;
-  vertical-align: 2px;
 }
 
 .char-gem-list {

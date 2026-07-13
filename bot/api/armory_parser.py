@@ -17,6 +17,8 @@ _STAT_PERCENT_RE = re.compile(r"([^,.\n]+?)(?:이|가)\s*([\d.]+)%\s*(증가|감
 _SIMPLE_PERCENT_RE = re.compile(r"^(.+?)\s*([+-][\d.]+)%")
 # "최대 마나 +6", "치명 +195" 같은 고정 수치 라인 (%가 붙으면 위 규칙이 먼저 잡는다)
 _SIMPLE_FLAT_RE = re.compile(r"^(.+?)\s*\+([\d,]+)$")
+# 문장 안의 "+1.99%" / "-6.00%" 같은 수치 토큰
+_VALUE_TOKEN_RE = re.compile(r"[+-][\d.,]+%?")
 
 
 def strip_html(text: str | None) -> str:
@@ -338,8 +340,12 @@ def parse_engravings(engraving: dict | None) -> list[dict]:
     return result
 
 
+# "남겨진 바람의 절벽 6세트 (12각성)" → 세트 이름만 남기기 위한 접미어 제거 규칙
+_CARD_SET_SUFFIX_RE = re.compile(r"\s*\d+세트.*$")
+
+
 def parse_cards(card: dict | None) -> dict:
-    """카드 — 장착된 카드 목록, 총 각성 수, 세트효과 이름/설명을 정리한다."""
+    """카드 — 장착된 카드 목록, 총 각성 수, 세트 이름, 세트효과 설명을 정리한다."""
     card = card or {}
     cards = [
         {
@@ -374,7 +380,17 @@ def parse_cards(card: dict | None) -> dict:
         if not name and not text:
             continue
         effects.append({"name": name, "text": text})
-    return {"cards": cards, "effects": effects, "total_awake": total_awake}
+
+    # 세트 이름 — "남겨진 바람의 절벽 6세트 (12각성)"에서 "N세트" 이후를 잘라낸다.
+    # 화면에는 "남겨진 바람의 절벽 30각"처럼 세트 이름 + 총 각성 수로 보여준다.
+    set_name = None
+    for eff in effects:
+        candidate = _CARD_SET_SUFFIX_RE.sub("", eff["name"] or "").strip()
+        if candidate:
+            set_name = candidate
+            break
+
+    return {"cards": cards, "effects": effects, "total_awake": total_awake, "set_name": set_name}
 
 
 def _iter_percent_effects(text: str):
@@ -612,10 +628,20 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
             }
         )
 
-    effects = [
-        {"name": e.get("Name"), "level": e.get("Level"), "text": strip_html(e.get("Tooltip"))}
-        for e in ark_grid.get("Effects") or []
-    ]
+    effects = []
+    for e in ark_grid.get("Effects") or []:
+        text = strip_html(e.get("Tooltip"))
+        # 이름("아군 피해 강화")과 본문("아군 피해량 강화 효과 +1.99%")의 표현이 미묘하게
+        # 달라 이름 제거 방식으로는 중복이 남는다 — 수치 토큰만 따로 뽑아 value_text로 준다.
+        values = _VALUE_TOKEN_RE.findall(text)
+        effects.append(
+            {
+                "name": e.get("Name"),
+                "level": e.get("Level"),
+                "text": text,
+                "value_text": values[-1] if values else None,
+            }
+        )
 
     return {"cores": cores, "effects": effects}
 

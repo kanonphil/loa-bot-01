@@ -332,9 +332,20 @@ def test_parse_ark_grid_does_not_include_per_core_gem_details():
 def test_parse_ark_grid_extracts_aggregate_stat_effects():
     result = parser.parse_ark_grid(ARK_GRID)
     assert result["effects"] == [
-        {"name": "공격력", "level": 29, "text": "공격력 +1.06%"},
-        {"name": "낙인력", "level": 44, "text": "낙인력 +7.33%"},
+        {"name": "공격력", "level": 29, "text": "공격력 +1.06%", "value_text": "+1.06%"},
+        {"name": "낙인력", "level": 44, "text": "낙인력 +7.33%", "value_text": "+7.33%"},
     ]
+
+
+def test_parse_ark_grid_effect_value_text_when_name_differs_from_tooltip():
+    """이름("아군 피해 강화")과 본문("아군 피해량 강화 효과 +1.99%")의 표현이 달라
+    이름 제거 방식으로는 본문이 통째로 남아 중복돼 보였다 — 수치만 뽑은 value_text 제공."""
+    ark_grid = {
+        "Slots": [],
+        "Effects": [{"Name": "아군 피해 강화", "Level": 38, "Tooltip": "아군 피해량 강화 효과 <font>+1.99%</font>"}],
+    }
+    result = parser.parse_ark_grid(ark_grid)
+    assert result["effects"][0]["value_text"] == "+1.99%"
 
 
 def test_parse_ark_grid_handles_none():
@@ -628,6 +639,7 @@ def test_parse_cards_unwraps_items_nested_effects_and_sums_awakening():
     }
     result = parser.parse_cards(card_data)
     assert result["total_awake"] == 9  # 5 + 4
+    assert result["set_name"] == "남겨진 바람의 절벽"  # "N세트 (M각성)" 접미어 제거
     assert [e["name"] for e in result["effects"]] == [
         "남겨진 바람의 절벽 6세트",
         "남겨진 바람의 절벽 6세트 (12각성)",
@@ -636,7 +648,7 @@ def test_parse_cards_unwraps_items_nested_effects_and_sums_awakening():
 
 
 def test_parse_cards_handles_none():
-    assert parser.parse_cards(None) == {"cards": [], "effects": [], "total_awake": 0}
+    assert parser.parse_cards(None) == {"cards": [], "effects": [], "total_awake": 0, "set_name": None}
 
 
 def test_parse_cards_skips_effect_entries_without_name_or_text():

@@ -68,6 +68,7 @@ DETAIL = {
             {"name": "남겨진 바람의 절벽 6세트 (12각성)", "text": "암속성 피해 감소 +25.00%"},
         ],
         "total_awake": 30,
+        "set_name": "남겨진 바람의 절벽",
     },
     "equipment": [
         {
@@ -237,11 +238,14 @@ def test_renders_character_detail(client):
     # 각인 + 카드
     assert "각성" in resp.text
     assert "Lv.4" in resp.text
-    assert "스톤 Lv.3" in resp.text  # 어빌리티 스톤으로 활성화된 각인은 스톤 레벨 표시
+    # 어빌리티 스톤으로 활성화된 각인은 파란 스톤 아이콘 + 레벨 표시
+    assert 'class="char-engraving-stone"' in resp.text
+    assert "Lv.3" in resp.text
     assert 'src="https://cdn-lostark.game.onstove.com/card.png"' in resp.text
-    assert "남겨진 바람의 절벽 6세트 (12각성)" in resp.text
+    # 카드 아이콘 아래 "세트 이름 + 총 각성" 한 줄과 세트효과 설명
+    assert "남겨진 바람의 절벽" in resp.text
+    assert "30각" in resp.text
     assert "암속성 피해 감소 +25.00%" in resp.text
-    assert "30각성" in resp.text  # 카드 제목 옆 총 각성 수
     assert "5각" in resp.text  # 카드마다 각성 수 배지
 
 
