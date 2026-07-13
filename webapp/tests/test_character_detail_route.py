@@ -117,7 +117,7 @@ DETAIL = {
             "grade": "고대",
             "quality": 96,
             "quality_tier": "상",
-            "base_stat_lines": ["힘 +17697", "민첩 +17697", "지능 +17697"],
+            "base_stat_lines": ["힘 +17697", "민첩 +17697", "지능 +17697", "체력 +4006"],
             "honing_effects": ["낙인력 +8.00%", "최대 마나 +6"],
             "honing_options": [
                 {"text": "낙인력 +8.00%", "tier": "상"},
@@ -158,7 +158,13 @@ DETAIL = {
                 "core_name": "해",
                 "willpower": "15 포인트",
                 "option_lines": ["[10P] 아군 공격력 강화 효과 +1.3%"],
-                "options": [{"point": 10, "text": "아군 공격력 강화 효과 +1.3%"}],
+                "options": [
+                    {
+                        "point": 10,
+                        "text": "아군 공격력 강화 효과 +1.3%",
+                        "sub_lines": ["'운명: 빛이 생명을 새긴다' : 적에게 주는 무력화 피해가 5.0% 증가한다."],
+                    }
+                ],
             }
         ],
         "effects": [{"name": "공격력", "level": 29, "text": "공격력 +1.06%"}],
@@ -223,6 +229,11 @@ def test_renders_character_detail(client):
     assert "core-opt-point" in resp.text
     assert "10P" in resp.text
     assert "아군 공격력 강화 효과 +1.3%" in resp.text
+    # '운명: ...' 부연 설명은 상위 옵션에 종속된 들여쓰기 줄로 렌더링
+    assert "core-opt-sub" in resp.text
+    assert "적에게 주는 무력화 피해가 5.0% 증가한다." in resp.text
+    # 장신구 기본 효과 4종(힘/민첩/지능/체력)
+    assert "체력 +4006" in resp.text
     assert "공격력 +1.06%" in resp.text
     # 등급은 텍스트로 적지 않고 아이콘 테두리/이름 글자색(CSS 클래스)으로만 표현
     assert 'class="char-arkgrid-core-icon char-grade-유물"' in resp.text

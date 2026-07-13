@@ -344,9 +344,36 @@ def test_parse_ark_grid_extracts_core_type_point_and_options():
     ]
     # "[NP] 설명"을 (포인트, 설명)으로 분리 — 달성 여부 강조 표시에 쓴다
     assert core["options"] == [
-        {"point": 10, "text": "아군 공격력 강화 효과 +1.3%"},
-        {"point": 18, "text": "아군 공격력 강화 효과 +0.15%"},
+        {"point": 10, "text": "아군 공격력 강화 효과 +1.3%", "sub_lines": []},
+        {"point": 18, "text": "아군 공격력 강화 효과 +0.15%", "sub_lines": []},
     ]
+
+
+def test_parse_ark_grid_attaches_fate_description_to_preceding_option():
+    """"[NP]"로 시작하지 않는 줄("'운명: ...' : ..." 부연 설명)은 별개 옵션이 아니라
+    바로 위 [14P]/[17P] 옵션에 종속된 설명으로 붙어야 한다."""
+    tooltip = json.dumps(
+        {
+            "Element_006": {
+                "type": "ItemPartBox",
+                "value": {
+                    "Element_000": "<FONT COLOR='#A9D0F5'>코어 옵션</FONT>",
+                    "Element_001": (
+                        "[10P] 아군 공격력 강화 효과가 1.3% 증가한다.<br>"
+                        "[14P] '운명' 발동 시 60.0초 동안 '운명: 빛이 생명을 새긴다' 효과를 획득한다.<br>"
+                        "'운명: 빛이 생명을 새긴다' : 적에게 주는 무력화 피해가 5.0% 증가한다.<br>"
+                        "[17P] '운명' 발동 시 60.0초 동안 '운명: 증명된 빛' 효과를 획득한다.<br>"
+                        "'운명: 증명된 빛' : 신의 증명의 아군 피해량 강화 효과가 27.0% 증가한다."
+                    ),
+                },
+            }
+        }
+    )
+    ark_grid = {"Slots": [{"Name": "질서의 해 코어 : 빛", "Point": 18, "Tooltip": tooltip}], "Effects": []}
+    options = parser.parse_ark_grid(ark_grid)["cores"][0]["options"]
+    assert [o["point"] for o in options] == [10, 14, 17]
+    assert options[1]["sub_lines"] == ["'운명: 빛이 생명을 새긴다' : 적에게 주는 무력화 피해가 5.0% 증가한다."]
+    assert options[2]["sub_lines"] == ["'운명: 증명된 빛' : 신의 증명의 아군 피해량 강화 효과가 27.0% 증가한다."]
 
 
 def test_parse_ark_grid_does_not_include_per_core_gem_details():

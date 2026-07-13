@@ -401,10 +401,14 @@
             {% if c.options %}
             <div class="core-opt-list">
               {% for o in c.options %}
-              <div class="core-opt-row{% if o.point is not none and c.point is not none and o.point <= c.point %} is-active{% endif %}">
+              {% set achieved = o.point is not none and c.point is not none and o.point <= c.point %}
+              <div class="core-opt-row{% if achieved %} is-active{% endif %}">
                 {% if o.point is not none %}<span class="core-opt-point">{{ o.point }}P</span>{% endif %}
                 <span class="core-opt-text">{{ o.text }}</span>
               </div>
+              {% for sub in o.sub_lines or [] %}
+              <div class="core-opt-sub{% if achieved %} is-active{% endif %}">{{ sub }}</div>
+              {% endfor %}
               {% endfor %}
             </div>
             {% elif c.option_lines %}

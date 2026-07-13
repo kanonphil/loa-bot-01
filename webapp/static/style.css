@@ -2965,6 +2965,20 @@ a.calendar-party:hover {
   line-height: 1.5;
 }
 
+/* "[NP]" 옵션에 종속된 부연 설명('운명: ...' 줄) — 포인트 칩 폭만큼 들여쓰고,
+   부모 옵션의 달성 여부를 따라 밝기를 맞춘다 */
+.core-opt-sub {
+  margin-left: 42px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.core-opt-sub.is-active {
+  opacity: 0.9;
+}
+
 /* 등급을 텍스트로 적지 않고 게임 내 등급 색상으로만 표현 (아이콘 테두리/이름 글자색).
    .char-arkgrid-core-icon의 기본 border-color(transparent)를 덮어써야 하므로
    반드시 그 규칙보다 뒤에 와야 한다 — 동일 특이도에서는 소스 순서가 나중인 쪽이 이긴다. */
@@ -3029,13 +3043,22 @@ a.calendar-party:hover {
   color: var(--text-muted);
 }
 
-/* 장신구 기본 효과(힘/민첩/지능) — 품질 바 대신 이 자리에 보여준다 */
+/* 장신구 기본 효과(힘/민첩/지능/체력) — 품질 바 대신 스탯 하나당 작은 칩으로 */
 .acc-base-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  font-size: 11px;
+  gap: 4px;
+}
+
+.acc-base-stats span {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* 장신구/팔찌/어빌리티 스톤 — 연마 효과 줄이 보이는 카드 */

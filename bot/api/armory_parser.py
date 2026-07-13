@@ -667,14 +667,18 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
         _, _, flavor = (slot.get("Name") or "").partition(" : ")
 
         option_lines = [line for line in option_text.split("\n") if line.strip()]
-        # "[10P] 효과 설명"을 (달성 포인트, 설명)으로 분리 — 달성 여부 강조 표시에 쓴다
+        # "[10P] 효과 설명"을 (달성 포인트, 설명)으로 분리 — 달성 여부 강조 표시에 쓴다.
+        # "[NP]"로 시작하지 않는 줄("'운명: ...' : ..." 같은 부연 설명)은 별개 옵션이
+        # 아니라 바로 위 옵션에 종속된 설명이므로 sub_lines로 붙인다.
         options = []
         for line in option_lines:
             match = _CORE_OPTION_RE.match(line)
             if match:
-                options.append({"point": int(match.group(1)), "text": match.group(2).strip()})
+                options.append({"point": int(match.group(1)), "text": match.group(2).strip(), "sub_lines": []})
+            elif options:
+                options[-1]["sub_lines"].append(line)
             else:
-                options.append({"point": None, "text": line})
+                options.append({"point": None, "text": line, "sub_lines": []})
 
         cores.append(
             {
