@@ -89,6 +89,22 @@ def test_list_unread_newest_first(db_path):
     asyncio.run(run())
 
 
+def test_list_read_returns_only_read_items_with_filters_applied(db_path):
+    """읽음 탭 — 읽은 알림만, 종류 토글/레이드 필터도 동일하게 적용."""
+    async def run():
+        a = await notification_store.add_notification("created", "m1", "읽을 알림")
+        await notification_store.add_notification("created", "m2", "안 읽은 알림")
+        await notification_store.mark_read("111", a["id"])
+
+        read = await notification_store.list_read("111")
+        assert [n["message_id"] for n in read] == ["m1"]
+        # 종류를 끄면 읽음 목록에서도 빠진다
+        await notification_store.set_type_preferences("111", created=False, cleared=True, guest_joined=True)
+        assert await notification_store.list_read("111") == []
+
+    asyncio.run(run())
+
+
 # ── 세부 설정: 종류 토글 + 레이드 필터 ────────────────────
 
 def test_preferences_default_all_types_on_no_filters(db_path):

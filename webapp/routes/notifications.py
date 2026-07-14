@@ -72,10 +72,13 @@ async def notification_count(user: dict = Depends(get_current_user)):
 async def notification_panel(request: Request, user: dict = Depends(get_current_user)):
     subscribed = await notification_store.is_subscribed(user["discord_id"])
     items = await notification_store.list_unread(user["discord_id"]) if subscribed else []
-    for item in items:
+    read_items = await notification_store.list_read(user["discord_id"]) if subscribed else []
+    for item in items + read_items:
         item["time_ago"] = _time_ago(item.get("created_at"))
     return templates.TemplateResponse(
-        request, "_notification_panel.html", {"subscribed": subscribed, "items": items}
+        request,
+        "_notification_panel.html",
+        {"subscribed": subscribed, "items": items, "read_items": read_items},
     )
 
 

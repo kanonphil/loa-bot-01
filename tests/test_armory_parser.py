@@ -835,6 +835,27 @@ def test_parse_extra_equipment_handles_none():
     assert parser.parse_extra_equipment(None) == []
 
 
+def test_bracelet_tier_bands_combat_stats_only():
+    """팔찌 전투특성은 상/중/하 밴딩으로 색을 입히고, 힘민지/체력/특수효과 줄은 대상이 아니다."""
+    assert parser.bracelet_tier("특화 +95") == "상"
+    assert parser.bracelet_tier("신속 +80") == "중"
+    assert parser.bracelet_tier("치명 +68") == "하"
+    assert parser.bracelet_tier("체력 +15000") is None
+    assert parser.bracelet_tier("[쇄빙] 방어력 감소 461 증가한다.") is None
+
+
+def test_parse_extra_equipment_bracelet_lines_carry_tier():
+    result = parser.parse_extra_equipment(EXTRA_EQUIPMENT)
+    bracelet = next(x for x in result if x["type"] == "팔찌")
+    options = bracelet["sections"][0]["options"]
+    by_text = {o["text"]: o["tier"] for o in options}
+    assert by_text["신속 +100"] == "상"
+    assert by_text["체력 +15000"] is None  # 전투특성만 밴딩
+    # 어빌리티 스톤 줄에는 팔찌 밴딩을 적용하지 않는다
+    stone = next(x for x in result if x["type"] == "어빌리티 스톤")
+    assert all(o["tier"] is None for section in stone["sections"] for o in section["options"])
+
+
 # ── 프로필 전투특성 수치 ─────────────────────────────────
 
 PROFILE_STATS = [
@@ -923,6 +944,21 @@ def test_summarize_gems_handles_empty():
     assert summary["base_attack_total"] is None
 
 
+def test_summarize_gems_falls_back_to_tooltip_effect_for_missing_items():
+    """스킬 매핑(Effects.Skills) 설명에 기본 공격력이 빠져 있어도, 보석 툴팁 효과 본문에
+    있으면 총합에 반영돼야 한다 (실서비스에서 기본 공격력 총합이 0으로 비던 문제)."""
+    gems = [
+        {
+            "kind": "쿨감",
+            "effect_lines": ["재사용 대기시간 20.00% 감소"],  # 매핑 설명엔 기본 공격력 없음
+            "effect": "재사용 대기시간 20.00% 감소\n기본 공격력 0.80% 증가\n지원 효과 2.00% 증가",
+        }
+    ]
+    summary = parser.summarize_gems(gems)
+    assert summary["base_attack_total"] == "0.80%"
+    assert summary["support_total"] == "2.00%"
+
+
 # ── 아크패시브 구조화 노드 ───────────────────────────────
 
 def test_parse_ark_passive_builds_structured_nodes():
@@ -941,6 +977,21 @@ def test_parse_ark_passive_node_falls_back_to_raw_text_when_unparsable():
     node = result["nodes_by_category"]["진화"][0]
     assert node["tier"] is None
     assert node["name"] == "특이한 형식의 효과"
+
+
+def test_parse_armory_detail_attaches_stone_engravings_to_stone_card():
+    """어빌리티 스톤 카드에 "어떤 각인이 세공 몇 레벨인지"를 각인 목록(AbilityStoneLevel)에서
+    가져와 붙인다 — 스톤 Tooltip 자체는 구조가 달라 직접 파싱하지 않는다."""
+    raw = {
+        "ArmoryProfile": {"CharacterName": "테스트"},
+        "ArmoryEquipment": EXTRA_EQUIPMENT,
+        "ArmoryEngraving": ENGRAVING_SAMPLE,
+    }
+    result = parser.parse_armory_detail(raw)
+    stone = next(x for x in result["extra_equipment"] if x["type"] == "어빌리티 스톤")
+    assert stone["stone_engravings"] == [{"name": "각성", "level": 3}]
+    bracelet = next(x for x in result["extra_equipment"] if x["type"] == "팔찌")
+    assert "stone_engravings" not in bracelet
 
 
 # ── parse_armory_detail: 스킬-보석 배지 연결 ─────────────────

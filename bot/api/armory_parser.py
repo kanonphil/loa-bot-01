@@ -291,10 +291,28 @@ _EXTRA_EQUIP_ORDER = ["팔찌", "어빌리티 스톤", "보주"]
 _EXTRA_SECTION_KEYWORDS = ("효과", "각인", "보너스")
 
 
+# 팔찌 부여 전투특성의 상/중/하 밴딩 — T4 고대 팔찌 특성 범위(61~100)를 3구간으로 나눈다.
+# 연마 효과처럼 고정 롤이 아니라 연속값이라 근사 구간이다 (경계는 조정 여지 있음).
+_BRACELET_STAT_RE = re.compile(r"^(치명|특화|신속|제압|인내|숙련)\s*\+(\d+)$")
+
+
+def bracelet_tier(line: str) -> str | None:
+    match = _BRACELET_STAT_RE.match(line.strip())
+    if not match:
+        return None
+    value = int(match.group(2))
+    if value >= 87:
+        return "상"
+    if value >= 74:
+        return "중"
+    return "하"
+
+
 def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
     """무기/방어구/장신구 외 장착 아이템 중 팔찌/어빌리티 스톤/보주만 정리한다.
     아이템 종류마다 Tooltip 구조가 달라서, ItemPartBox 섹션 중 제목에 효과/각인/보너스가
-    들어간 것들을 (제목, 줄 목록) 그대로 수집하는 방어적 방식을 쓴다."""
+    들어간 것들을 (제목, 줄 목록) 그대로 수집하는 방어적 방식을 쓴다.
+    팔찌 전투특성 줄에는 상/중/하 밴딩(tier)을 함께 붙인다(options)."""
     result = []
     for item in equipment or []:
         item_type = item.get("Type")
@@ -312,8 +330,16 @@ def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
                 continue
             if not any(keyword in header for keyword in _EXTRA_SECTION_KEYWORDS):
                 continue
+            lines = [line for line in body.split("\n") if line.strip()]
             sections.append(
-                {"header": header, "lines": [line for line in body.split("\n") if line.strip()]}
+                {
+                    "header": header,
+                    "lines": lines,
+                    "options": [
+                        {"text": line, "tier": bracelet_tier(line) if item_type == "팔찌" else None}
+                        for line in lines
+                    ],
+                }
             )
         quality = find_quality(tooltip)
         result.append(
@@ -632,15 +658,21 @@ _GEM_SUPPORT_RE = re.compile(r"지원 효과\s*(?:이|가)?\s*\+?([\d.]+)\s*%")
 
 def summarize_gems(gems: list[dict]) -> dict:
     """보석을 피해/쿨감/기타 그룹으로 나누고, 광휘 보석의 기본 공격력·지원 효과 총합을 계산한다.
-    (레퍼런스 사이트 보석 탭 상단의 "기본 공격력 총합 / 지원 효과 총합"에 대응)"""
+    (레퍼런스 사이트 보석 탭 상단의 "기본 공격력 총합 / 지원 효과 총합"에 대응)
+    스킬 매핑(Effects.Skills)의 설명에는 일부 효과(기본 공격력 등)가 빠질 수 있어서,
+    항목별로 매핑 설명에서 못 찾으면 보석 툴팁 효과 본문에서 한 번 더 찾는다."""
     base_atk = 0.0
     support = 0.0
     for gem in gems:
-        text = " ".join(gem.get("effect_lines") or []) or (gem.get("effect") or "")
-        for m in _GEM_BASE_ATK_RE.finditer(text):
-            base_atk += float(m.group(1))
-        for m in _GEM_SUPPORT_RE.finditer(text):
-            support += float(m.group(1))
+        lines_text = " ".join(gem.get("effect_lines") or [])
+        tooltip_text = gem.get("effect") or ""
+        for pattern, add in ((_GEM_BASE_ATK_RE, "base"), (_GEM_SUPPORT_RE, "support")):
+            values = pattern.findall(lines_text) or pattern.findall(tooltip_text)
+            total = sum(float(v) for v in values)
+            if add == "base":
+                base_atk += total
+            else:
+                support += total
     return {
         "damage": [g for g in gems if g["kind"] == "피해"],
         "cooldown": [g for g in gems if g["kind"] == "쿨감"],
@@ -729,6 +761,17 @@ def parse_armory_detail(raw: dict) -> dict:
     extra_equipment = parse_extra_equipment(raw.get("ArmoryEquipment"))
     engravings = parse_engravings(raw.get("ArmoryEngraving"))
     gems = parse_gems(raw.get("ArmoryGem"))
+
+    # 어빌리티 스톤 카드에 "어떤 각인이 세공 몇 레벨로 달려있는지" 표시 —
+    # 스톤 자체 Tooltip 대신, 이미 파싱된 각인 목록의 AbilityStoneLevel을 재사용한다.
+    stone_engravings = [
+        {"name": e["name"], "level": e["ability_stone_level"]}
+        for e in engravings
+        if e.get("ability_stone_level")
+    ]
+    for extra in extra_equipment:
+        if extra["type"] == "어빌리티 스톤":
+            extra["stone_engravings"] = stone_engravings
 
     # 보석이 적용된 스킬에 레벨/분류 배지를 달아주기 위한 스킬명 → 보석 매핑
     skills = parse_skills(raw.get("ArmorySkills"))

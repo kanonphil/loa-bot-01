@@ -118,7 +118,7 @@ def test_time_ago_buckets():
 def test_open_marks_read_and_redirects_to_party(client):
     _login(client, discord_id="111")
     client.post("/notifications/subscribe")
-    saved = asyncio.run(notification_store.add_notification("created", "msg-1", "text"))
+    saved = asyncio.run(notification_store.add_notification("created", "msg-1", "읽음 처리될 알림"))
 
     resp = client.get(f"/notifications/{saved['id']}/open")
     assert resp.status_code == 303
@@ -126,6 +126,21 @@ def test_open_marks_read_and_redirects_to_party(client):
 
     resp = client.get("/notifications/panel")
     assert "새 알림이 없습니다" in resp.text
+    # 읽은 알림은 "읽음" 탭 pane으로 이동
+    assert 'data-notif-pane="read"' in resp.text
+    assert "읽음 처리될 알림" in resp.text
+
+
+def test_panel_has_unread_and_read_tabs(client):
+    _login(client, discord_id="111")
+    client.post("/notifications/subscribe")
+    asyncio.run(notification_store.add_notification("created", "msg-1", "안 읽은 알림"))
+
+    resp = client.get("/notifications/panel")
+    assert 'data-notif-tab="unread"' in resp.text
+    assert 'data-notif-tab="read"' in resp.text
+    assert "안 읽은 알림" in resp.text
+    assert "읽은 알림이 없습니다" in resp.text  # 읽음 pane은 비어있음
 
 
 def test_open_unknown_notification_redirects_to_party_list(client):

@@ -236,6 +236,23 @@ async def unread_count(discord_id: str) -> int:
     return len(await list_unread(discord_id, limit=10**9))
 
 
+async def list_read(discord_id: str, limit: int = 30) -> list[dict]:
+    """이미 읽은 알림 — 종 아이콘 패널의 "읽음" 탭용. 종류 토글/레이드 필터는 동일하게 적용."""
+    prefs = await get_preferences(discord_id)
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT n.id, n.type, n.message_id, n.text, n.raid_name, n.difficulty, n.created_at "
+            "FROM notifications n "
+            "JOIN notification_reads r ON r.notification_id = n.id AND r.discord_id = ? "
+            "ORDER BY n.id DESC",
+            (discord_id,),
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+    filtered = [r for r in rows if _matches(prefs, r["type"], r["raid_name"], r["difficulty"])]
+    return filtered[:limit]
+
+
 async def mark_read(discord_id: str, notification_id: int) -> dict | None:
     """읽음 처리하고 해당 알림을 반환(상세 페이지로 리다이렉트할 message_id를 얻기 위함)."""
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:

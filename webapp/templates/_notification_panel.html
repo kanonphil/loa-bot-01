@@ -1,3 +1,16 @@
+{% macro notif_item(n) %}
+<li>
+  <a href="/notifications/{{ n.id }}/open" class="notif-panel-item">
+    <span class="notif-panel-icon notif-icon-{{ n.type }}">
+      {% if n.type == "created" %}📢{% elif n.type == "cleared" %}🏆{% elif n.type == "guest_joined" %}👤{% else %}🔔{% endif %}
+    </span>
+    <span class="notif-panel-body">
+      <span class="notif-panel-text">{{ n.text }}</span>
+      {% if n.time_ago %}<span class="notif-panel-time">{{ n.time_ago }}</span>{% endif %}
+    </span>
+  </a>
+</li>
+{% endmacro %}
 <div class="notif-panel-header">
   <span class="notif-panel-title">알림</span>
   <a href="/settings" class="notif-panel-settings-link">설정</a>
@@ -7,24 +20,29 @@
   <p>알림을 구독하면 여기서 이력을 볼 수 있어요.</p>
   <a href="/settings" class="notif-panel-settings-link">알림 설정으로 이동 &rarr;</a>
 </div>
-{% elif not items %}
-<div class="notif-panel-empty">
-  <p>새 알림이 없습니다.</p>
-</div>
 {% else %}
-<ul class="notif-panel-list">
-  {% for n in items %}
-  <li>
-    <a href="/notifications/{{ n.id }}/open" class="notif-panel-item">
-      <span class="notif-panel-icon notif-icon-{{ n.type }}">
-        {% if n.type == "created" %}📢{% elif n.type == "cleared" %}🏆{% elif n.type == "guest_joined" %}👤{% else %}🔔{% endif %}
-      </span>
-      <span class="notif-panel-body">
-        <span class="notif-panel-text">{{ n.text }}</span>
-        {% if n.time_ago %}<span class="notif-panel-time">{{ n.time_ago }}</span>{% endif %}
-      </span>
-    </a>
-  </li>
-  {% endfor %}
-</ul>
+<div class="notif-panel-tabs">
+  <button type="button" class="notif-tab is-active" data-notif-tab="unread">
+    안 읽음{% if items %} <span class="notif-tab-count">{{ items | length }}</span>{% endif %}
+  </button>
+  <button type="button" class="notif-tab" data-notif-tab="read">읽음</button>
+</div>
+<div data-notif-pane="unread">
+  {% if items %}
+  <ul class="notif-panel-list">
+    {% for n in items %}{{ notif_item(n) }}{% endfor %}
+  </ul>
+  {% else %}
+  <div class="notif-panel-empty"><p>새 알림이 없습니다.</p></div>
+  {% endif %}
+</div>
+<div data-notif-pane="read" hidden>
+  {% if read_items %}
+  <ul class="notif-panel-list notif-panel-list-read">
+    {% for n in read_items %}{{ notif_item(n) }}{% endfor %}
+  </ul>
+  {% else %}
+  <div class="notif-panel-empty"><p>읽은 알림이 없습니다.</p></div>
+  {% endif %}
+</div>
 {% endif %}

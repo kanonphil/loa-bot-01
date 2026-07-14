@@ -35,6 +35,19 @@
     if (opening) loadPanel();
   });
 
+  // 패널 내용은 innerHTML로 주입되므로(스크립트 실행 안 됨) 탭 전환은 여기서 위임 처리
+  panel.addEventListener("click", function (event) {
+    var tab = event.target.closest ? event.target.closest("[data-notif-tab]") : null;
+    if (!tab) return;
+    var target = tab.getAttribute("data-notif-tab");
+    panel.querySelectorAll("[data-notif-tab]").forEach(function (t) {
+      t.classList.toggle("is-active", t === tab);
+    });
+    panel.querySelectorAll("[data-notif-pane]").forEach(function (p) {
+      p.hidden = p.getAttribute("data-notif-pane") !== target;
+    });
+  });
+
   document.addEventListener("click", function (event) {
     if (!panel.hidden && !panel.contains(event.target) && event.target !== bell) {
       panel.hidden = true;

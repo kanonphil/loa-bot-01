@@ -135,8 +135,27 @@ DETAIL = {
             "grade": "고대",
             "quality": None,
             "quality_tier": None,
-            "sections": [{"header": "팔찌 효과", "lines": ["체력 +15000", "신속 +100"]}],
-        }
+            "sections": [
+                {
+                    "header": "팔찌 효과",
+                    "lines": ["체력 +15000", "신속 +100"],
+                    "options": [
+                        {"text": "체력 +15000", "tier": None},
+                        {"text": "신속 +100", "tier": "상"},
+                    ],
+                }
+            ],
+        },
+        {
+            "type": "어빌리티 스톤",
+            "name": "위대한 비상",
+            "icon": "https://cdn-lostark.game.onstove.com/stone.png",
+            "grade": "유물",
+            "quality": None,
+            "quality_tier": None,
+            "sections": [{"header": "기본 효과", "lines": ["체력 +30000"], "options": [{"text": "체력 +30000", "tier": None}]}],
+            "stone_engravings": [{"name": "각성", "level": 3}, {"name": "구슬동자", "level": 2}],
+        },
     ],
     "gems": [GEM],
     "gem_summary": {
@@ -219,6 +238,13 @@ def test_renders_character_detail(client):
     assert "1804" in resp.text
     assert "천선의 구슬치" in resp.text
     assert "체력 +15000" in resp.text
+    # 팔찌 전투특성도 상/중/하 밴딩 색
+    assert "grind-tier-상" in resp.text
+    # 어빌리티 스톤 카드에 세공 각인 + 레벨 칩
+    assert "stone-engraving" in resp.text
+    assert "구슬동자" in resp.text
+    # hover 정보는 네이티브 title 대신 카드형 툴팁(data-tip)으로
+    assert "data-tip=" in resp.text
     # 효과 영수증은 이름/수치 분리 렌더링
     assert "+30.99%" in resp.text
     assert "최대 마나" in resp.text

@@ -43,10 +43,22 @@
       <span class="equip-type-tag">{{ x.type }}</span>
       <span class="equip-icon-name char-grade-text-{{ x.grade }}">{{ x.name }}</span>
     </div>
+    {% if x.stone_engravings %}
+    {# 어빌리티 스톤 — 어떤 각인이 세공 몇 레벨로 달려있는지 #}
+    <div class="acc-effect-lines">
+      {% for e in x.stone_engravings %}
+      <span class="acc-effect-line stone-engraving">{{ e.name }} <strong>Lv.{{ e.level }}</strong></span>
+      {% endfor %}
+    </div>
+    {% endif %}
     {% for section in x.sections %}
     <div class="acc-effect-lines">
+      {% for o in section.options or [] %}
+      <span class="acc-effect-line{% if o.tier %} grind-tier-{{ o.tier }}{% endif %}">{{ o.text }}</span>
+      {% else %}
       {% for line in section.lines %}
       <span class="acc-effect-line">{{ line }}</span>
+      {% endfor %}
       {% endfor %}
     </div>
     {% endfor %}
@@ -168,7 +180,7 @@
         <div class="gem-band-group">
           <span class="gem-band-label damage">피해</span>
           {% for g in detail.gem_summary.damage %}
-          <span class="gem-band-icon-wrap" title="{% if g.skill_name %}[{{ g.skill_name }}] {% endif %}Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
+          <span class="gem-band-icon-wrap" data-tip="{% if g.skill_name %}[{{ g.skill_name }}] {% endif %}Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
             {% if g.icon %}<img src="{{ g.icon }}" alt="" class="gem-band-icon">{% endif %}
             <span class="gem-level-badge">{{ g.level }}</span>
           </span>
@@ -179,7 +191,7 @@
         <div class="gem-band-group">
           <span class="gem-band-label cooldown">쿨감</span>
           {% for g in detail.gem_summary.cooldown %}
-          <span class="gem-band-icon-wrap" title="{% if g.skill_name %}[{{ g.skill_name }}] {% endif %}Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
+          <span class="gem-band-icon-wrap" data-tip="{% if g.skill_name %}[{{ g.skill_name }}] {% endif %}Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
             {% if g.icon %}<img src="{{ g.icon }}" alt="" class="gem-band-icon">{% endif %}
             <span class="gem-level-badge">{{ g.level }}</span>
           </span>
@@ -190,7 +202,7 @@
         <div class="gem-band-group">
           <span class="gem-band-label">기타</span>
           {% for g in detail.gem_summary.etc %}
-          <span class="gem-band-icon-wrap" title="Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
+          <span class="gem-band-icon-wrap" data-tip="Lv.{{ g.level }} {{ g.name }}&#10;{{ g.effect_lines | join('\n') }}">
             {% if g.icon %}<img src="{{ g.icon }}" alt="" class="gem-band-icon">{% endif %}
             <span class="gem-level-badge">{{ g.level }}</span>
           </span>
@@ -258,10 +270,10 @@
             <h2 class="char-detail-title">각인</h2>
             <div class="char-engraving-list">
               {% for eng in detail.engravings %}
-              <div class="char-engraving-row" title="{{ eng.description }}">
+              <div class="char-engraving-row" data-tip="{{ eng.description }}">
                 <span class="char-engraving-name char-grade-text-{{ eng.grade }}">{{ eng.name }}</span>
                 <span class="char-engraving-meta">
-                  {% if eng.ability_stone_level %}<span class="char-engraving-stone" title="어빌리티 스톤 세공 레벨"><i class="stone-gem"></i>Lv.{{ eng.ability_stone_level }}</span>{% endif %}
+                  {% if eng.ability_stone_level %}<span class="char-engraving-stone" data-tip="어빌리티 스톤 세공 레벨"><i class="stone-gem"></i>Lv.{{ eng.ability_stone_level }}</span>{% endif %}
                   <span class="char-engraving-level">Lv.{{ eng.level }}</span>
                 </span>
               </div>
@@ -276,7 +288,7 @@
             {% if detail.cards.cards %}
             <div class="char-card-icon-list">
               {% for c in detail.cards.cards %}
-              <span class="char-card-item" title="{{ c.name }} ({{ c.awake_count }}/{{ c.awake_total }})">
+              <span class="char-card-item" data-tip="{{ c.name }} ({{ c.awake_count }}/{{ c.awake_total }})">
                 <img src="{{ c.icon }}" alt="{{ c.name }}" class="char-card-icon">
                 {% if c.awake_count is not none %}<span class="char-card-awake">{{ c.awake_count }}각</span>{% endif %}
               </span>
@@ -349,7 +361,7 @@
             <div class="skill-row-title">
               <span class="char-skill-name">{{ s.name }}</span>
               {% if s.rune %}
-              <span class="char-rune-badge char-grade-text-{{ s.rune.grade }}" title="{{ s.rune.effect or '' }}">{{ s.rune.name }}</span>
+              <span class="char-rune-badge char-grade-text-{{ s.rune.grade }}" data-tip="{{ s.rune.effect or '' }}">{{ s.rune.name }}</span>
               {% endif %}
               {% for g in s.gems or [] %}
               <span class="skill-gem-badge {{ 'damage' if g.kind == '피해' else 'cooldown' if g.kind == '쿨감' else '' }}">{{ g.level }}레벨 {{ g.kind if g.kind != '기타' else g.name }}</span>
