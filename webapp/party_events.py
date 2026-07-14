@@ -41,6 +41,8 @@ def _detect_notification_events(prev: dict[str, dict], current: dict[str, dict])
                 "type": "created",
                 "message_id": message_id,
                 "text": f"{party.get('raid_name', '')} {party.get('difficulty', '')} 공격대가 모집을 시작했습니다.",
+                "raid_name": party.get("raid_name"),
+                "difficulty": party.get("difficulty"),
             })
             continue
 
@@ -51,6 +53,8 @@ def _detect_notification_events(prev: dict[str, dict], current: dict[str, dict])
                     "type": "guest_joined",
                     "message_id": message_id,
                     "text": f"{party.get('raid_name', '')} {party.get('difficulty', '')} 공대에 게스트가 합류했습니다.",
+                    "raid_name": party.get("raid_name"),
+                    "difficulty": party.get("difficulty"),
                 })
 
     return events
@@ -71,6 +75,8 @@ async def _detect_cleared_events(prev: dict[str, dict], current: dict[str, dict]
                 "type": "cleared",
                 "message_id": message_id,
                 "text": f"{party.get('raid_name', '')} {party.get('difficulty', '')} 공대가 클리어했습니다! 🏆",
+                "raid_name": party.get("raid_name"),
+                "difficulty": party.get("difficulty"),
             })
     return events
 
@@ -90,7 +96,11 @@ async def _poll_once() -> None:
         events += await _detect_cleared_events(_last_snapshot, current_snapshot)
         for event in events:
             saved = await notification_store.add_notification(
-                event["type"], event["message_id"], event["text"]
+                event["type"],
+                event["message_id"],
+                event["text"],
+                raid_name=event.get("raid_name"),
+                difficulty=event.get("difficulty"),
             )
             for queue in list(_notification_subscribers):
                 queue.put_nowait(saved)

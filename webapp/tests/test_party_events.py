@@ -121,6 +121,8 @@ def test_detect_notification_events_created():
         "type": "created",
         "message_id": "1",
         "text": "카멘 하드 공격대가 모집을 시작했습니다.",
+        "raid_name": "카멘",  # 레이드 필터(봇의 /레이드구독 대응) 매칭용 메타데이터
+        "difficulty": "하드",
     }]
 
 
@@ -132,6 +134,8 @@ def test_detect_notification_events_guest_joined():
         "type": "guest_joined",
         "message_id": "1",
         "text": "카멘 하드 공대에 게스트가 합류했습니다.",
+        "raid_name": "카멘",
+        "difficulty": "하드",
     }]
 
 

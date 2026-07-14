@@ -89,6 +89,85 @@ def test_list_unread_newest_first(db_path):
     asyncio.run(run())
 
 
+# ── 세부 설정: 종류 토글 + 레이드 필터 ────────────────────
+
+def test_preferences_default_all_types_on_no_filters(db_path):
+    prefs = asyncio.run(notification_store.get_preferences("111"))
+    assert prefs["subscribed"] is False
+    assert prefs["notify_created"] is True
+    assert prefs["notify_cleared"] is True
+    assert prefs["notify_guest_joined"] is True
+    assert prefs["raid_filters"] == []
+
+
+def test_type_preferences_filter_unread_and_count(db_path):
+    async def run():
+        await notification_store.add_notification("created", "msg-1", "모집", raid_name="카멘", difficulty="하드")
+        await notification_store.add_notification("cleared", "msg-2", "클리어", raid_name="카멘", difficulty="하드")
+        await notification_store.set_type_preferences("111", created=False, cleared=True, guest_joined=True)
+
+        unread = await notification_store.list_unread("111")
+        assert [n["type"] for n in unread] == ["cleared"]
+        assert await notification_store.unread_count("111") == 1
+        # 다른 유저는 영향 없음
+        assert await notification_store.unread_count("222") == 2
+
+    asyncio.run(run())
+
+
+def test_type_preferences_do_not_touch_subscribed_flag(db_path):
+    async def run():
+        await notification_store.set_subscribed("111", True)
+        await notification_store.set_type_preferences("111", created=False, cleared=True, guest_joined=True)
+        assert await notification_store.is_subscribed("111") is True
+
+    asyncio.run(run())
+
+
+def test_raid_filters_limit_to_selected_raid_and_difficulty(db_path):
+    async def run():
+        await notification_store.add_notification("created", "m1", "카멘 하드", raid_name="카멘", difficulty="하드")
+        await notification_store.add_notification("created", "m2", "카멘 노말", raid_name="카멘", difficulty="노말")
+        await notification_store.add_notification("created", "m3", "종막 하드", raid_name="종막", difficulty="하드")
+
+        await notification_store.add_raid_filter("111", "카멘", "하드")
+        unread = await notification_store.list_unread("111")
+        assert [n["message_id"] for n in unread] == ["m1"]
+
+        # difficulty가 NULL인 필터는 그 레이드의 모든 난이도를 포함
+        await notification_store.remove_raid_filter("111", "카멘", "하드")
+        await notification_store.add_raid_filter("111", "카멘", None)
+        unread = await notification_store.list_unread("111")
+        assert sorted(n["message_id"] for n in unread) == ["m1", "m2"]
+
+    asyncio.run(run())
+
+
+def test_raid_filter_keeps_legacy_notifications_without_raid_metadata(db_path):
+    """레이드 정보가 없는 구버전 알림은 필터로 걸러낼 근거가 없으므로 계속 보여준다."""
+    async def run():
+        await notification_store.add_notification("created", "m1", "구버전 알림")
+        await notification_store.add_raid_filter("111", "카멘", "하드")
+        unread = await notification_store.list_unread("111")
+        assert [n["message_id"] for n in unread] == ["m1"]
+
+    asyncio.run(run())
+
+
+def test_event_matches_for_realtime_toast(db_path):
+    async def run():
+        await notification_store.set_type_preferences("111", created=True, cleared=False, guest_joined=True)
+        await notification_store.add_raid_filter("111", "카멘", None)
+
+        assert await notification_store.event_matches("111", "created", "카멘", "하드") is True
+        assert await notification_store.event_matches("111", "created", "종막", "하드") is False
+        assert await notification_store.event_matches("111", "cleared", "카멘", "하드") is False
+        # 설정 없는 유저는 전부 통과 (기존 동작 유지)
+        assert await notification_store.event_matches("222", "cleared", "종막", "하드") is True
+
+    asyncio.run(run())
+
+
 def test_delete_expired_removes_old_notifications_and_reads(db_path):
     async def run():
         saved = await notification_store.add_notification("created", "msg-1", "old")

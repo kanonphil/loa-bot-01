@@ -17,5 +17,91 @@
     {% endif %}
   </form>
 </div>
+
+<div class="settings-card">
+  <h2 class="leader-panel-title">🎚️ 알림 종류</h2>
+  <p class="settings-desc">받고 싶은 알림 종류만 선택하세요. 화면 toast와 종 아이콘 이력에 모두 적용됩니다.</p>
+  <form method="post" action="/notifications/preferences" class="settings-check-form">
+    <label class="settings-check"><input type="checkbox" name="created" {% if prefs.notify_created %}checked{% endif %}> 📢 공대 모집 시작</label>
+    <label class="settings-check"><input type="checkbox" name="cleared" {% if prefs.notify_cleared %}checked{% endif %}> 🏆 공대 클리어</label>
+    <label class="settings-check"><input type="checkbox" name="guest_joined" {% if prefs.notify_guest_joined %}checked{% endif %}> 👤 게스트 합류</label>
+    <button type="submit" class="settings-toggle-btn">저장</button>
+  </form>
+</div>
+
+<div class="settings-card">
+  <h2 class="leader-panel-title">⚔️ 레이드 필터</h2>
+  <p class="settings-desc">
+    봇의 <code>/레이드구독</code>처럼 특정 레이드만 골라서 알림을 받을 수 있어요.
+    아무것도 추가하지 않으면 전체 레이드의 알림을 받습니다.
+  </p>
+  {% if prefs.raid_filters %}
+  <ul class="settings-filter-list">
+    {% for f in prefs.raid_filters %}
+    <li class="settings-filter-row">
+      <span class="settings-filter-name">🔔 {{ f.raid_name }} <em>{{ f.difficulty or "모든 난이도" }}</em></span>
+      <form method="post" action="/notifications/raid-filters/remove">
+        <input type="hidden" name="raid_name" value="{{ f.raid_name }}">
+        <input type="hidden" name="difficulty" value="{{ f.difficulty or '' }}">
+        <button type="submit" class="settings-filter-remove">삭제</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="settings-desc">현재 <strong>전체 레이드</strong>의 알림을 받고 있어요.</p>
+  {% endif %}
+  {% if raids %}
+  <form method="post" action="/notifications/raid-filters/add" class="settings-filter-add">
+    <select name="raid_name" id="filter-raid-select" class="settings-select" required>
+      <option value="" disabled selected>레이드 선택</option>
+      {% for name, info in raids.items() %}{% if info.get("is_active", True) %}
+      <option value="{{ name }}" data-difficulties="{{ (info.get('difficulties') or {}).keys() | list | join(',') }}">{{ name }}</option>
+      {% endif %}{% endfor %}
+    </select>
+    <select name="difficulty" id="filter-diff-select" class="settings-select">
+      <option value="">모든 난이도</option>
+    </select>
+    <button type="submit" class="settings-toggle-btn">추가</button>
+  </form>
+  <script>
+    (function () {
+      var raidSelect = document.getElementById("filter-raid-select");
+      var diffSelect = document.getElementById("filter-diff-select");
+      raidSelect.addEventListener("change", function () {
+        var opt = raidSelect.options[raidSelect.selectedIndex];
+        var diffs = (opt.getAttribute("data-difficulties") || "").split(",").filter(Boolean);
+        diffSelect.innerHTML = '<option value="">모든 난이도</option>';
+        diffs.forEach(function (d) {
+          var o = document.createElement("option");
+          o.value = d;
+          o.textContent = d;
+          diffSelect.appendChild(o);
+        });
+      });
+    })();
+  </script>
+  {% endif %}
+</div>
+
+<div class="settings-card">
+  <h2 class="leader-panel-title">🔊 알림 소리</h2>
+  <p class="settings-desc">알림 toast가 뜰 때 짧은 알림음을 재생합니다. 이 설정은 지금 쓰는 브라우저에만 저장돼요.</p>
+  <label class="settings-check"><input type="checkbox" id="notif-sound-toggle"> 소리 켜기</label>
+  <button type="button" class="settings-toggle-btn" id="notif-sound-test">🔔 미리 듣기</button>
+  <script>
+    (function () {
+      var toggle = document.getElementById("notif-sound-toggle");
+      toggle.checked = localStorage.getItem("notifSoundOff") !== "1";
+      toggle.addEventListener("change", function () {
+        if (toggle.checked) localStorage.removeItem("notifSoundOff");
+        else localStorage.setItem("notifSoundOff", "1");
+      });
+      document.getElementById("notif-sound-test").addEventListener("click", function () {
+        if (window.playNotifSound) window.playNotifSound(true);
+      });
+    })();
+  </script>
+</div>
 </div>
 {% endblock %}

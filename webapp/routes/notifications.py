@@ -9,6 +9,7 @@ from starlette.responses import RedirectResponse, StreamingResponse
 
 from webapp import notification_store, party_events
 from webapp.auth.dependencies import get_current_user
+from webapp.clients import bot_client
 from webapp.templating import templates
 
 router = APIRouter()
@@ -35,7 +36,7 @@ def _time_ago(created_at_iso: str) -> str:
     return f"{int(seconds // 86400)}일 전"
 
 
-async def _stream(request: Request):
+async def _stream(request: Request, discord_id: str | None = None):
     queue = party_events.subscribe_notifications()
     try:
         while True:
@@ -43,6 +44,11 @@ async def _stream(request: Request):
                 break
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL_SECONDS)
+                # 실시간 toast도 유저의 종류 토글/레이드 필터를 따른다
+                if discord_id is not None and not await notification_store.event_matches(
+                    discord_id, event.get("type"), event.get("raid_name"), event.get("difficulty")
+                ):
+                    continue
                 yield f"event: notification\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
             except asyncio.TimeoutError:
                 yield ": keep-alive\n\n"
@@ -52,7 +58,7 @@ async def _stream(request: Request):
 
 @router.get("/events/notifications")
 async def notification_stream(request: Request, user: dict = Depends(get_current_user)):
-    return StreamingResponse(_stream(request), media_type="text/event-stream")
+    return StreamingResponse(_stream(request, user["discord_id"]), media_type="text/event-stream")
 
 
 @router.get("/notifications/count")
@@ -83,9 +89,22 @@ async def open_notification(notification_id: int, user: dict = Depends(get_curre
 
 @router.get("/settings")
 async def settings_page(request: Request, user: dict = Depends(get_current_user)):
-    subscribed = await notification_store.is_subscribed(user["discord_id"])
+    prefs = await notification_store.get_preferences(user["discord_id"])
+    # 레이드 필터 추가용 목록 — 봇 서버가 응답 못 하면 추가 UI만 숨긴다(설정 페이지 자체는 동작)
+    try:
+        raids = await bot_client.get_raids()
+    except Exception:
+        raids = {}
     return templates.TemplateResponse(
-        request, "settings.html", {"user": user, "active": "settings", "subscribed": subscribed}
+        request,
+        "settings.html",
+        {
+            "user": user,
+            "active": "settings",
+            "subscribed": prefs["subscribed"],
+            "prefs": prefs,
+            "raids": raids,
+        },
     )
 
 
@@ -93,4 +112,37 @@ async def settings_page(request: Request, user: dict = Depends(get_current_user)
 async def toggle_subscribe(user: dict = Depends(get_current_user)):
     subscribed = await notification_store.is_subscribed(user["discord_id"])
     await notification_store.set_subscribed(user["discord_id"], not subscribed)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/notifications/preferences")
+async def save_type_preferences(request: Request, user: dict = Depends(get_current_user)):
+    """종류별(모집/클리어/게스트 합류) on/off — 체크박스 폼이라 체크된 것만 넘어온다."""
+    form = await request.form()
+    await notification_store.set_type_preferences(
+        user["discord_id"],
+        created="created" in form,
+        cleared="cleared" in form,
+        guest_joined="guest_joined" in form,
+    )
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/notifications/raid-filters/add")
+async def add_raid_filter(request: Request, user: dict = Depends(get_current_user)):
+    form = await request.form()
+    raid_name = (form.get("raid_name") or "").strip()
+    difficulty = (form.get("difficulty") or "").strip() or None  # 빈 값 = 모든 난이도
+    if raid_name:
+        await notification_store.add_raid_filter(user["discord_id"], raid_name, difficulty)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/notifications/raid-filters/remove")
+async def remove_raid_filter(request: Request, user: dict = Depends(get_current_user)):
+    form = await request.form()
+    raid_name = (form.get("raid_name") or "").strip()
+    difficulty = (form.get("difficulty") or "").strip() or None
+    if raid_name:
+        await notification_store.remove_raid_filter(user["discord_id"], raid_name, difficulty)
     return RedirectResponse("/settings", status_code=303)

@@ -144,6 +144,81 @@ def test_unsubscribed_user_does_not_accumulate_unread(client):
     assert resp.json() == {"subscribed": False, "count": 0}
 
 
+def test_settings_page_shows_type_checkboxes_and_sound_section(client):
+    _login(client)
+    resp = client.get("/settings")
+    assert resp.status_code == 200
+    assert "알림 종류" in resp.text
+    assert 'name="created"' in resp.text
+    assert 'name="cleared"' in resp.text
+    assert 'name="guest_joined"' in resp.text
+    assert "레이드 필터" in resp.text
+    assert "알림 소리" in resp.text
+    assert "notif-sound-toggle" in resp.text
+
+
+def test_save_type_preferences_filters_panel(client):
+    _login(client, discord_id="111")
+    client.post("/notifications/subscribe")
+    asyncio.run(notification_store.add_notification("created", "msg-1", "모집 알림"))
+    asyncio.run(notification_store.add_notification("cleared", "msg-2", "클리어 알림"))
+
+    # 모집 알림 끄기 (체크 안 된 항목은 폼에서 빠짐)
+    resp = client.post("/notifications/preferences", data={"cleared": "on", "guest_joined": "on"})
+    assert resp.status_code == 303
+
+    resp = client.get("/notifications/panel")
+    assert "클리어 알림" in resp.text
+    assert "모집 알림" not in resp.text
+    assert client.get("/notifications/count").json()["count"] == 1
+
+
+def test_raid_filter_add_and_remove_roundtrip(client):
+    _login(client, discord_id="111")
+    client.post("/notifications/subscribe")
+    asyncio.run(notification_store.add_notification("created", "m1", "카멘 하드 모집", raid_name="카멘", difficulty="하드"))
+    asyncio.run(notification_store.add_notification("created", "m2", "종막 하드 모집", raid_name="종막", difficulty="하드"))
+
+    resp = client.post("/notifications/raid-filters/add", data={"raid_name": "카멘", "difficulty": "하드"})
+    assert resp.status_code == 303
+
+    resp = client.get("/notifications/panel")
+    assert "카멘 하드 모집" in resp.text
+    assert "종막 하드 모집" not in resp.text
+
+    # 설정 페이지에 필터 목록 표시
+    resp = client.get("/settings")
+    assert "카멘" in resp.text
+
+    # 필터 삭제 → 다시 전체 레이드
+    resp = client.post("/notifications/raid-filters/remove", data={"raid_name": "카멘", "difficulty": "하드"})
+    assert resp.status_code == 303
+    resp = client.get("/notifications/panel")
+    assert "종막 하드 모집" in resp.text
+
+
+def test_stream_filters_events_by_user_preferences(monkeypatch, notification_db):
+    """실시간 toast(SSE)도 종류 토글을 따라야 한다 — created를 끈 유저에겐
+    created 이벤트가 스킵되고 다음 이벤트(cleared)만 전달된다."""
+    monkeypatch.setattr(notifications, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
+
+    async def scenario():
+        await notification_store.set_type_preferences("111", created=False, cleared=True, guest_joined=True)
+        gen = notifications._stream(_FakeRequest(), discord_id="111")
+        first = await gen.__anext__()
+        assert first.startswith(":")  # keep-alive로 구독 등록
+
+        queue = next(iter(party_events._notification_subscribers))
+        queue.put_nowait({"id": 1, "type": "created", "message_id": "m1", "text": "모집", "raid_name": "카멘", "difficulty": "하드"})
+        queue.put_nowait({"id": 2, "type": "cleared", "message_id": "m2", "text": "클리어", "raid_name": "카멘", "difficulty": "하드"})
+        event = await gen.__anext__()
+        assert "cleared" in event
+        assert "모집" not in event
+        await gen.aclose()
+
+    asyncio.run(scenario())
+
+
 def test_stream_sends_keepalive_then_notification_event(monkeypatch):
     monkeypatch.setattr(notifications, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
 

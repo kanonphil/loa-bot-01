@@ -47,6 +47,7 @@
   source.addEventListener("notification", function (event) {
     var data = JSON.parse(event.data);
     if (window.showToast) window.showToast(data.text, "info");
+    if (window.playNotifSound) window.playNotifSound();
     refreshCount();
   });
 })();
