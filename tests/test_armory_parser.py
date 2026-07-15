@@ -835,12 +835,37 @@ def test_parse_extra_equipment_handles_none():
     assert parser.parse_extra_equipment(None) == []
 
 
-def test_bracelet_tier_bands_combat_stats_only():
-    """팔찌 전투특성은 상/중/하 밴딩으로 색을 입히고, 힘민지/체력/특수효과 줄은 대상이 아니다."""
+def test_bracelet_tier_combat_stat_banding():
+    """전투특성(치명/특화/…)은 고대 팔찌 범위를 3구간으로 밴딩."""
     assert parser.bracelet_tier("특화 +95") == "상"
     assert parser.bracelet_tier("신속 +80") == "중"
     assert parser.bracelet_tier("치명 +68") == "하"
+
+
+def test_bracelet_tier_main_stat_and_recovery_banding():
+    """주 스탯(힘/민첩/지능)과 전투 중 생명력 회복량도 관측 상급값 기준으로 밴딩."""
+    assert parser.bracelet_tier("지능 +14208") == "상"
+    assert parser.bracelet_tier("힘 +11840") == "중"
+    assert parser.bracelet_tier("민첩 +9472") == "하"
+    assert parser.bracelet_tier("전투 중 생명력 회복량 +100") == "상"
+    assert parser.bracelet_tier("전투 중 생명력 회복량 +80") == "중"
+
+
+def test_bracelet_tier_percent_options_use_game_disclosed_rolls():
+    """부여 % 옵션은 게임 공식 확률표의 하/중/상 고정 롤과 정확히 일치할 때만 색을 입힌다."""
+    assert parser.bracelet_tier("치명타 피해 +10.00%") == "상"
+    assert parser.bracelet_tier("치명타 적중률 +4.20%") == "중"
+    assert parser.bracelet_tier("추가 피해 +2.00%") == "하"
+    assert parser.bracelet_tier("아군 피해량 강화 효과 +7.50%") == "상"
+    assert parser.bracelet_tier("세레나데, 신앙, 조화 게이지 획득량 +6.00%") == "상"
+    # 표에 없는 값은 오분류하지 않고 None (색 미표시)
+    assert parser.bracelet_tier("치명타 피해 +6.66%") is None
+
+
+def test_bracelet_tier_returns_none_for_unsupported_options():
+    """정확한 수치표가 없는 옵션(체력/무기공격력)과 특수효과 문장은 색을 넣지 않는다."""
     assert parser.bracelet_tier("체력 +15000") is None
+    assert parser.bracelet_tier("무기 공격력 +195") is None
     assert parser.bracelet_tier("[쇄빙] 방어력 감소 461 증가한다.") is None
 
 

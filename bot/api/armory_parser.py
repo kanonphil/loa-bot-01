@@ -291,21 +291,67 @@ _EXTRA_EQUIP_ORDER = ["팔찌", "어빌리티 스톤", "보주"]
 _EXTRA_SECTION_KEYWORDS = ("효과", "각인", "보너스")
 
 
-# 팔찌 부여 전투특성의 상/중/하 밴딩 — T4 고대 팔찌 특성 범위(61~100)를 3구간으로 나눈다.
-# 연마 효과처럼 고정 롤이 아니라 연속값이라 근사 구간이다 (경계는 조정 여지 있음).
+# ── 팔찌 부여 효과 상/중/하 등급 ─────────────────────────────
+# 팔찌는 종류별로 값 특성이 달라 세 갈래로 나눠 판정한다.
+_BRACELET_TIER_NAMES = ("하", "중", "상")
+
+# (1) 전투특성(기본 효과) — 고대 팔찌 61~100 연속값이라 3구간 근사 밴딩(경계 조정 여지 있음).
 _BRACELET_STAT_RE = re.compile(r"^(치명|특화|신속|제압|인내|숙련)\s*\+(\d+)$")
+# (2) 주 스탯 — 힘/민첩/지능 고정 수치. 상=14208(관측값) 기준 근사 밴딩.
+_BRACELET_MAIN_STAT_RE = re.compile(r"^(?:힘|민첩|지능)\s*\+([\d,]+)$")
+# (3) 전투 중 생명력 회복량 — 상=100 기준 근사 밴딩.
+_BRACELET_RECOVERY_RE = re.compile(r"전투 중 생명력 회복량\s*\+(\d+)")
+
+# (4) 부여 % 옵션 — 게임 공식 확률표의 하/중/상 고정 롤(고대 팔찌).
+# 정확히 일치할 때만 색을 입히므로, 표가 실제와 어긋나면 오분류 대신 색 미표시로 안전하게 빠진다.
+_BRACELET_PCT_TIERS = {
+    "추가 피해": (2.00, 2.60, 3.00),
+    "치명타 적중률": (3.40, 4.20, 5.00),
+    "치명타 피해": (5.00, 7.50, 10.00),
+    "게이지 획득량": (3.60, 4.80, 6.00),  # 세레나데/신앙/조화
+    "낙인력": (4.80, 6.40, 8.00),
+    "아군 공격력 강화 효과": (3.00, 4.00, 5.00),
+    "아군 피해량 강화 효과": (4.50, 6.00, 7.50),
+    "파티원 회복 효과": (2.10, 2.80, 3.50),
+    "파티원 보호막 효과": (2.10, 2.80, 3.50),
+    "상태이상 공격 지속시간": (0.50, 0.75, 1.00),
+}
+
+
+def _bracelet_pct_tier(line: str) -> str | None:
+    match = _GRIND_VALUE_RE.search(line)
+    if not match or not match.group(2):  # % 옵션만
+        return None
+    value = float(match.group(1).replace(",", ""))
+    for name in sorted(_BRACELET_PCT_TIERS, key=len, reverse=True):
+        if name in line:
+            for tier_name, tier_value in zip(_BRACELET_TIER_NAMES, _BRACELET_PCT_TIERS[name]):
+                if abs(value - tier_value) < 0.011:
+                    return tier_name
+            return None
+    return None
 
 
 def bracelet_tier(line: str) -> str | None:
-    match = _BRACELET_STAT_RE.match(line.strip())
-    if not match:
-        return None
-    value = int(match.group(2))
-    if value >= 87:
-        return "상"
-    if value >= 74:
-        return "중"
-    return "하"
+    """팔찌 옵션 한 줄의 상/중/하 등급. 판정 못 하는 옵션(체력/무기공격력 등)은 None."""
+    line = line.strip()
+
+    match = _BRACELET_STAT_RE.match(line)  # 전투특성
+    if match:
+        value = int(match.group(2))
+        return "상" if value >= 87 else "중" if value >= 74 else "하"
+
+    match = _BRACELET_MAIN_STAT_RE.match(line)  # 힘/민첩/지능
+    if match:
+        value = int(match.group(1).replace(",", ""))
+        return "상" if value >= 13000 else "중" if value >= 10600 else "하"
+
+    match = _BRACELET_RECOVERY_RE.search(line)  # 전투 중 생명력 회복량
+    if match:
+        value = int(match.group(1))
+        return "상" if value >= 90 else "중" if value >= 70 else "하"
+
+    return _bracelet_pct_tier(line)  # 부여 % 옵션
 
 
 def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
