@@ -15,7 +15,7 @@
     <ul class="dash-char-progress-list">
       {% for c in raid_progress %}
       <li>
-        <span class="dash-char-name">{{ c.character_name }}</span>
+        <a class="dash-char-name char-link" href="/characters/{{ c.character_name | urlencode }}">{{ c.character_name }}</a>
         <span class="dash-char-class">{{ c.character_class }}</span>
         <span class="dash-char-count">{{ c.done_count }}/{{ c.total_slots }}</span>
       </li>
@@ -52,7 +52,7 @@
     <ul class="dash-character-list">
       {% for c in characters %}
       <li>
-        <span class="dash-char-name">{{ c.character_name }}</span>
+        <a class="dash-char-name char-link" href="/characters/{{ c.character_name | urlencode }}">{{ c.character_name }}</a>
         <span class="dash-char-class">{{ c.character_class }}</span>
         <span class="dash-char-level">{{ c.item_level }}</span>
       </li>

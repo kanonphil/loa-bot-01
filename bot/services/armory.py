@@ -27,4 +27,18 @@ async def get_character_armory_detail(discord_id: str, character_name: str) -> d
     if raw is None:
         return {"error": "캐릭터 정보를 찾을 수 없습니다."}
 
-    return parse_armory_detail(raw)
+    detail = parse_armory_detail(raw)
+
+    # 이 조회에는 이미 전투력이 들어있으니, 랭킹 캐시를 공짜로 최신화한다(추가 API 호출 없음).
+    raw_cp = (raw.get("ArmoryProfile") or {}).get("CombatPower")
+    try:
+        cp = int(float(raw_cp))
+    except (TypeError, ValueError):
+        cp = None
+    if cp:
+        try:
+            await db.update_character_combat_power(discord_id, character_name, cp)
+        except Exception:
+            pass
+
+    return detail

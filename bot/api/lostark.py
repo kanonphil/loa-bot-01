@@ -73,6 +73,19 @@ async def get_armory(api_key: str, character_name: str, filters: str = ARMORY_FI
     )
 
 
+async def get_combat_power(api_key: str, character_name: str) -> Optional[int]:
+    """캐릭터 전투력(CombatPower) 하나만 가볍게 조회 — 랭킹 캐시 갱신용.
+    프로필 필터만 써서 응답을 최소화한다. 값이 없거나 숫자가 아니면 None."""
+    data = await get_armory(api_key, character_name, filters="profiles")
+    if not data:
+        return None
+    raw = (data.get("ArmoryProfile") or {}).get("CombatPower")
+    try:
+        return int(float(raw))
+    except (TypeError, ValueError):
+        return None
+
+
 async def get_character_info(api_key: str, character_name: str) -> Optional[dict]:
     """원정대 목록에서 해당 캐릭터 기본 정보 추출"""
     siblings = await get_siblings(api_key, character_name)

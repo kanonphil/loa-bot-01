@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content">
+<h1>원정대 랭킹</h1>
+<p class="rank-caption">전체 원정대(모든 길드원의 모든 캐릭터) 기준입니다. 전투력은 캐릭터 상세를 열거나 매일 자동 동기화될 때 갱신됩니다.</p>
+
+<div class="rank-tabs">
+  {% for m in metrics %}
+  <a href="/ranking?metric={{ m }}" class="rank-tab{% if m == metric %} is-active{% endif %}">{{ metric_labels[m] }}</a>
+  {% endfor %}
+</div>
+
+{% if not entries %}
+<div class="party-empty-card">
+  <p class="party-empty-icon">📊</p>
+  <p class="party-empty-desc">
+    {% if metric == "weekly_clears" %}이번 주 클리어 기록이 아직 없습니다.
+    {% elif metric == "combat_power" %}전투력 데이터가 아직 없습니다. 캐릭터 상세를 한 번 열거나 원정대를 동기화하면 채워집니다.
+    {% else %}표시할 데이터가 없습니다.{% endif %}
+  </p>
+</div>
+{% else %}
+<div class="rank-table" role="table">
+  <div class="rank-row rank-head" role="row">
+    <span class="rank-col-rank">#</span>
+    <span class="rank-col-name">캐릭터</span>
+    <span class="rank-col-class">직업</span>
+    <span class="rank-col-value">{{ metric_labels[metric] }}</span>
+  </div>
+  {% for e in entries %}
+  <a class="rank-row rank-medal-{{ e.rank if e.rank <= 3 else 0 }}" role="row"
+     href="/characters/{{ e.character_name | urlencode }}?discord_id={{ e.discord_id }}">
+    <span class="rank-col-rank">{% if e.rank == 1 %}🥇{% elif e.rank == 2 %}🥈{% elif e.rank == 3 %}🥉{% else %}{{ e.rank }}{% endif %}</span>
+    <span class="rank-col-name">{{ e.character_name }}</span>
+    <span class="rank-col-class">{{ e.character_class or "—" }}</span>
+    <span class="rank-col-value">
+      {% if metric == "combat_power" %}{{ "{:,}".format(e.value|int) }}
+      {% elif metric == "item_level" %}{{ "%.2f"|format(e.value|float) }}
+      {% else %}{{ e.value|int }}개{% endif %}
+    </span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

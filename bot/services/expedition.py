@@ -217,6 +217,15 @@ async def sync_all_accounts_daily() -> None:
                     await db.update_character_cache(
                         entry["discord_id"], name, level, char_class, api_key_id=key_id
                     )
+                # 랭킹용 전투력 — 캐릭터당 아머리 1회 조회. 일일 배치에서만 갱신하며(수동
+                # 동기화는 빠르게 유지), 실패해도 다른 캐릭터에 영향 주지 않도록 개별 처리.
+                try:
+                    cp = await loa.get_combat_power(api_key, name)
+                    if cp:
+                        await db.update_character_combat_power(entry["discord_id"], name, cp)
+                except Exception:
+                    pass
+                await asyncio.sleep(0.5)  # 키당 분당 100건 한도 아래로 유지
         except Exception as e:
             print(f"[account_sync_task] 계정 동기화 실패 (api_key_id={entry.get('id')}): {e}")
         await asyncio.sleep(1)

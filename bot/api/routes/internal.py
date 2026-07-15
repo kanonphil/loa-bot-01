@@ -87,6 +87,15 @@ async def armory_detail(discord_id: str, character_name: str):
   return await get_character_armory_detail(discord_id, character_name)
 
 
+@router.get("/ranking")
+async def ranking(metric: str = "combat_power", limit: int = 100):
+  """전체 원정대 랭킹 — metric: combat_power | item_level | weekly_clears.
+  캐시된 데이터만 읽으므로(로스트아크 API 미호출) 빠르고 한도 부담이 없다."""
+  if metric not in ("combat_power", "item_level", "weekly_clears"):
+    metric = "combat_power"
+  return {"metric": metric, "entries": await db.get_expedition_ranking(metric, limit)}
+
+
 class ToggleCompletionBody(BaseModel):
   discord_id: str
   character_name: str

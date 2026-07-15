@@ -23,6 +23,7 @@ from webapp.routes import (
     pages,
     party,
     raid_check,
+    ranking,
     tools,
 )
 from webapp.templating import templates
@@ -87,6 +88,7 @@ app.include_router(dashboard.router)
 app.include_router(expedition.router)
 app.include_router(character.router)
 app.include_router(raid_check.router)
+app.include_router(ranking.router)
 app.include_router(party.router)
 app.include_router(calendar.router)
 app.include_router(board.router)

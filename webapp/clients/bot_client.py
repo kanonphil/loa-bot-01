@@ -103,6 +103,17 @@ async def get_armory_detail(discord_id: str, character_name: str) -> dict:
         return resp.json()
 
 
+async def get_ranking(metric: str, limit: int = 100) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/ranking",
+            params={"metric": metric, "limit": limit},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_raid_selection(discord_id: str, character_name: str) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(

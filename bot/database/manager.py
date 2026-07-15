@@ -306,6 +306,8 @@ async def init_db() -> None:
             ("character_class", "TEXT"),
             ("cached_at",       "TIMESTAMP"),
             ("api_key_id",      "INTEGER"),
+            ("combat_power",    "INTEGER"),   # 전투력 랭킹용 — 아머리 조회로 갱신
+            ("combat_power_at", "TIMESTAMP"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE user_characters ADD COLUMN {col} {definition}")
@@ -638,6 +640,51 @@ async def get_user_characters(discord_id: str) -> list[str]:
         )
         rows = await cur.fetchall()
     return [r[0] for r in rows]
+
+
+async def update_character_combat_power(discord_id: str, character_name: str, combat_power: int) -> None:
+    """전투력 캐시 갱신 (랭킹용). 아머리 조회로 얻은 값을 저장한다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE user_characters SET combat_power=?, combat_power_at=CURRENT_TIMESTAMP "
+            "WHERE discord_id=? AND character_name=?",
+            (int(combat_power), discord_id, character_name),
+        )
+        await db.commit()
+
+
+async def get_expedition_ranking(metric: str, limit: int = 100) -> list[dict]:
+    """전체 원정대(모든 유저의 모든 캐릭터) 랭킹.
+    metric: 'combat_power' | 'item_level' | 'weekly_clears'.
+    반환 각 항목: discord_id, character_name, character_class, value(정렬 기준값),
+    item_level, combat_power(참고 표시용)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if metric == "weekly_clears":
+            week = get_week_key()
+            cur = await db.execute(
+                "SELECT c.discord_id, c.character_name, uc.character_class, uc.item_level, "
+                "uc.combat_power, COUNT(*) AS value "
+                "FROM raid_completions c "
+                "LEFT JOIN user_characters uc "
+                "  ON uc.discord_id=c.discord_id AND uc.character_name=c.character_name "
+                "WHERE c.week_key=? "
+                "GROUP BY c.discord_id, c.character_name "
+                "ORDER BY value DESC, uc.item_level DESC "
+                "LIMIT ?",
+                (week, limit),
+            )
+        else:
+            column = "combat_power" if metric == "combat_power" else "item_level"
+            cur = await db.execute(
+                f"SELECT discord_id, character_name, character_class, item_level, combat_power, "
+                f"{column} AS value FROM user_characters "
+                f"WHERE {column} IS NOT NULL AND {column} > 0 "
+                f"ORDER BY value DESC LIMIT ?",
+                (limit,),
+            )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
 
 
 async def update_character_cache(

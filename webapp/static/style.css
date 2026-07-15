@@ -3678,6 +3678,117 @@ a.calendar-party:hover {
   color: var(--text-muted);
 }
 
+/* ── 원정대 랭킹 ──────────────────────────────────────────── */
+
+.rank-caption {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.rank-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rank-tab {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.rank-tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.rank-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 720px;
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 120px 130px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.rank-row:hover {
+  border-color: var(--accent);
+}
+
+.rank-head {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 14px;
+}
+
+.rank-col-rank {
+  font-weight: 700;
+  text-align: center;
+}
+
+.rank-col-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-col-class {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.rank-col-value {
+  text-align: right;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* 1~3위 강조 (금/은/동) */
+.rank-medal-1 { border-color: #ffcf40; background: rgba(255, 207, 64, 0.08); }
+.rank-medal-2 { border-color: #c7ccd6; background: rgba(199, 204, 214, 0.08); }
+.rank-medal-3 { border-color: #d98a54; background: rgba(217, 138, 84, 0.08); }
+.rank-medal-1 .rank-col-rank,
+.rank-medal-2 .rank-col-rank,
+.rank-medal-3 .rank-col-rank { font-size: 18px; }
+
+@media (max-width: 560px) {
+  .rank-row {
+    grid-template-columns: 40px 1fr 100px;
+  }
+  .rank-col-class { display: none; }
+}
+
+/* 목록에서 캐릭터 이름을 상세로 잇는 링크 */
+.char-link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.char-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 /* ── data-tip 카드형 툴팁 (네이티브 title 대체) ─────────────── */
 
 .ui-tip {
