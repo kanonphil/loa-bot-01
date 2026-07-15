@@ -82,6 +82,13 @@ async def notification_panel(request: Request, user: dict = Depends(get_current_
     )
 
 
+@router.post("/notifications/read-all")
+async def mark_all_read(user: dict = Depends(get_current_user)):
+    """종 아이콘을 열면 호출 — 안 읽은 알림을 전부 읽음 처리하고 남은 안읽음 수(0)를 반환."""
+    await notification_store.mark_all_read(user["discord_id"])
+    return {"count": 0}
+
+
 @router.get("/notifications/{notification_id}/open")
 async def open_notification(notification_id: int, user: dict = Depends(get_current_user)):
     notif = await notification_store.mark_read(user["discord_id"], notification_id)

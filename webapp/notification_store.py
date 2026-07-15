@@ -253,6 +253,59 @@ async def list_read(discord_id: str, limit: int = 30) -> list[dict]:
     return filtered[:limit]
 
 
+async def mark_all_read(discord_id: str) -> int:
+    """이 유저가 아직 안 읽은 모든 알림을 읽음 처리. 종 아이콘을 열기만 해도 전부 읽음이 되도록.
+    반환: 새로 읽음 처리된 알림 수."""
+    now = _now_iso()
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT OR IGNORE INTO notification_reads (discord_id, notification_id, read_at) "
+            "SELECT ?, n.id, ? FROM notifications n "
+            "WHERE NOT EXISTS ("
+            "  SELECT 1 FROM notification_reads r "
+            "  WHERE r.notification_id = n.id AND r.discord_id = ?"
+            ")",
+            (discord_id, now, discord_id),
+        )
+        await db.commit()
+        return cur.rowcount
+
+
+# 주간 리셋(수요일 06:00 KST) 기준 — 봇의 get_week_key와 동일한 경계.
+_KST = timezone(timedelta(hours=9))
+
+
+def _current_week_reset() -> datetime:
+    """현재 주의 시작(가장 최근 수요일 06:00 KST)을 KST datetime으로 반환."""
+    now = datetime.now(_KST)
+    days_since_wed = (now.weekday() - 2) % 7
+    week_start = (now - timedelta(days=days_since_wed)).replace(
+        hour=6, minute=0, second=0, microsecond=0
+    )
+    if week_start > now:
+        week_start -= timedelta(days=7)
+    return week_start
+
+
+async def delete_before_week_reset() -> int:
+    """주간 리셋 이전에 생성된 알림(=지난 주 공대 일정 관련 내역)을 모두 삭제.
+    주간 초기화가 지나면 전주 공대 알림이 읽음 탭에서 자동으로 비워진다. 삭제 수 반환."""
+    cutoff = _current_week_reset()
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        # created_at은 UTC ISO. cutoff(KST)를 UTC로 바꿔 문자열 비교(둘 다 ISO offset 포함).
+        cutoff_iso = cutoff.astimezone(timezone.utc).isoformat()
+        cur = await db.execute("SELECT id FROM notifications WHERE created_at < ?", (cutoff_iso,))
+        old_ids = [row[0] for row in await cur.fetchall()]
+        if old_ids:
+            placeholders = ",".join("?" for _ in old_ids)
+            await db.execute(
+                f"DELETE FROM notification_reads WHERE notification_id IN ({placeholders})", old_ids
+            )
+            await db.execute(f"DELETE FROM notifications WHERE id IN ({placeholders})", old_ids)
+            await db.commit()
+    return len(old_ids)
+
+
 async def mark_read(discord_id: str, notification_id: int) -> dict | None:
     """읽음 처리하고 해당 알림을 반환(상세 페이지로 리다이렉트할 message_id를 얻기 위함)."""
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:

@@ -89,6 +89,55 @@ def test_list_unread_newest_first(db_path):
     asyncio.run(run())
 
 
+def test_mark_all_read_marks_every_unread(db_path):
+    """종 아이콘을 열면 개별 클릭 없이 전부 읽음 처리."""
+    async def run():
+        await notification_store.add_notification("created", "m1", "a")
+        await notification_store.add_notification("cleared", "m2", "b")
+        assert await notification_store.unread_count("111") == 2
+
+        marked = await notification_store.mark_all_read("111")
+        assert marked == 2
+        assert await notification_store.unread_count("111") == 0
+        assert len(await notification_store.list_read("111")) == 2
+        # 다른 유저는 영향 없음
+        assert await notification_store.unread_count("222") == 2
+
+    asyncio.run(run())
+
+
+def test_mark_all_read_is_idempotent(db_path):
+    async def run():
+        await notification_store.add_notification("created", "m1", "a")
+        assert await notification_store.mark_all_read("111") == 1
+        assert await notification_store.mark_all_read("111") == 0  # 이미 다 읽음
+
+    asyncio.run(run())
+
+
+def test_delete_before_week_reset_purges_previous_week(db_path):
+    """주간 리셋(수요일 06:00 KST) 이전에 생성된 알림은 삭제되고, 이번 주 알림은 남는다."""
+    import aiosqlite
+
+    async def run():
+        old = await notification_store.add_notification("cleared", "m1", "지난주 클리어")
+        await notification_store.add_notification("created", "m2", "이번주 모집")
+        # 첫 알림을 아주 예전(리셋 경계 이전)으로 조작
+        async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+            await db.execute(
+                "UPDATE notifications SET created_at=? WHERE id=?",
+                ("2020-01-01T00:00:00+00:00", old["id"]),
+            )
+            await db.commit()
+
+        purged = await notification_store.delete_before_week_reset()
+        assert purged == 1
+        remaining = await notification_store.list_unread("111")
+        assert [n["message_id"] for n in remaining] == ["m2"]
+
+    asyncio.run(run())
+
+
 def test_list_read_returns_only_read_items_with_filters_applied(db_path):
     """읽음 탭 — 읽은 알림만, 종류 토글/레이드 필터도 동일하게 적용."""
     async def run():

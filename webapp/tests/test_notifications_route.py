@@ -131,6 +131,24 @@ def test_open_marks_read_and_redirects_to_party(client):
     assert "읽음 처리될 알림" in resp.text
 
 
+def test_read_all_marks_everything_and_moves_to_read_tab(client):
+    _login(client, discord_id="111")
+    client.post("/notifications/subscribe")
+    asyncio.run(notification_store.add_notification("created", "msg-1", "알림 하나"))
+    asyncio.run(notification_store.add_notification("cleared", "msg-2", "알림 둘"))
+    assert client.get("/notifications/count").json()["count"] == 2
+
+    resp = client.post("/notifications/read-all")
+    assert resp.status_code == 200
+    assert resp.json() == {"count": 0}
+
+    # 배지 0, 둘 다 읽음 탭으로 이동
+    assert client.get("/notifications/count").json()["count"] == 0
+    panel = client.get("/notifications/panel").text
+    assert "알림 하나" in panel and "알림 둘" in panel
+    assert "새 알림이 없습니다" in panel  # 안읽음 pane은 비어있음
+
+
 def test_panel_has_unread_and_read_tabs(client):
     _login(client, discord_id="111")
     client.post("/notifications/subscribe")

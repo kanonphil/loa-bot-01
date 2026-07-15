@@ -28,11 +28,22 @@
       .catch(function () {});
   }
 
+  function markAllRead() {
+    fetch("/notifications/read-all", { method: "POST" })
+      .then(function () { setBadge(0); })
+      .catch(function () {});
+  }
+
   bell.addEventListener("click", function (event) {
     event.stopPropagation();
     var opening = panel.hidden;
     panel.hidden = !opening;
-    if (opening) loadPanel();
+    if (opening) {
+      // 패널을 먼저 렌더(현재 안 읽음 목록이 이번 열람에는 그대로 보이도록)한 뒤,
+      // 종을 열었다는 것만으로 전부 읽음 처리하고 배지를 0으로 만든다.
+      loadPanel();
+      markAllRead();
+    }
   });
 
   // 패널 내용은 innerHTML로 주입되므로(스크립트 실행 안 됨) 탭 전환은 여기서 위임 처리

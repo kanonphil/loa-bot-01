@@ -47,6 +47,13 @@ async def _cleanup_loop() -> None:
                 logger.info("만료된 알림 %d개 삭제 (보관기간 %d일)", deleted, config.NOTIFICATION_RETENTION_DAYS)
         except Exception:
             logger.exception("알림 자동 정리 중 오류")
+        try:
+            # 주간 리셋(수요일 06:00 KST)이 지나면 전주 공대 알림을 자동으로 비운다.
+            purged = await notification_store.delete_before_week_reset()
+            if purged:
+                logger.info("전주 공대 알림 %d개 삭제 (주간 리셋)", purged)
+        except Exception:
+            logger.exception("주간 알림 정리 중 오류")
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
 
 
