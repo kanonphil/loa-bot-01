@@ -199,6 +199,40 @@ async def leave(
     )
 
 
+@router.get("/parties/{message_id}/switch")
+async def switch_character_form(
+    request: Request, message_id: str, user: dict = Depends(get_current_user)
+):
+    """파티를 나갔다 재참여하지 않고 참여 캐릭터만 바꾸는 폼 — 참여 중인 사람만 접근 가능."""
+    party = await bot_client.get_party(message_id)
+    if not party:
+        return RedirectResponse("/parties", status_code=303)
+    eligibility = await bot_client.get_switch_eligibility(message_id, user["discord_id"])
+    if not eligibility["can_switch"]:
+        return RedirectResponse(f"/parties/{message_id}", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "party_switch_character.html",
+        {"user": user, "active": "parties", "party": party, "eligibility": eligibility},
+    )
+
+
+@router.post("/parties/{message_id}/switch")
+async def switch_character_submit(
+    request: Request,
+    message_id: str,
+    character_name: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.switch_character(message_id, user["discord_id"], character_name)
+    if not result.get("success"):
+        from urllib.parse import quote
+
+        reason = quote(result.get("reason") or "캐릭터를 변경하지 못했습니다.")
+        return RedirectResponse(f"/parties/{message_id}?join_error={reason}", status_code=303)
+    return RedirectResponse(f"/parties/{message_id}", status_code=303)
+
+
 async def _manage_response(request, message_id, user, action_result):
     ctx = await _detail_context(message_id, user["discord_id"])
     return templates.TemplateResponse(

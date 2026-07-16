@@ -17,6 +17,97 @@ KST = timezone(timedelta(hours=9))
 # 파티 초대 — 응답 뷰 (ManageView에서 사용)
 # ─────────────────────────────────────────────────────
 
+async def _leave_party_core(bot: discord.Client, message_id: str, discord_id: str) -> tuple[bool, str | None]:
+    """파티 나가기 핵심 로직 — 디스코드 "나가기" 버튼과 웹 API가 공유.
+    리더가 나가면 다음 파티원에게 자동 위임하고, 아무도 없으면 파티를 해체한다.
+    반환: (success, 실패 사유 — 성공이면 None)."""
+    party = await db.get_party(message_id)
+    if not party:
+        return False, "파티를 찾을 수 없습니다."
+
+    is_leader = party["leader_id"] == discord_id
+    removed = await db.leave_slot(message_id, discord_id)
+    if not removed:
+        return False, "파티에 참여하지 않았습니다."
+
+    if is_leader:
+        remaining = await db.get_party_slots(message_id)
+        if remaining:
+            await db.transfer_leader(message_id, remaining[0]["discord_id"])
+        else:
+            await db.disband_party(message_id)
+
+    updated_party = await db.get_party(message_id)
+    if bot and updated_party:
+        if updated_party["status"] == "disbanded":
+            try:
+                from bot.ui.embeds import party_embed as _party_embed
+
+                channel = bot.get_channel(int(updated_party["channel_id"]))
+                if channel is None:
+                    channel = await bot.fetch_channel(int(updated_party["channel_id"]))
+                slots = await db.get_party_slots(message_id)
+                msg = await channel.fetch_message(int(message_id))
+                await msg.edit(embed=_party_embed(updated_party, slots), view=None)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+        else:
+            await _refresh_party_embed_with_reserved(bot, updated_party)
+
+    return True, None
+
+
+async def _switch_character_core(
+    bot: discord.Client, message_id: str, discord_id: str, character_name: str
+) -> dict:
+    """참여 캐릭터 변경 핵심 로직 — 디스코드 "캐릭터 변경" 버튼과 웹 API가 공유.
+    파티를 나갔다가 다시 들어올 필요 없이 현재 슬롯의 캐릭터만 교체한다.
+    새 캐릭터가 같은 레이드·같은 주차의 다른 파티에 이미 참여 중이면(교체 자체는
+    허용하되) 그 파티에서는 자동으로 나가게 해서 한 캐릭터가 같은 레이드에 중복
+    참여하지 않도록 한다.
+
+    반환: {"success": bool, "reason": str|None, "left_other_party": message_id|None}
+    """
+    party = await db.get_party(message_id)
+    if not party or party["status"] == "disbanded":
+        return {"success": False, "reason": "유효하지 않은 파티입니다.", "left_other_party": None}
+
+    slots = await db.get_party_slots(message_id)
+    current = next((s for s in slots if s["discord_id"] == discord_id), None)
+    if not current:
+        return {"success": False, "reason": "이 파티에 참여하고 있지 않습니다.", "left_other_party": None}
+    if character_name == current["character_name"]:
+        return {"success": False, "reason": "이미 이 캐릭터로 참여 중입니다.", "left_other_party": None}
+
+    # 클라이언트가 보낸 후보를 그대로 믿지 않고 서버에서 다시 검증한다
+    # (레벨/골드완료/캐시 여부는 eligibility와 동일 기준, 단 "타 공대 참여중"만 예외 허용).
+    eligibility = await db.get_party_switch_eligibility(message_id, discord_id)
+    if not eligibility["can_switch"]:
+        return {"success": False, "reason": eligibility["reason"], "left_other_party": None}
+    candidate = next((c for c in eligibility["candidates"] if c["name"] == character_name), None)
+    if candidate is None:
+        return {"success": False, "reason": "선택한 캐릭터는 참여 조건을 만족하지 않습니다.", "left_other_party": None}
+
+    role = current["role"]
+    if role == "support" and candidate["class"] not in SUPPORT_CLASSES:
+        role = "dps"
+
+    left_other_party: str | None = None
+    if candidate["in_other_party"]:
+        other_message_id = candidate["in_other_party"]["message_id"]
+        ok, _ = await _leave_party_core(bot, other_message_id, discord_id)
+        if ok:
+            left_other_party = other_message_id
+
+    await db.switch_party_character(message_id, discord_id, character_name, candidate["class"], role)
+
+    updated_party = await db.get_party(message_id)
+    if bot and updated_party:
+        await _refresh_party_embed_with_reserved(bot, updated_party)
+
+    return {"success": True, "reason": None, "left_other_party": left_other_party}
+
+
 async def _refresh_party_embed_with_reserved(client: discord.Client, party: dict) -> None:
     from bot.ui.embeds import party_embed as _party_embed
     try:
@@ -1187,6 +1278,13 @@ async def _create_party_core(
 ) -> dict:
     """공대 생성 핵심 로직 — 디스코드 명령어(/공대모집)와 웹 API가 공유.
     interaction 없이 bot 인스턴스만으로 동작해서 웹에서 트리거해도 그대로 쓸 수 있다."""
+    # 응답이 느릴 때 폼 재제출/더블클릭으로 같은 조건의 파티가 짧은 시간 안에 다시
+    # 요청되면, 스레드를 또 만들지 않고 방금 만든 파티를 그대로 반환한다
+    # (정상 스레드 + 빈 스레드가 함께 생기던 증상의 원인).
+    duplicate = await db.find_recent_duplicate_party(leader_id, raid_name, difficulty, scheduled_datetime)
+    if duplicate:
+        return duplicate
+
     diff_info   = get_difficulty_info(raid_name, difficulty)
     total_slots = diff_info["total_slots"]
     min_level   = diff_info["min_level"]
@@ -1367,6 +1465,15 @@ class PartyView(View):
         manage_btn.callback = self._handle_manage
         self.add_item(manage_btn)
 
+        switch_btn = Button(
+            label="캐릭터 변경", emoji="🔁",
+            style=discord.ButtonStyle.secondary,
+            custom_id="party:switch",
+            row=2,
+        )
+        switch_btn.callback = self._handle_switch_character
+        self.add_item(switch_btn)
+
     # ── 참여하기 ────────────────────────────────────
 
     async def _handle_join(self, interaction: discord.Interaction) -> None:
@@ -1519,6 +1626,35 @@ class PartyView(View):
         view = ManageView(party, interaction.message, self.total_slots)
         await interaction.response.send_message("⚙️ **공대 관리**", view=view, ephemeral=True)
         view._manage_interaction = interaction
+
+    # ── 캐릭터 변경 ────────────────────────────────────
+
+    async def _handle_switch_character(self, interaction: discord.Interaction) -> None:
+        party = await db.get_party_by_channel(str(interaction.channel.id))
+        if not party or party["status"] == "disbanded":
+            await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
+            return
+
+        discord_id = str(interaction.user.id)
+        result = await db.get_party_switch_eligibility(party["message_id"], discord_id)
+        if not result["can_switch"]:
+            await interaction.response.send_message(result["reason"], ephemeral=True)
+            return
+        if not result["candidates"]:
+            await interaction.response.send_message(
+                "변경할 수 있는 다른 캐릭터가 없습니다.", ephemeral=True
+            )
+            return
+
+        view = CharacterSwitchSelectView(discord_id, party["message_id"], result["candidates"], self)
+        await interaction.response.send_message(
+            f"현재 **{result['current_character']}**(으)로 참여 중입니다. 변경할 캐릭터를 선택하세요:",
+            view=view, ephemeral=True,
+        )
+        try:
+            view.message = await interaction.original_response()
+        except discord.HTTPException:
+            pass
 
     # ── 빈자리 알림 ──────────────────────────────────
 
@@ -1757,6 +1893,113 @@ class CharSelectView(View):
                 self.message_id, self.total_slots, self.party_view,
                 responded=True,
             )
+
+
+class CharacterSwitchSelectView(View):
+    """"캐릭터 변경" 1단계 — 후보 캐릭터 선택. 같은 레이드의 다른 공대에 이미
+    참여 중인 캐릭터도 후보에 포함하되 라벨에 "(타 공대 참여중)"을 붙여 보여준다."""
+
+    def __init__(
+        self, discord_id: str, message_id: str, candidates: list[dict], party_view: PartyView,
+    ) -> None:
+        super().__init__(timeout=60)
+        self.discord_id = discord_id
+        self.message_id = message_id
+        self.candidate_map = {c["name"]: c for c in candidates}
+        self.party_view = party_view
+        self.message: discord.Message | None = None
+
+        options = [
+            discord.SelectOption(
+                label=c["name"],
+                description=(
+                    f"{c['class']} | {c['level']:.0f}"
+                    + (" | 타 공대 참여중" if c["in_other_party"] else "")
+                ),
+                value=c["name"],
+            )
+            for c in candidates
+        ]
+        sel = Select(placeholder="변경할 캐릭터를 선택하세요", options=options)
+        sel.callback = self._on_select
+        self.add_item(sel)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="⏱️ 선택 시간(60초)이 초과되었습니다.", view=None)
+            except discord.HTTPException:
+                pass
+
+    async def _on_select(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
+            return
+        char_name = interaction.data["values"][0]
+        candidate = self.candidate_map[char_name]
+
+        view = CharacterSwitchConfirmView(self.discord_id, self.message_id, candidate, self.party_view)
+        warning = (
+            "\n⚠️ 이 캐릭터가 참여 중인 다른 공대에서는 자동으로 나가게 됩니다."
+            if candidate["in_other_party"] else ""
+        )
+        await interaction.response.edit_message(
+            content=f"**{char_name}**(으)로 변경하시겠습니까?{warning}", view=view,
+        )
+        try:
+            view.message = await interaction.original_response()
+        except discord.HTTPException:
+            pass
+
+
+class CharacterSwitchConfirmView(View):
+    """"캐릭터 변경" 2단계 — 최종 확인/취소."""
+
+    def __init__(
+        self, discord_id: str, message_id: str, candidate: dict, party_view: PartyView,
+    ) -> None:
+        super().__init__(timeout=60)
+        self.discord_id = discord_id
+        self.message_id = message_id
+        self.candidate = candidate
+        self.party_view = party_view
+        self.message: discord.Message | None = None
+
+        confirm_btn = Button(label="확인", style=discord.ButtonStyle.danger)
+        confirm_btn.callback = self._on_confirm
+        self.add_item(confirm_btn)
+
+        cancel_btn = Button(label="취소", style=discord.ButtonStyle.secondary)
+        cancel_btn.callback = self._on_cancel
+        self.add_item(cancel_btn)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="⏱️ 확인 시간(60초)이 초과되었습니다.", view=None)
+            except discord.HTTPException:
+                pass
+
+    async def _on_confirm(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message("본인만 사용할 수 있습니다.", ephemeral=True)
+            return
+        result = await _switch_character_core(
+            interaction.client, self.message_id, self.discord_id, self.candidate["name"]
+        )
+        if not result["success"]:
+            await interaction.response.edit_message(content=f"❌ {result['reason']}", view=None)
+            return
+        note = "\n(참여 중이던 다른 공대에서는 자동으로 나갔습니다.)" if result["left_other_party"] else ""
+        await interaction.response.edit_message(
+            content=f"✅ **{self.candidate['name']}**(으)로 변경되었습니다.{note}", view=None,
+        )
+
+    async def _on_cancel(self, interaction: discord.Interaction) -> None:
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message("본인만 사용할 수 있습니다.", ephemeral=True)
+            return
+        await interaction.response.edit_message(content="취소되었습니다.", view=None)
 
 
 class RoleSelectView(View):

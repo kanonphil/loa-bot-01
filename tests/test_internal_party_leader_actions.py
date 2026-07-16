@@ -118,6 +118,26 @@ def test_clear_completes_raid_and_disbands(client, fake_bot):
     assert "아르모체(4막)_노말" in done
 
 
+def test_clear_rejected_when_no_one_joined(client, fake_bot):
+    """아무도 참여하지 않은 공격대는 클리어할 수 없어야 한다 — 파티장조차 슬롯에 없는
+    상태(예: 웹에서 캐릭터 선택 없이 개설)로 클리어를 시도하면 거부돼야 한다."""
+    asyncio.run(
+        db.create_party(
+            message_id="1000", channel_id="556", guild_id="1", leader_id=LEADER_ID,
+            raid_name="아르모체(4막)", difficulty="노말", proficiency="숙련",
+            scheduled_time="05/21 20:00", scheduled_datetime="2026-05-21T20:00:00+09:00",
+            total_slots=8, min_level=1700,
+        )
+    )
+    resp = client.post(
+        "/api/internal/parties/1000/clear", json={"discord_id": LEADER_ID}, headers=HEADERS
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "파티원이 없" in body["reason"]
+    assert (asyncio.run(db.get_party("1000")))["status"] == "recruiting"  # 상태 그대로 유지
+
+
 # ── 파티 취소 ───────────────────────────────────────────────
 
 def test_cancel_purges_party_and_dms_members(client, fake_bot):

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-content">
+<a href="/parties/{{ party.message_id }}" class="party-back-link">&larr; 공대로 돌아가기</a>
+<h1>캐릭터 변경</h1>
+<p class="party-switch-desc">
+  <strong>{{ party.raid_name }} {{ party.difficulty }}</strong>에
+  <strong>{{ eligibility.current_character }}</strong>(으)로 참여 중입니다.
+  변경할 캐릭터를 선택하면 파티를 나갔다 다시 참여할 필요 없이 바로 교체됩니다.
+</p>
+
+{% if eligibility.candidates %}
+<form method="post" action="/parties/{{ party.message_id }}/switch" id="switch-form" class="party-switch-form">
+  <select name="character_name" id="switch-character-select" required>
+    <option value="" disabled selected>변경할 캐릭터 선택</option>
+    {% for c in eligibility.candidates %}
+    <option value="{{ c.name }}">
+      {{ c.name }} ({{ c['class'] }}, {{ c.level }}){% if c.in_other_party %} — 타 공대 참여중{% endif %}
+    </option>
+    {% endfor %}
+  </select>
+  <button type="submit" hidden>변경</button>
+</form>
+{% else %}
+<p class="dash-empty">변경할 수 있는 다른 캐릭터가 없습니다.</p>
+{% endif %}
+
+{% if eligibility.gold_done or eligibility.level_too_low or eligibility.no_cache %}
+<div class="party-switch-ineligible">
+  <p class="party-switch-ineligible-title">아래 캐릭터는 선택할 수 없습니다</p>
+  <ul>
+    {% for name in eligibility.gold_done %}<li>{{ name }} — 이번 주 이미 클리어함</li>{% endfor %}
+    {% for c in eligibility.level_too_low %}<li>{{ c.name }} — 아이템 레벨 미달 ({{ c.level }})</li>{% endfor %}
+    {% for name in eligibility.no_cache %}<li>{{ name }} — 아이템 레벨 정보 없음 (원정대 관리에서 동기화 필요)</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+</div>
+
+<script>
+  // 캐릭터를 고르는 순간 확인창을 띄우고, 확인해야만 실제로 제출한다.
+  // 타 공대에 참여 중인 캐릭터를 고르면 그 공대에서는 자동으로 빠진다는 것을 안내한다.
+  (function () {
+    var select = document.getElementById("switch-character-select");
+    var form = document.getElementById("switch-form");
+    if (!select) return;
+
+    select.addEventListener("change", function () {
+      var opt = select.options[select.selectedIndex];
+      var isOther = opt.textContent.includes("타 공대 참여중");
+      var message = isOther
+        ? opt.value + "(으)로 변경하시겠습니까?\n이 캐릭터가 참여 중인 다른 공대에서는 자동으로 나가게 됩니다."
+        : opt.value + "(으)로 변경하시겠습니까?";
+      if (window.confirm(message)) {
+        form.submit();
+      } else {
+        select.selectedIndex = 0;
+      }
+    });
+  })();
+</script>
+{% endblock %}

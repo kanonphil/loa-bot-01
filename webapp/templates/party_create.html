@@ -61,7 +61,7 @@
     </select>
   </label>
 
-  <button type="submit">공대 개설</button>
+  <button type="submit" id="party-create-submit">공대 개설</button>
 </form>
 </div>
 
@@ -98,6 +98,16 @@
 
   characterSelect.addEventListener("change", updateRoleOptions);
   updateRoleOptions();
+
+  // 응답이 느릴 때 더블클릭/재제출로 스레드가 중복 생성되는 것을 막는다
+  // (서버에도 동일 유저의 짧은 시간 내 중복 요청 방지가 있지만, 클라이언트에서
+  // 먼저 막아 불필요한 왕복 자체를 줄인다).
+  const createForm = document.querySelector(".party-create-form");
+  const submitBtn = document.getElementById("party-create-submit");
+  createForm.addEventListener("submit", function () {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "개설 중...";
+  });
 </script>
 <script src="/static/flatpickr.min.js"></script>
 <script src="/static/party-datetime.js"></script>

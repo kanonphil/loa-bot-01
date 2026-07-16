@@ -864,6 +864,25 @@ async def create_party(
         await db.commit()
 
 
+async def find_recent_duplicate_party(
+    leader_id: str, raid_name: str, difficulty: str, scheduled_datetime: str | None, within_seconds: int = 15
+) -> Optional[dict]:
+    """방금 이 리더가 똑같은 조건(레이드/난이도/일정)으로 만든 파티가 있는지 확인.
+    응답이 느릴 때 이중 클릭/폼 재제출로 스레드가 두 개 생성되는 것을 막기 위한 가드 —
+    있으면 새로 만들지 않고 이 파티를 그대로 재사용한다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM parties WHERE leader_id=? AND raid_name=? AND difficulty=? "
+            "AND (scheduled_datetime IS ? OR scheduled_datetime=?) "
+            "AND created_at >= datetime('now', ?) "
+            "ORDER BY created_at DESC LIMIT 1",
+            (leader_id, raid_name, difficulty, scheduled_datetime, scheduled_datetime, f"-{within_seconds} seconds"),
+        )
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
 async def get_parties_due_notification(now_iso: str) -> list[dict]:
     """알림 시간이 된 미통보 파티 목록"""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -906,7 +925,8 @@ async def get_user_active_slots_in_raid(
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT ps.character_name, p.scheduled_datetime FROM party_slots ps "
+            "SELECT ps.character_name, ps.party_message_id AS message_id, p.scheduled_datetime "
+            "FROM party_slots ps "
             "JOIN parties p ON ps.party_message_id = p.message_id "
             "WHERE ps.discord_id = ? "
             "AND p.raid_name = ? "
@@ -1198,6 +1218,101 @@ async def get_party_join_eligibility(message_id: str, discord_id: str) -> dict:
         "no_cache": no_cache,
         "min_level": min_level,
     }
+
+
+async def get_party_switch_eligibility(message_id: str, discord_id: str) -> dict:
+    """이미 파티에 참여 중인 유저가 "캐릭터 변경"으로 고를 수 있는 후보 목록.
+
+    get_party_join_eligibility와 대부분 같은 필터(레벨/골드완료/캐시여부)를 쓰지만
+    한 가지만 다르다 — 같은 레이드의 다른 공대에 참여 중인 캐릭터를 후보에서 아예
+    빼지 않고, 대신 candidate["in_other_party"]에 그 공대 정보를 담아 반환한다.
+    화면에서 "캐릭터명 (타 공대 참여중)"으로 보여준 뒤, 선택하면 그 공대에서는
+    자동으로 나가고 이 공대로 옮겨 온다 — 실행은 switch_party_character가 담당.
+
+    반환:
+      {"can_switch": False, "reason": "..."}
+      또는
+      {"can_switch": True, "current_character": "...",
+       "candidates": [{"name","level","class","in_other_party": {"message_id","raid_name"}|None}, ...],
+       "gold_done": [...], "level_too_low": [...], "no_cache": [...]}
+    """
+    party = await get_party(message_id)
+    if not party or party["status"] == "disbanded":
+        return {"can_switch": False, "reason": "유효하지 않은 파티입니다."}
+
+    slots = await get_party_slots(message_id)
+    current = next((s for s in slots if s["discord_id"] == discord_id), None)
+    if not current:
+        return {"can_switch": False, "reason": "이 파티에 참여하고 있지 않습니다."}
+
+    party_week_key = (
+        get_week_key_for_dt(party["scheduled_datetime"])
+        if party.get("scheduled_datetime")
+        else get_week_key()
+    )
+
+    registered = await get_user_characters(discord_id)
+    min_level: int = party["min_level"]
+    cached = await get_cached_characters(discord_id, max_age_hours=99999)
+    cache_map = {c["character_name"]: c for c in cached}
+
+    candidates: list[dict] = []
+    level_too_low: list[dict] = []
+    no_cache: list[str] = []
+
+    for char_name in registered:
+        if char_name == current["character_name"]:
+            continue  # 이미 참여 중인 캐릭터로는 "변경"할 수 없다
+        c = cache_map.get(char_name)
+        if not c or c["item_level"] is None:
+            no_cache.append(char_name)
+        elif c["item_level"] < min_level:
+            level_too_low.append({"name": char_name, "level": c["item_level"]})
+        else:
+            candidates.append(
+                {"name": char_name, "level": c["item_level"], "class": c["character_class"], "in_other_party": None}
+            )
+
+    gold_done: list[str] = []
+    filtered = []
+    for cand in candidates:
+        completions = await get_completions(discord_id, cand["name"], week_key=party_week_key)
+        if any(k.startswith(f"{party['raid_name']}_") for k in completions):
+            gold_done.append(cand["name"])
+        else:
+            filtered.append(cand)
+    candidates = filtered
+
+    already_slots = await get_user_active_slots_in_raid(
+        discord_id, party["raid_name"], message_id, party_week_key=party_week_key
+    )
+    already_by_name = {s["character_name"]: s["message_id"] for s in already_slots}
+    for cand in candidates:
+        other_message_id = already_by_name.get(cand["name"])
+        if other_message_id:
+            cand["in_other_party"] = {"message_id": other_message_id, "raid_name": party["raid_name"]}
+
+    return {
+        "can_switch": True,
+        "current_character": current["character_name"],
+        "candidates": candidates,
+        "gold_done": gold_done,
+        "level_too_low": level_too_low,
+        "no_cache": no_cache,
+    }
+
+
+async def switch_party_character(
+    message_id: str, discord_id: str, character_name: str, character_class: str, role: str
+) -> None:
+    """참여 중인 슬롯의 캐릭터만 교체한다(슬롯 번호·참여 시각은 유지)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE party_slots SET character_name=?, character_class=?, role=? "
+            "WHERE party_message_id=? AND discord_id=?",
+            (character_name, character_class, role, message_id, discord_id),
+        )
+        await db.commit()
 
 
 async def leave_slot(message_id: str, discord_id: str) -> bool:

@@ -282,45 +282,34 @@ class LeavePartyBody(BaseModel):
 
 @router.post("/parties/{message_id}/leave")
 async def leave_party(message_id: str, body: LeavePartyBody):
-  import discord as _discord
   from bot.api import bot_ref
-  from bot.ui.embeds import party_embed
-  from bot.ui.views import _refresh_party_embed_with_reserved
+  from bot.ui.views import _leave_party_core
 
-  party = await db.get_party(message_id)
-  if not party:
-    return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+  success, reason = await _leave_party_core(bot_ref.get_bot(), message_id, body.discord_id)
+  return {"success": success, "reason": reason}
 
-  is_leader = party["leader_id"] == body.discord_id
 
-  removed = await db.leave_slot(message_id, body.discord_id)
-  if not removed:
-    return {"success": False, "reason": "파티에 참여하지 않았습니다."}
+@router.get("/parties/{message_id}/switch-eligibility")
+async def switch_eligibility(message_id: str, discord_id: str):
+  """참여 캐릭터 변경 시 고를 수 있는 캐릭터 후보 — 같은 레이드의 다른 공대에 이미
+  참여 중인 캐릭터도 후보에 포함하되 in_other_party로 표시(웹/봇 UI가 "타 공대 참여중"
+  경고와 확인 절차를 붙일 수 있도록)."""
+  return await db.get_party_switch_eligibility(message_id, discord_id)
 
-  if is_leader:
-    remaining = await db.get_party_slots(message_id)
-    if remaining:
-      await db.transfer_leader(message_id, remaining[0]["discord_id"])
-    else:
-      await db.disband_party(message_id)
 
-  bot = bot_ref.get_bot()
-  updated_party = await db.get_party(message_id)
-  if bot and updated_party:
-    if updated_party["status"] == "disbanded":
-      try:
-        channel = bot.get_channel(int(updated_party["channel_id"]))
-        if channel is None:
-          channel = await bot.fetch_channel(int(updated_party["channel_id"]))
-        slots = await db.get_party_slots(message_id)
-        msg = await channel.fetch_message(int(message_id))
-        await msg.edit(embed=party_embed(updated_party, slots), view=None)
-      except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
-        pass
-    else:
-      await _refresh_party_embed_with_reserved(bot, updated_party)
+class SwitchCharacterBody(BaseModel):
+  discord_id: str
+  character_name: str
 
-  return {"success": True}
+
+@router.post("/parties/{message_id}/switch-character")
+async def switch_character(message_id: str, body: SwitchCharacterBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _switch_character_core
+
+  return await _switch_character_core(
+    bot_ref.get_bot(), message_id, body.discord_id, body.character_name
+  )
 
 
 # ── 파티장 관리 (마감/재개/클리어/취소/강제퇴장/일정변경/위임) ─────

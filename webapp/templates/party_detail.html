@@ -69,9 +69,14 @@
 {% endif %}
 
 {% if joined %}
-<form method="post" action="/parties/{{ party.message_id }}/leave">
-  <button type="submit" class="party-leave-btn">나가기</button>
-</form>
+<div class="party-member-actions">
+  {% if party.status != "disbanded" %}
+  <a href="/parties/{{ party.message_id }}/switch" class="party-switch-btn">캐릭터 변경</a>
+  {% endif %}
+  <form method="post" action="/parties/{{ party.message_id }}/leave">
+    <button type="submit" class="party-leave-btn">나가기</button>
+  </form>
+</div>
 {% elif eligibility and eligibility.can_join %}
   {% if eligibility.qualifying %}
   <form method="post" action="/parties/{{ party.message_id }}/join" class="party-join-form">

@@ -274,6 +274,28 @@ async def leave_party(message_id: str, discord_id: str) -> dict:
         return resp.json()
 
 
+async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",
+            params={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def switch_character(message_id: str, discord_id: str, character_name: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-character",
+            json={"discord_id": discord_id, "character_name": character_name},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_proficiency_options() -> list[dict]:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
