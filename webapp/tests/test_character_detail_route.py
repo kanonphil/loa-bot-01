@@ -334,6 +334,53 @@ def test_uses_explicit_discord_id_when_provided(client):
     assert sent_params["discord_id"] == ["222"]
 
 
+# ── 동기화 버튼 — F5로는 API를 다시 호출하지 않고, 이 버튼을 눌러야만 갱신된다 ──
+
+SYNC_URL = "http://bot-server.internal/api/internal/armory-detail/sync"
+
+
+def test_own_character_shows_sync_button_and_last_synced_time(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(ARMORY_URL).mock(
+            return_value=httpx.Response(200, json={**DETAIL, "synced_at": "2026-07-16T00:00:00+00:00"})
+        )
+        resp = client.get("/characters/발키리")
+
+    assert resp.status_code == 200
+    assert "armory-sync-btn" in resp.text
+    assert "마지막 동기화" in resp.text
+    assert "동기화" in resp.text
+    # 아이콘 없이 텍스트만 — 이모지/아이콘 클래스가 버튼에 섞여 있지 않은지 확인
+    assert '<button type="submit" class="armory-sync-btn">동기화</button>' in resp.text
+
+
+def test_other_persons_character_hides_sync_button(client):
+    """공대 모집 '자세히 보기'처럼 남의 캐릭터를 볼 때는 동기화 버튼을 숨긴다
+    — 남을 대신해 로스트아크 API를 호출시킬 권한이 없다."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(ARMORY_URL).mock(return_value=httpx.Response(200, json=DETAIL))
+        resp = client.get("/characters/발키리", params={"discord_id": "222"})
+
+    assert resp.status_code == 200
+    assert "armory-sync-btn" not in resp.text
+
+
+def test_sync_posts_to_bot_and_redirects_back(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        sync_route = respx.post(SYNC_URL).mock(return_value=httpx.Response(200, json=DETAIL))
+        resp = client.post("/characters/발키리/sync")
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/characters/%EB%B0%9C%ED%82%A4%EB%A6%AC"  # "발키리" URL 인코딩
+    assert sync_route.called
+    sent_params = parse_qs(urlparse(str(sync_route.calls.last.request.url)).query)
+    assert sent_params["discord_id"] == ["111"]
+    assert sent_params["character_name"] == ["발키리"]
+
+
 PARTY_MEMBER_CARD_URL = "http://bot-server.internal/api/internal/armory-detail"
 
 

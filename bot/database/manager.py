@@ -308,6 +308,8 @@ async def init_db() -> None:
             ("api_key_id",      "INTEGER"),
             ("combat_power",    "INTEGER"),   # 전투력 랭킹용 — 아머리 조회로 갱신
             ("combat_power_at", "TIMESTAMP"),
+            ("armory_detail_json", "TEXT"),   # 캐릭터 상세 페이지 캐시 — "동기화" 눌러야 갱신
+            ("armory_synced_at",   "TIMESTAMP"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE user_characters ADD COLUMN {col} {definition}")
@@ -642,15 +644,50 @@ async def get_user_characters(discord_id: str) -> list[str]:
     return [r[0] for r in rows]
 
 
-async def update_character_combat_power(discord_id: str, character_name: str, combat_power: int) -> None:
-    """전투력 캐시 갱신 (랭킹용). 아머리 조회로 얻은 값을 저장한다."""
+async def update_character_combat_power(discord_id: str, character_name: str, combat_power: int) -> bool:
+    """전투력 캐시 갱신 (랭킹용). 아머리 조회로 얻은 값을 저장한다.
+    반환값 False는 discord_id+character_name이 user_characters에 없어(등록 안 된 캐릭터,
+    또는 다른 계정 소유) 아무 행도 갱신되지 않았다는 뜻 — 호출부가 로깅할 수 있게 알려준다."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
+        cur = await db.execute(
             "UPDATE user_characters SET combat_power=?, combat_power_at=CURRENT_TIMESTAMP "
             "WHERE discord_id=? AND character_name=?",
             (int(combat_power), discord_id, character_name),
         )
         await db.commit()
+        return cur.rowcount > 0
+
+
+async def get_character_armory_cache(discord_id: str, character_name: str) -> dict | None:
+    """캐릭터 상세 페이지 캐시(아머리 조회 결과) — "동기화"를 누르기 전까지는 이 값을 그대로
+    보여준다(F5로 로스트아크 API를 다시 부르지 않기 위함). 캐시가 없으면 None."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT armory_detail_json, armory_synced_at FROM user_characters "
+            "WHERE discord_id=? AND character_name=?",
+            (discord_id, character_name),
+        )
+        row = await cur.fetchone()
+    if not row or not row[0]:
+        return None
+    import json
+
+    return {"detail": json.loads(row[0]), "synced_at": row[1]}
+
+
+async def set_character_armory_cache(discord_id: str, character_name: str, detail: dict) -> bool:
+    """"동기화" 버튼(또는 최초 조회 시 1회)으로 갱신한 아머리 상세를 캐시에 저장.
+    반환값 False는 update_character_combat_power와 동일한 이유로 아무 행도 갱신되지 않았다는 뜻."""
+    import json
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE user_characters SET armory_detail_json=?, armory_synced_at=CURRENT_TIMESTAMP "
+            "WHERE discord_id=? AND character_name=?",
+            (json.dumps(detail, ensure_ascii=False), discord_id, character_name),
+        )
+        await db.commit()
+        return cur.rowcount > 0
 
 
 async def get_expedition_ranking(metric: str, limit: int = 100) -> list[dict]:

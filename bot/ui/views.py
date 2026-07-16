@@ -1364,10 +1364,34 @@ async def _post_party(
 ) -> None:
     leader_id = str(interaction.user.id)
     await interaction.response.edit_message(content="✅ 공대 모집 게시물을 생성합니다.", view=None)
-    await _create_party_core(
+    party = await _create_party_core(
         interaction.client, str(interaction.guild_id), leader_id, forum_channel_id,
         raid_name, difficulty, proficiency, scheduled_time, scheduled_datetime, memo,
     )
+    await _offer_leader_join(interaction, party)
+
+
+async def _offer_leader_join(interaction: discord.Interaction, party: dict) -> None:
+    """공대 생성 직후 리더에게 바로 참여할 캐릭터를 물어본다(웹의 개설 폼에 있는
+    "참여할 캐릭터" 선택과 동등한 경험을 디스코드에도 제공). 참여 가능한 캐릭터가
+    없으면 조용히 넘어가고, 나중에 "참여하기" 버튼으로 참가할 수 있다."""
+    message_id = party["message_id"]
+    leader_id = party["leader_id"]
+    result = await db.get_party_join_eligibility(message_id, leader_id)
+    if not result["can_join"] or not result["qualifying"]:
+        return
+
+    party_view = PartyView(total_slots=result["total_slots"])
+    view = CharSelectView(leader_id, result["qualifying"], message_id, result["total_slots"], party_view)
+    try:
+        msg = await interaction.followup.send(
+            "공대가 생성되었습니다! 참여할 캐릭터를 선택하세요 "
+            "(선택하지 않아도 나중에 '참여하기' 버튼으로 참가할 수 있습니다):",
+            view=view, ephemeral=True,
+        )
+        view.message = msg
+    except discord.HTTPException:
+        pass
 
 
 async def _auto_join_dps(

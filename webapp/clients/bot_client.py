@@ -93,9 +93,23 @@ async def get_completions(discord_id: str, character_name: str) -> dict:
 
 
 async def get_armory_detail(discord_id: str, character_name: str) -> dict:
+    """캐시된 캐릭터 상세를 그대로 받아온다 — 로스트아크 API를 호출하지 않는다.
+    최신 정보가 필요하면 sync_armory_detail(동기화 버튼)을 따로 호출해야 한다."""
     async with httpx.AsyncClient(timeout=20) as client:
         resp = await client.get(
             f"{config.BOT_API_BASE_URL}/api/internal/armory-detail",
+            params={"discord_id": discord_id, "character_name": character_name},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def sync_armory_detail(discord_id: str, character_name: str) -> dict:
+    """"동기화" 버튼 전용 — 실제로 로스트아크 API를 호출해 최신 정보로 갱신한다."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/armory-detail/sync",
             params={"discord_id": discord_id, "character_name": character_name},
             headers=_headers(),
         )

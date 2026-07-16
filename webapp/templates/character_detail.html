@@ -104,6 +104,13 @@
       </div>
       {% endif %}
     </div>
+
+    {% if can_sync %}
+    <form method="post" action="/characters/{{ character_name }}/sync" class="armory-sync-form">
+      {% if synced_ago %}<span class="armory-sync-ago">마지막 동기화: {{ synced_ago }}</span>{% endif %}
+      <button type="submit" class="armory-sync-btn">동기화</button>
+    </form>
+    {% endif %}
   </aside>
 
   <div class="armory-main">

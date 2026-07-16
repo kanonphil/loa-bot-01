@@ -81,10 +81,19 @@ async def completions(discord_id: str, character_name: str):
 
 @router.get("/armory-detail")
 async def armory_detail(discord_id: str, character_name: str):
-  """캐릭터 상세 정보(스킬/트라이포드/룬/아크패시브/장신구 품질·연마/보석)."""
+  """캐릭터 상세 정보(스킬/트라이포드/룬/아크패시브/장신구 품질·연마/보석).
+  캐시가 있으면 그대로 반환 — 로스트아크 API를 매번 호출하지 않는다."""
   from bot.services.armory import get_character_armory_detail
 
   return await get_character_armory_detail(discord_id, character_name)
+
+
+@router.post("/armory-detail/sync")
+async def armory_detail_sync(discord_id: str, character_name: str):
+  """"동기화" 버튼 전용 — 로스트아크 API를 실제로 호출해 캐시를 최신 정보로 갱신한다."""
+  from bot.services.armory import sync_character_armory_detail
+
+  return await sync_character_armory_detail(discord_id, character_name)
 
 
 @router.get("/ranking")

@@ -2383,6 +2383,38 @@ a.calendar-party:hover {
   gap: 6px;
 }
 
+/* 동기화 버튼 — 아이콘 없이 텍스트만, 눈에 띄되 과하지 않게 */
+.armory-sync-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.armory-sync-ago {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.armory-sync-btn {
+  width: 100%;
+  padding: 8px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.armory-sync-btn:hover {
+  background: var(--panel);
+}
+
 .armory-tabs {
   display: flex;
   gap: 4px;
