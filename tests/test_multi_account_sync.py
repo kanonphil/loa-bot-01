@@ -106,7 +106,11 @@ def test_sync_characters_for_discord_id_groups_by_account(clean_db, monkeypatch)
         calls.append((api_key, name))
         return {"key-a": ACCOUNT_A_SIBLINGS, "key-b": ACCOUNT_B_SIBLINGS}.get(api_key)
 
+    async def no_op_get_combat_power(api_key, name):
+        return None
+
     monkeypatch.setattr(svc.loa, "get_siblings", fake_get_siblings)
+    monkeypatch.setattr(svc.loa, "get_combat_power", no_op_get_combat_power)
 
     updated, total = asyncio.run(svc.sync_characters_for_discord_id("111"))
 
@@ -123,6 +127,37 @@ def test_sync_characters_for_discord_id_groups_by_account(clean_db, monkeypatch)
     assert len(calls) == 2
     called_keys = {c[0] for c in calls}
     assert called_keys == {"key-a", "key-b"}
+
+
+def test_sync_characters_for_discord_id_also_updates_combat_power(clean_db, monkeypatch):
+    """이전에는 이 "동기화" 버튼이 전투력을 전혀 건드리지 않아서, 캐릭터 상세를 따로
+    열어보지 않은 유저는 전투력 랭킹에 영영 안 잡히는 문제가 있었다 — 이제는 이 버튼만
+    눌러도 등록된 모든 캐릭터의 전투력이 함께 갱신돼야 한다."""
+    id_a = asyncio.run(db.add_user_api_key("111", "발키리", "key-a"))
+    asyncio.run(db.add_character("111", "발키리", api_key_id=id_a))
+    asyncio.run(db.add_character("111", "워로드부캐", api_key_id=id_a))
+
+    async def fake_get_siblings(api_key, name):
+        return ACCOUNT_A_SIBLINGS
+
+    cp_by_name = {"발키리": 4_300_000, "워로드부캐": 3_900_000}
+
+    async def fake_get_combat_power(api_key, name):
+        return cp_by_name.get(name)
+
+    async def no_sleep(_):
+        return None
+
+    monkeypatch.setattr(svc.loa, "get_siblings", fake_get_siblings)
+    monkeypatch.setattr(svc.loa, "get_combat_power", fake_get_combat_power)
+    monkeypatch.setattr(svc.asyncio, "sleep", no_sleep)
+
+    asyncio.run(svc.sync_characters_for_discord_id("111"))
+
+    rows = asyncio.run(db.get_expedition_ranking("combat_power"))
+    values = {r["character_name"]: r["value"] for r in rows}
+    assert values["발키리"] == 4_300_000
+    assert values["워로드부캐"] == 3_900_000
 
 
 def test_sync_characters_for_discord_id_no_accounts(clean_db):
@@ -149,7 +184,11 @@ def test_sync_all_accounts_daily_continues_after_one_account_fails(clean_db, mon
             raise RuntimeError("API 키가 유효하지 않습니다.")
         return ACCOUNT_B_SIBLINGS
 
+    async def no_op_get_combat_power(api_key, name):
+        return None
+
     monkeypatch.setattr(svc.loa, "get_siblings", flaky_get_siblings)
+    monkeypatch.setattr(svc.loa, "get_combat_power", no_op_get_combat_power)
 
     async def no_sleep(_):
         return None

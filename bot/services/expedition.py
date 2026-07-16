@@ -140,6 +140,9 @@ async def sync_characters_for_discord_id(discord_id: str) -> tuple[int, int]:
     공유하는 핵심 로직.
 
     api_key_id가 없는(레거시) 캐릭터는 유저의 첫 번째 등록 계정으로 간주해 동기화한다.
+    아이템레벨/직업과 함께 랭킹용 전투력(combat_power)도 캐릭터당 1회씩 추가로 조회해
+    갱신한다 — 이전에는 이 버튼이 전투력을 건드리지 않아서, 캐릭터 상세를 따로 열어보지
+    않은 대부분의 유저가 전투력 랭킹에 아예 안 잡히는 문제가 있었다.
 
     반환: (updated_count, total_count)
     """
@@ -174,13 +177,20 @@ async def sync_characters_for_discord_id(discord_id: str) -> tuple[int, int]:
 
         for name in names:
             char = siblings_map.get(name)
-            if not char:
-                continue
-            level = loa.parse_item_level(char)
-            char_class = char.get("CharacterClassName", "?")
-            if level > 0:
-                await db.update_character_cache(discord_id, name, level, char_class, api_key_id=key_id)
-                updated += 1
+            if char:
+                level = loa.parse_item_level(char)
+                char_class = char.get("CharacterClassName", "?")
+                if level > 0:
+                    await db.update_character_cache(discord_id, name, level, char_class, api_key_id=key_id)
+                    updated += 1
+
+            try:
+                cp = await loa.get_combat_power(api_key, name)
+                if cp:
+                    await db.update_character_combat_power(discord_id, name, cp)
+            except Exception:
+                pass
+            await asyncio.sleep(0.2)  # 캐릭터가 많은 유저도 분당 100건 한도 아래로 유지
 
     return updated, len(char_names)
 
