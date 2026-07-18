@@ -92,8 +92,8 @@ def test_calendar_month_navigation_links(client, monkeypatch):
         respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
         resp = client.get("/calendar")
 
-    assert "/calendar?year=2026&month=4" in resp.text
-    assert "/calendar?year=2026&month=6" in resp.text
+    assert "/calendar?view=month&year=2026&month=4" in resp.text
+    assert "/calendar?view=month&year=2026&month=6" in resp.text
 
 
 def test_calendar_time_shown_is_derived_from_datetime_not_scheduled_time_text(client, monkeypatch):
@@ -135,8 +135,9 @@ def test_calendar_cleared_party_is_not_clickable(client, monkeypatch):
     assert 'href="/parties/p2"' not in resp.text
 
 
-def test_calendar_caps_visible_parties_per_day_and_shows_more_count(client, monkeypatch):
-    """한 칸에 일정이 몰려도 칸 높이가 안 밀리도록 최대 3개까지만 보여주고 나머지는 "+N개 더"로 표시."""
+def test_calendar_shows_all_parties_without_truncation(client, monkeypatch):
+    """관리자 앱처럼 칸이 일정 개수에 맞춰 늘어나야 하므로, 한 칸에 일정이 몰려도
+    자르지 않고 전부 보여줘야 한다(이전에는 최대 3개 + "+N개 더"로 잘랐음)."""
     many_parties = [
         {
             "message_id": f"day-{i}", "raid_name": f"레이드{i}", "difficulty": "노말", "proficiency": "숙련",
@@ -151,5 +152,74 @@ def test_calendar_caps_visible_parties_per_day_and_shows_more_count(client, monk
         respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=many_parties))
         resp = client.get("/calendar")
 
-    assert resp.text.count("calendar-party-name") == 3
-    assert "+1개 더" in resp.text
+    assert resp.text.count("calendar-party-name") == 4
+    assert "calendar-party-more" not in resp.text
+
+
+def test_calendar_week_view_shows_current_week_by_default(client, monkeypatch):
+    """view=week 파라미터만 주면(week_start 없이) "오늘"이 속한 주가 기본으로 보여야 한다.
+    2026-05-15(금)이 속한 주는 2026-05-10(일)~05-16(토)이라 p1/p2 둘 다 포함된다."""
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=PARTIES))
+        resp = client.get("/calendar", params={"view": "week"})
+
+    assert resp.status_code == 200
+    assert "5월 10일" in resp.text
+    assert "카멘 노말" in resp.text
+    assert "아르모체(4막) 노말" in resp.text
+
+
+def test_calendar_week_view_highlights_today(client, monkeypatch):
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
+        resp = client.get("/calendar", params={"view": "week"})
+
+    assert '<div class="calendar-cell today">' in resp.text
+
+
+def test_calendar_week_navigation_stays_within_seven_days(client, monkeypatch):
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
+        resp = client.get("/calendar", params={"view": "week"})
+
+    # 이전 주(5/3)와 다음 주(5/17) 링크가 있어야 한다
+    assert "week_start=2026-05-03" in resp.text
+    assert "week_start=2026-05-17" in resp.text
+
+
+def test_calendar_view_toggle_links_present_in_both_views(client, monkeypatch):
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
+        month_resp = client.get("/calendar")
+        week_resp = client.get("/calendar", params={"view": "week"})
+
+    assert 'class="calendar-view-btn is-active">월간' in month_resp.text
+    assert 'href="/calendar?view=week' in month_resp.text
+    assert 'class="calendar-view-btn is-active">주간' in week_resp.text
+    assert 'href="/calendar?view=month' in week_resp.text
+
+
+def test_calendar_week_shows_all_parties_without_truncation(client, monkeypatch):
+    many_parties = [
+        {
+            "message_id": f"day-{i}", "raid_name": f"레이드{i}", "difficulty": "노말", "proficiency": "숙련",
+            "scheduled_time": "2026/05/15 오후 9시 정각", "scheduled_datetime": "2026-05-15T21:00:00+09:00",
+            "status": "recruiting", "total_slots": 8, "slot_count": 1,
+        }
+        for i in range(5)
+    ]
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=many_parties))
+        resp = client.get("/calendar", params={"view": "week"})
+
+    assert resp.text.count("calendar-party-name") == 5

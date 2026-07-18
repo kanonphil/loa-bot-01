@@ -1,10 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
+{% macro render_parties(parties) %}
+{% for p in parties %}
+{% set inner %}
+  <span class="calendar-party-time">{{ p.time_label }}</span>
+  <span class="calendar-party-name">{{ p.raid_name }} {{ p.difficulty }}</span>
+  <span class="calendar-party-badge">{{ p.status_label }}</span>
+{% endset %}
+{% if p.is_active %}
+<a class="calendar-party status-{{ p.status }}" href="/parties/{{ p.message_id }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</a>
+{% else %}
+<div class="calendar-party status-{{ p.status }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</div>
+{% endif %}
+{% endfor %}
+{% endmacro %}
+
 <div class="page-content calendar-page">
-  <div class="calendar-header">
-    <a href="/calendar?year={{ prev_year }}&month={{ prev_month }}" class="calendar-nav-btn">&larr;</a>
-    <h1>{{ year }}년 {{ month }}월</h1>
-    <a href="/calendar?year={{ next_year }}&month={{ next_month }}" class="calendar-nav-btn">&rarr;</a>
+  <div class="calendar-toolbar">
+    <div class="calendar-header">
+      {% if view == "week" %}
+      <a href="/calendar?view=week&week_start={{ prev_week_start }}" class="calendar-nav-btn">&larr;</a>
+      <h1>{{ week_label }}</h1>
+      <a href="/calendar?view=week&week_start={{ next_week_start }}" class="calendar-nav-btn">&rarr;</a>
+      {% else %}
+      <a href="/calendar?view=month&year={{ prev_year }}&month={{ prev_month }}" class="calendar-nav-btn">&larr;</a>
+      <h1>{{ year }}년 {{ month }}월</h1>
+      <a href="/calendar?view=month&year={{ next_year }}&month={{ next_month }}" class="calendar-nav-btn">&rarr;</a>
+      {% endif %}
+    </div>
+    <div class="calendar-view-toggle">
+      <a href="/calendar?view=week&week_start={{ current_week_start if view == 'week' else week_toggle_start }}"
+         class="calendar-view-btn{% if view == 'week' %} is-active{% endif %}">주간</a>
+      <a href="/calendar?view=month&year={{ month_toggle_year if view == 'week' else year }}&month={{ month_toggle_month if view == 'week' else month }}"
+         class="calendar-view-btn{% if view == 'month' %} is-active{% endif %}">월간</a>
+    </div>
   </div>
 
   <div class="calendar-grid">
@@ -18,6 +47,16 @@
       <span class="calendar-weekday sat">토</span>
     </div>
 
+    {% if view == "week" %}
+    <div class="calendar-week calendar-week-single">
+      {% for d in week_days %}
+      <div class="calendar-cell{% if d.is_today %} today{% endif %}">
+        <span class="calendar-day-number">{{ d.month }}/{{ d.day }}</span>
+        <div class="calendar-party-list">{{ render_parties(d.parties) }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
     {% for week in weeks %}
     <div class="calendar-week">
       {% for day in week %}
@@ -27,28 +66,13 @@
       {% set day_parties = parties_by_day.get(day, []) %}
       <div class="calendar-cell{% if day == today_day %} today{% endif %}">
         <span class="calendar-day-number">{{ day }}</span>
-        <div class="calendar-party-list">
-          {% for p in day_parties[:3] %}
-          {% set inner %}
-            <span class="calendar-party-time">{{ p.time_label }}</span>
-            <span class="calendar-party-name">{{ p.raid_name }} {{ p.difficulty }}</span>
-            <span class="calendar-party-badge">{{ p.status_label }}</span>
-          {% endset %}
-          {% if p.is_active %}
-          <a class="calendar-party status-{{ p.status }}" href="/parties/{{ p.message_id }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</a>
-          {% else %}
-          <div class="calendar-party status-{{ p.status }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</div>
-          {% endif %}
-          {% endfor %}
-          {% if day_parties | length > 3 %}
-          <div class="calendar-party-more">+{{ day_parties | length - 3 }}개 더</div>
-          {% endif %}
-        </div>
+        <div class="calendar-party-list">{{ render_parties(day_parties) }}</div>
       </div>
       {% endif %}
       {% endfor %}
     </div>
     {% endfor %}
+    {% endif %}
   </div>
 </div>
 {% endblock %}

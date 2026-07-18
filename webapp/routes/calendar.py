@@ -1,5 +1,6 @@
-"""일정 캘린더 — 월별로 공대 일정을 보여준다. 취소된 파티는 봇 서버에서 완전
-삭제되므로 자연히 빠지고, 클리어된 파티(status=disbanded)는 행이 남아있어 그대로 보인다."""
+"""일정 캘린더 — 월간/주간 보기로 공대 일정을 보여준다. 취소된 파티는 봇 서버에서 완전
+삭제되므로 자연히 빠지고, 클리어된 파티(status=disbanded)는 행이 남아있어 그대로 보인다.
+칸은 그날 일정 개수에 맞춰 늘어나며(관리자 앱과 동일), 개수를 잘라서 숨기지 않는다."""
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request
@@ -45,14 +46,99 @@ def _build_weeks(year: int, month: int) -> list[list[int]]:
     return [cells[i : i + 7] for i in range(0, len(cells), 7)]
 
 
+def _week_start_of(dt: datetime) -> datetime:
+    """dt가 속한 주의 일요일(00:00) — 월 그리드와 동일하게 일요일 시작 기준."""
+    days_since_sunday = (dt.weekday() + 1) % 7
+    return (dt - timedelta(days=days_since_sunday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+
+def _make_party_entry(p: dict, dt: datetime) -> dict:
+    return {
+        **p,
+        "status_label": STATUS_LABELS.get(p["status"], p["status"]),
+        "time_label": dt.strftime("%H:%M"),
+        "is_active": p["status"] != "disbanded",
+    }
+
+
 @router.get("/calendar")
 async def calendar_view(
     request: Request,
+    view: str = "month",
     year: int | None = None,
     month: int | None = None,
+    week_start: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     now = datetime.now(KST)
+    if view not in ("month", "week"):
+        view = "month"
+
+    if view == "week":
+        try:
+            ref = datetime.fromisoformat(week_start).replace(tzinfo=KST) if week_start else now
+        except ValueError:
+            ref = now
+        w_start = _week_start_of(ref)
+        w_end = w_start + timedelta(days=7)
+
+        parties = await bot_client.get_calendar_parties(
+            config.DISCORD_GUILD_ID,
+            w_start.strftime("%Y-%m-%dT%H:%M:%S"),
+            w_end.strftime("%Y-%m-%dT%H:%M:%S"),
+        )
+
+        parties_by_date: dict[str, list[dict]] = {}
+        for p in parties:
+            dt = datetime.fromisoformat(p["scheduled_datetime"])
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=KST)
+            key = dt.strftime("%Y-%m-%d")
+            parties_by_date.setdefault(key, []).append(_make_party_entry(p, dt))
+
+        today_key = now.strftime("%Y-%m-%d")
+        week_days = []
+        for i in range(7):
+            d = w_start + timedelta(days=i)
+            key = d.strftime("%Y-%m-%d")
+            week_days.append(
+                {
+                    "date": key,
+                    "day": d.day,
+                    "month": d.month,
+                    "is_today": key == today_key,
+                    "parties": parties_by_date.get(key, []),
+                }
+            )
+
+        w_last = w_end - timedelta(days=1)
+        week_label = (
+            f"{w_start.year}년 {w_start.month}월 {w_start.day}일 – "
+            f"{w_last.month}월 {w_last.day}일"
+        )
+
+        return templates.TemplateResponse(
+            request,
+            "calendar.html",
+            {
+                "user": user,
+                "active": "calendar",
+                "view": "week",
+                "week_days": week_days,
+                "week_label": week_label,
+                "prev_week_start": (w_start - timedelta(days=7)).strftime("%Y-%m-%d"),
+                "next_week_start": (w_start + timedelta(days=7)).strftime("%Y-%m-%d"),
+                # "월간" 탭으로 전환할 때 이 주가 속한 달로 이동시키기 위함
+                "month_toggle_year": w_start.year,
+                "month_toggle_month": w_start.month,
+                # "주간" 탭 자체 링크(현재 주 유지)에도 필요
+                "current_week_start": w_start.strftime("%Y-%m-%d"),
+            },
+        )
+
+    # ── 월간 보기(기본) ──────────────────────────────────
     y = year or now.year
     m = month or now.month
     if m < 1 or m > 12:
@@ -70,14 +156,7 @@ async def calendar_view(
         dt = datetime.fromisoformat(p["scheduled_datetime"])
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=KST)
-        parties_by_day.setdefault(dt.day, []).append(
-            {
-                **p,
-                "status_label": STATUS_LABELS.get(p["status"], p["status"]),
-                "time_label": dt.strftime("%H:%M"),
-                "is_active": p["status"] != "disbanded",
-            }
-        )
+        parties_by_day.setdefault(dt.day, []).append(_make_party_entry(p, dt))
 
     prev_last = first - timedelta(days=1)
     today = now.date()
@@ -88,6 +167,7 @@ async def calendar_view(
         {
             "user": user,
             "active": "calendar",
+            "view": "month",
             "year": y,
             "month": m,
             "weeks": _build_weeks(y, m),
@@ -97,5 +177,7 @@ async def calendar_view(
             "prev_month": prev_last.month,
             "next_year": next_first.year,
             "next_month": next_first.month,
+            # "주간" 탭으로 전환할 때 이 달의 1일이 속한 주로 이동시키기 위함
+            "week_toggle_start": first.strftime("%Y-%m-%d"),
         },
     )

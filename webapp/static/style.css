@@ -1666,12 +1666,49 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   max-width: 960px;
 }
 
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 20px;
+}
+
 .calendar-header {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 20px;
-  margin-bottom: 20px;
+}
+
+.calendar-view-toggle {
+  position: absolute;
+  right: 0;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+}
+
+.calendar-view-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.calendar-view-btn:hover {
+  color: var(--text);
+}
+
+.calendar-view-btn.is-active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .calendar-header h1 {
@@ -1730,22 +1767,23 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 .calendar-cell {
-  height: 112px;
+  min-height: 112px;
   padding: 6px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 3px;
-  overflow: hidden;
 }
 
 .calendar-party-list {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-height: 0;
-  overflow: hidden;
+}
+
+.calendar-week-single .calendar-cell {
+  min-height: 160px;
 }
 
 .calendar-week .calendar-cell:last-child {
@@ -1797,13 +1835,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 a.calendar-party:hover {
   border-color: var(--accent);
   background: var(--accent-dim);
-}
-
-.calendar-party-more {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: var(--text-muted);
-  padding: 0 5px;
 }
 
 .calendar-party-time {
@@ -4088,8 +4119,17 @@ a.rank-row:hover {
   }
 
   .calendar-cell {
-    height: 72px;
+    min-height: 72px;
     padding: 4px;
+  }
+
+  .calendar-toolbar {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .calendar-view-toggle {
+    position: static;
   }
 
   .calendar-weekday,
