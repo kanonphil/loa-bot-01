@@ -742,19 +742,31 @@ async def get_expedition_ranking(metric: str, limit: int = 100) -> list[dict]:
         db.row_factory = aiosqlite.Row
         if metric == "weekly_clears":
             week = get_week_key()
+            # 원정대(discord_id) 단위로 합산 — 캐릭터마다 따로 줄을 세우면 같은 사람이
+            # 여러 캐릭터로 여러 번 등장해 "누가 많이 클리어했는지"를 한눈에 보기 어려웠다.
+            # 표시용 이름/직업은 그 원정대의 대표 캐릭터(최초 등록 캐릭터 — 초대 대상자
+            # 목록(ManageView._handle_invite)과 동일한 기준)를 쓴다.
             # user_characters와 INNER JOIN — 게스트 초대(API 키 미등록자)로 참여해
             # 클리어된 raid_completions 행은 user_characters에 매칭되는 캐릭터가 없어
             # LEFT JOIN이면 class/item_level이 NULL인 채로 랭킹에 노출됐다. "원정대
             # 랭킹"은 실제 등록된 길드원 캐릭터만 보여줘야 하므로 INNER JOIN으로 제외한다.
             cur = await db.execute(
-                "SELECT c.discord_id, c.character_name, uc.character_class, uc.item_level, "
-                "uc.combat_power, COUNT(*) AS value "
+                "SELECT c.discord_id, "
+                "  (SELECT uc2.character_name FROM user_characters uc2 "
+                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS character_name, "
+                "  (SELECT uc2.character_class FROM user_characters uc2 "
+                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS character_class, "
+                "  (SELECT uc2.item_level FROM user_characters uc2 "
+                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS item_level, "
+                "  (SELECT uc2.combat_power FROM user_characters uc2 "
+                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS combat_power, "
+                "  COUNT(*) AS value "
                 "FROM raid_completions c "
                 "JOIN user_characters uc "
                 "  ON uc.discord_id=c.discord_id AND uc.character_name=c.character_name "
                 "WHERE c.week_key=? "
-                "GROUP BY c.discord_id, c.character_name "
-                "ORDER BY value DESC, uc.item_level DESC "
+                "GROUP BY c.discord_id "
+                "ORDER BY value DESC "
                 "LIMIT ?",
                 (week, limit),
             )

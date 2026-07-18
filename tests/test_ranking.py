@@ -58,9 +58,28 @@ def test_ranking_by_item_level_desc(seeded):
 
 def test_ranking_by_weekly_clears(seeded):
     rows = asyncio.run(db.get_expedition_ranking("weekly_clears"))
-    # 클리어 기록이 있는 캐릭터만, 많은 순
+    # 원정대(discord_id) 단위 합산 — 이 픽스처는 원정대당 클리어한 캐릭터가 하나뿐이라
+    # 캐릭터 단위였을 때와 결과가 같아 보인다(대표 캐릭터 = 발키리/바드).
     assert [(r["character_name"], r["value"]) for r in rows] == [("발키리", 2), ("바드", 1)]
     assert rows[0]["character_class"] == "홀리나이트"  # user_characters와 조인돼 직업도 나온다
+    assert rows[0]["discord_id"] == "111"
+
+
+def test_ranking_weekly_clears_aggregates_multiple_characters_per_expedition(seeded):
+    """개편: 같은 원정대(discord_id)의 여러 캐릭터가 각각 클리어해도 캐릭터별로 줄을
+    나누지 않고 원정대 하나로 합산하며, 표시 이름/직업은 대표 캐릭터(최초 등록)를
+    쓴다 — 캐릭터 단위로 흩어져 보이던 이전 방식 대신 "누가 가장 많이 클리어했는지"를
+    한눈에 보여주기 위한 개편."""
+    # 111의 두 번째 캐릭터(워로드부캐)도 이번 주 1건 클리어를 추가로 기록
+    asyncio.run(db.toggle_completion("111", "워로드부캐", "카양겔", "하드"))
+
+    rows = asyncio.run(db.get_expedition_ranking("weekly_clears"))
+    by_discord = {r["discord_id"]: r for r in rows}
+
+    assert len(rows) == 2  # 111, 222 각각 한 줄 — 워로드부캐가 별도 줄로 나오지 않는다
+    assert by_discord["111"]["value"] == 3  # 발키리 2건 + 워로드부캐 1건 합산
+    assert by_discord["111"]["character_name"] == "발키리"  # 대표(최초 등록) 캐릭터로 표시
+    assert by_discord["222"]["value"] == 1
 
 
 def test_ranking_excludes_characters_without_metric(seeded):

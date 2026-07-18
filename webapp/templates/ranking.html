@@ -2,7 +2,10 @@
 {% block content %}
 <div class="page-content">
 <h1>원정대 랭킹</h1>
-<p class="rank-caption">전체 원정대(모든 길드원의 모든 캐릭터) 기준입니다. 전투력은 원정대 관리에서 "동기화"를 누르거나, 캐릭터 상세에서 "동기화"를 누르거나, 매일 자동 동기화될 때 갱신됩니다.</p>
+<p class="rank-caption">
+  {% if metric == "weekly_clears" %}전체 원정대(길드원) 기준으로, 원정대의 모든 캐릭터가 이번 주 클리어한 횟수를 합산합니다. 이름/직업은 원정대의 대표 캐릭터(최초 등록한 캐릭터) 기준입니다.
+  {% else %}전체 원정대(모든 길드원의 모든 캐릭터) 기준입니다. 전투력은 원정대 관리에서 "동기화"를 누르거나, 캐릭터 상세에서 "동기화"를 누르거나, 매일 자동 동기화될 때 갱신됩니다.{% endif %}
+</p>
 
 <div class="rank-tabs">
   {% for m in metrics %}
@@ -23,7 +26,7 @@
 <div class="rank-table" role="table">
   <div class="rank-row rank-head" role="row">
     <span class="rank-col-rank">#</span>
-    <span class="rank-col-name">캐릭터</span>
+    <span class="rank-col-name">{% if metric == "weekly_clears" %}대표 캐릭터{% else %}캐릭터{% endif %}</span>
     <span class="rank-col-class">직업</span>
     <span class="rank-col-value">{{ metric_labels[metric] }}</span>
   </div>
