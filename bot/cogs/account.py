@@ -4,7 +4,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Modal, TextInput, View, Button
+from discord.ui import Modal, TextInput, View, Button, Select
 
 import bot.database.manager as db
 from bot.cogs.guide import send_guide

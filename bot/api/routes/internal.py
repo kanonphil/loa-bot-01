@@ -163,7 +163,7 @@ async def create_party(body: CreatePartyBody):
   from datetime import datetime
   from bot.api import bot_ref
   from bot.data.raids import RAIDS, PROFICIENCY, get_difficulty_info
-  from bot.ui.views import KST, _create_party_core, _format_schedule
+  from bot.ui.views import KST, _create_party_core, _format_schedule, validate_party_schedule
 
   api_key = await db.get_user_api_key(body.discord_id)
   if not api_key:
@@ -185,6 +185,13 @@ async def create_party(body: CreatePartyBody):
     dt = datetime.fromisoformat(body.scheduled_datetime).replace(tzinfo=KST)
   except ValueError:
     return {"success": False, "reason": "일정 형식이 올바르지 않습니다."}
+
+  # 디스코드 모달(ScheduleAndMemoModal)과 동일한 검증 — 과거 날짜 거부 + 익스트림
+  # 레이드 운영 기간 확인. 이전에는 웹 경로에만 이 검증이 빠져 있어 과거 일정이나
+  # 운영 기간 밖의 익스트림 공대를 만들 수 있었다.
+  error = validate_party_schedule(dt, RAIDS.get(body.raid_name, {}))
+  if error:
+    return {"success": False, "reason": error}
 
   bot = bot_ref.get_bot()
   if not bot:
@@ -243,9 +250,10 @@ class JoinPartyBody(BaseModel):
 
 @router.post("/parties/{message_id}/join")
 async def join_party(message_id: str, body: JoinPartyBody):
+  import discord as _discord
   from bot.api import bot_ref
   from bot.data.raids import SUPPORT_CLASSES
-  from bot.ui.views import _refresh_party_embed_with_reserved
+  from bot.ui.views import _party_url, _refresh_party_embed_with_reserved, _send_dm
 
   result = await db.get_party_join_eligibility(message_id, body.discord_id)
   if not result["can_join"]:
@@ -277,10 +285,31 @@ async def join_party(message_id: str, body: JoinPartyBody):
   )
 
   if success:
+    # 디스코드 참여하기 버튼(bot/ui/views.py _auto_join_dps, RoleSelectView)과 동일한
+    # 후처리 — 이전에는 웹 참여가 waitlist를 안 지워서 이미 참여한 사람에게 나중에
+    # 빈자리 알림 DM이 갈 수 있었고, 만석 공지·리더 DM도 전혀 발송되지 않았다.
+    await db.remove_waitlist(message_id, body.discord_id)
     bot = bot_ref.get_bot()
     party = await db.get_party(message_id)
     if bot and party:
       await _refresh_party_embed_with_reserved(bot, party)
+      if party["status"] == "full":
+        try:
+          slots = await db.get_party_slots(message_id)
+          channel = bot.get_channel(int(party["channel_id"])) or await bot.fetch_channel(int(party["channel_id"]))
+          mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
+          await channel.send(
+            f"🎉 **{party['raid_name']} {party['difficulty']}** 파티가 완성되었습니다!\n{mentions}"
+          )
+        except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
+          pass
+      if party["leader_id"] != body.discord_id:
+        raid_title = f"{party['raid_name']} {party['difficulty']}"
+        role_icon = "🛡️" if role == "support" else "⚔️"
+        await _send_dm(
+          bot, party["leader_id"],
+          f"{role_icon} **{raid_title}** 공대에 **{body.character_name}**({char_info['class']})이(가) 참여했습니다!\n{_party_url(party)}",
+        )
 
   return {"success": success, "slot_number": slot_number, "message": message}
 
@@ -605,7 +634,14 @@ class RemoveCharacterBody(BaseModel):
 
 @router.post("/characters/remove")
 async def remove_character(body: RemoveCharacterBody):
-  removed = await db.remove_character(body.discord_id, body.character_name)
+  from bot.api import bot_ref
+  from bot.services.expedition import remove_character_and_leave_parties
+
+  # 삭제 + 참여 중이던 활성 공대에서 자동으로 나가기까지 처리하는 공용 로직 —
+  # Discord /캐릭터삭제, RemoveCharacterView와 동일한 코드를 사용한다.
+  removed = await remove_character_and_leave_parties(
+    bot_ref.get_bot(), body.discord_id, body.character_name
+  )
   if not removed:
     return {"success": False, "reason": f"{body.character_name}은(는) 등록된 캐릭터가 아닙니다."}
   return {"success": True}

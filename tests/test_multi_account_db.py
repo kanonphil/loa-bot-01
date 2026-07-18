@@ -152,3 +152,43 @@ def test_delete_user_removes_all_registered_accounts(clean_db):
     assert asyncio.run(db.get_user_api_key("111")) is None
     assert asyncio.run(db.get_user_characters("111")) == []
     assert asyncio.run(db.user_exists("111")) is False
+
+
+def test_delete_user_cleans_up_related_party_and_raid_data(clean_db):
+    """회귀 테스트: delete_user가 party_slots/party_waitlist/party_invites/
+    raid_subscriptions/character_raid_selection(_state)까지 정리해야 한다 —
+    이전에는 이 테이블들이 안 지워져서 유저를 삭제해도 활성 공대 화면에 유령
+    파티원이 계속 표시되거나 고아 row가 남을 수 있었다."""
+    asyncio.run(db.add_user_api_key("111", "발키리", "key-a"))
+    asyncio.run(db.add_character("111", "발키리"))
+    asyncio.run(
+        db.create_party(
+            message_id="700", channel_id="600", guild_id="1", leader_id="222",
+            raid_name="아르모체(4막)", difficulty="노말", proficiency="숙련",
+            scheduled_time="05/20 20:00", scheduled_datetime="2026-05-20T20:00:00+09:00",
+            total_slots=8, min_level=1700,
+        )
+    )
+    asyncio.run(db.auto_assign_slot("700", "111", "발키리", "홀리나이트", "support", 8))
+    asyncio.run(
+        db.create_party(
+            message_id="701", channel_id="601", guild_id="1", leader_id="222",
+            raid_name="종막", difficulty="노말", proficiency="숙련",
+            scheduled_time="05/21 20:00", scheduled_datetime="2026-05-21T20:00:00+09:00",
+            total_slots=1, min_level=1700,
+        )
+    )
+    asyncio.run(db.add_waitlist("701", "111"))
+    asyncio.run(db.create_invite("701", "111", 1))
+    asyncio.run(db.subscribe_raid("111", "세르카", "노말"))
+    asyncio.run(db.set_selected_raids("111", "발키리", ["세르카"]))
+
+    asyncio.run(db.delete_user("111"))
+
+    slots = asyncio.run(db.get_party_slots("700"))
+    assert not any(s["discord_id"] == "111" for s in slots)
+    assert asyncio.run(db.get_waitlist("701")) == []
+    assert asyncio.run(db.get_reserved_slots("701")) == {}
+    assert asyncio.run(db.get_user_subscriptions("111")) == []
+    selected = asyncio.run(db.get_selected_raids("111", "발키리"))
+    assert selected is None  # customized 상태 자체가 지워져야 한다

@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 import bot.database.manager as db
 import bot.api.lostark as loa
 from bot.services.expedition import sync_all_accounts_daily
-from bot.ui.views import PartyView, _send_dm
+from bot.ui.views import PartyView, _refresh_party_embed_with_reserved, _send_dm
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
 
@@ -41,6 +41,14 @@ class LoABot(commands.Bot):
     async def setup_hook(self) -> None:
         await db.init_db()
         await raids_module.reload()
+        # PartyView 버튼(party:join/leave/waitlist/manage/switch)을 custom_id 기준으로
+        # 전역 등록 — timeout=None이라 가능하다. _restore_party_views가 재시작 시 활성
+        # 파티 메시지를 일일이 edit해서 View를 재연결하는데, 그 edit이 실패(레이트리밋,
+        # 일시적 네트워크 오류 등)한 메시지의 버튼은 살아있는 View에 안 묶여서 죽는다.
+        # 이 등록은 total_slots/closed 값과 무관하게(실제 검증은 핸들러가 매번 DB에서
+        # 다시 조회) 모든 파티 메시지의 버튼 클릭을 항상 받아낼 수 있게 하는 이중
+        # 안전장치 — _restore_party_views의 embed 최신화 자체는 계속 그대로 수행한다.
+        self.add_view(PartyView(total_slots=8))
         for cog in COGS:
             await self.load_extension(cog)
         await self.tree.sync()
@@ -93,19 +101,28 @@ class LoABot(commands.Bot):
         now_iso = now.isoformat()
 
         # 시작 시각 알림 (채널 멘션)
+        # 파티 하나에서 채널을 못 찾거나 전송이 실패해도(아카이브된 스레드, 권한 문제 등)
+        # 이 루프 자체가 죽어서 이후 처리(주간 정리, 게시판 리마인더)까지 멈추지 않도록
+        # 각 파티를 개별적으로 감싼다. get_channel만 쓰면 캐시에 없는(아카이브된) 스레드는
+        # 알림이 영영 안 나가고 notified도 안 찍혀 매 30초 재시도만 반복하므로
+        # fetch_channel fallback도 함께 추가.
         for party in await db.get_parties_due_notification(now_iso):
-            channel = self.get_channel(int(party["channel_id"]))
-            if channel is None:
-                continue
-            slots      = await db.get_party_slots(party["message_id"])
-            mentions   = " ".join(f"<@{s['discord_id']}>" for s in slots)
-            raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
-            leader_mention = f"<@{party['leader_id']}>"
-            await channel.send(
-                f"⏰ **{raid_title}** 공격대 시작 시간입니다!\n"
-                f"{mentions or leader_mention}"
-            )
-            await db.mark_notified(party["message_id"])
+            try:
+                channel = self.get_channel(int(party["channel_id"]))
+                if channel is None:
+                    channel = await self.fetch_channel(int(party["channel_id"]))
+                slots      = await db.get_party_slots(party["message_id"])
+                mentions   = " ".join(f"<@{s['discord_id']}>" for s in slots)
+                raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
+                leader_mention = f"<@{party['leader_id']}>"
+                await channel.send(
+                    f"⏰ **{raid_title}** 공격대 시작 시간입니다!\n"
+                    f"{mentions or leader_mention}"
+                )
+                await db.mark_notified(party["message_id"])
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                print(f"[시작 알림] 발송 실패 (message_id={party.get('message_id')}): {type(e).__name__}: {e}")
+                await db.mark_notified(party["message_id"])
 
         # 게시판 이벤트 참여자 리마인더 (10분 전 / 시작 시각) — DM 발송.
         # 파티 하나 실패가 나머지 게시글 처리를 막지 않도록 개별로 감싼다.
@@ -132,6 +149,19 @@ class LoABot(commands.Bot):
                 await db.mark_board_reminder_sent(post["id"], "start")
             except Exception as e:
                 print(f"[게시판 리마인더] 시작 알림 처리 실패 (post_id={post.get('id')}): {type(e).__name__}: {e}")
+
+        # 초대(예약 슬롯) 만료 정리 — InviteResponseView의 1시간 timeout은 메모리(뷰
+        # 인스턴스)에만 있어서 봇이 재시작되면 사라진다. 그러면 party_invites 행이
+        # 영구히 남아 슬롯 하나가 계속 "예약중"으로 막히는 문제가 있었다. DB의
+        # invited_at 기준으로 1시간 지난 초대를 여기서 주기적으로 정리한다.
+        for invite in await db.get_expired_invites(hours=1):
+            try:
+                await db.delete_invite(invite["message_id"], invite["discord_id"])
+                party = await db.get_party(invite["message_id"])
+                if party and party["status"] != "disbanded":
+                    await _refresh_party_embed_with_reserved(self, party)
+            except Exception as e:
+                print(f"[초대 만료] 정리 실패 (message_id={invite.get('message_id')}): {type(e).__name__}: {e}")
 
         # 익스트림 레이드 운영 기간 만료 → 알림만 발송, 파티는 유지
         # embed/버튼/스레드 잠금 없음 — 공대장이 직접 클리어/해체 처리하도록
@@ -178,7 +208,10 @@ class LoABot(commands.Bot):
             except (discord.NotFound, discord.Forbidden):
                 pass
             raid_title = f"{party['raid_name']} {party['difficulty']}"
-            await thread.send(f"🔒 **{raid_title}** 공대 모집이 자동 종료되었습니다.")
+            try:
+                await thread.send(f"🔒 **{raid_title}** 공대 모집이 자동 종료되었습니다.")
+            except discord.HTTPException:
+                pass
             try:
                 await thread.edit(archived=True, locked=True)
             except discord.HTTPException:

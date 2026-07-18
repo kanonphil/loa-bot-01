@@ -7,7 +7,11 @@ from datetime import datetime, timezone, timedelta
 from bot.data.raids import RAIDS, get_applicable_raids, get_difficulty_info, SUPPORT_CLASSES, PROFICIENCY
 import bot.database.manager as db
 import bot.api.lostark as loa
-from bot.services.expedition import register_character_auto_detect, sync_characters_for_discord_id
+from bot.services.expedition import (
+    register_character_auto_detect,
+    remove_character_and_leave_parties,
+    sync_characters_for_discord_id,
+)
 from bot.services.guest import lookup_guest_character
 
 KST = timezone(timedelta(hours=9))
@@ -18,14 +22,18 @@ KST = timezone(timedelta(hours=9))
 # ─────────────────────────────────────────────────────
 
 async def _leave_party_core(bot: discord.Client, message_id: str, discord_id: str) -> tuple[bool, str | None]:
-    """파티 나가기 핵심 로직 — 디스코드 "나가기" 버튼과 웹 API가 공유.
-    리더가 나가면 다음 파티원에게 자동 위임하고, 아무도 없으면 파티를 해체한다.
+    """파티 나가기 핵심 로직 — 디스코드 "나가기" 버튼(PartyView._handle_leave)과 웹 API가
+    공유. 리더가 나가면 다음 파티원에게 자동 위임(채널 공지 + 새 파티장 DM)하고, 아무도
+    없으면 파티를 해체(채널 공지 + 스레드 아카이브/잠금)한다. 그 외의 경우 만석이었다가
+    빈자리가 생기면 채널 공지 + 대기열(waitlist) 통지까지 처리한다 — 이전에는 웹 API로
+    나가면 embed만 갱신되고 이 부수 효과들은 전혀 발생하지 않았다.
     반환: (success, 실패 사유 — 성공이면 None)."""
     party = await db.get_party(message_id)
-    if not party:
+    if not party or party["status"] == "disbanded":
         return False, "파티를 찾을 수 없습니다."
 
     is_leader = party["leader_id"] == discord_id
+    was_full  = party["status"] == "full"
     removed = await db.leave_slot(message_id, discord_id)
     if not removed:
         return False, "파티에 참여하지 않았습니다."
@@ -33,28 +41,73 @@ async def _leave_party_core(bot: discord.Client, message_id: str, discord_id: st
     if is_leader:
         remaining = await db.get_party_slots(message_id)
         if remaining:
-            await db.transfer_leader(message_id, remaining[0]["discord_id"])
-        else:
-            await db.disband_party(message_id)
+            new_leader = remaining[0]["discord_id"]
+            await db.transfer_leader(message_id, new_leader)
+            updated_party = await db.get_party(message_id)
+            if bot and updated_party:
+                await _refresh_party_embed_and_announce(bot, updated_party, was_full=was_full)
+                try:
+                    channel = bot.get_channel(int(updated_party["channel_id"]))
+                    if channel is None:
+                        channel = await bot.fetch_channel(int(updated_party["channel_id"]))
+                    await channel.send(
+                        f"👑 **파티장 변경** — <@{new_leader}>님이 새 파티장이 되었습니다."
+                    )
+                except discord.HTTPException:
+                    pass
+                await _send_dm(
+                    bot, new_leader,
+                    f"👑 **{updated_party['raid_name']} {updated_party['difficulty']}** "
+                    f"공대의 파티장이 되었습니다!\n{_party_url(updated_party)}",
+                )
+            return True, None
 
-    updated_party = await db.get_party(message_id)
-    if bot and updated_party:
-        if updated_party["status"] == "disbanded":
+        await db.disband_party(message_id)
+        if bot:
             try:
                 from bot.ui.embeds import party_embed as _party_embed
 
-                channel = bot.get_channel(int(updated_party["channel_id"]))
+                disbanded_party = {**party, "status": "disbanded"}
+                channel = bot.get_channel(int(party["channel_id"]))
                 if channel is None:
-                    channel = await bot.fetch_channel(int(updated_party["channel_id"]))
-                slots = await db.get_party_slots(message_id)
+                    channel = await bot.fetch_channel(int(party["channel_id"]))
                 msg = await channel.fetch_message(int(message_id))
-                await msg.edit(embed=_party_embed(updated_party, slots), view=None)
+                await msg.edit(embed=_party_embed(disbanded_party, []), view=None)
+                raid_title = f"{party['raid_name']} {party['difficulty']}"
+                await channel.send(f"🔒 **{raid_title}** 파티원이 모두 나가 공대가 종료되었습니다.")
+                await channel.edit(archived=True, locked=True)
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 pass
-        else:
-            await _refresh_party_embed_with_reserved(bot, updated_party)
+        return True, None
+
+    updated_party = await db.get_party(message_id)
+    if bot and updated_party:
+        await _refresh_party_embed_and_announce(bot, updated_party, was_full=was_full)
 
     return True, None
+
+
+async def _refresh_party_embed_and_announce(
+    client: discord.Client, party: dict, *, was_full: bool = False,
+) -> None:
+    """embed 갱신(_refresh_party_embed_with_reserved) + 만석이었다가 빈자리가 생긴
+    경우의 채널 공지·대기열 통지 — PartyView._refresh_party와 동등한 부수 효과를
+    interaction(discord.Message) 없이 bot+party만으로 수행한다."""
+    await _refresh_party_embed_with_reserved(client, party)
+    if was_full and party["status"] == "recruiting":
+        try:
+            channel = client.get_channel(int(party["channel_id"]))
+            if channel is None:
+                channel = await client.fetch_channel(int(party["channel_id"]))
+            slots = await db.get_party_slots(party["message_id"])
+            raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
+            await channel.send(
+                f"📢 **{raid_title}** 파티에 빈 자리가 생겼습니다! "
+                f"`{len(slots)}/{party['total_slots']}`"
+            )
+        except discord.HTTPException:
+            pass
+        await _notify_waitlist(client, party)
 
 
 async def _switch_character_core(
@@ -262,34 +315,35 @@ class InviteResponseView(View):
                 GuestCharacterNameModal(self.message_id, party, discord_id)
             )
             return
-        registered = await db.get_user_characters(discord_id)
-        if not registered:
-            await interaction.response.edit_message(content="❌ `/원정대`에서 캐릭터를 먼저 등록해주세요.", view=None)
+        # 참여 규칙(레벨/골드완료/같은 레이드 타 공대 중복/익스트림 주1회/모집 상태)은
+        # 일반 "참여하기" 버튼과 동일한 단일 로직(db.get_party_join_eligibility)으로
+        # 검증한다 — 이전에는 여기서 최소 레벨만 확인해서, 초대를 통하면 이 규칙들을
+        # 전부 우회해 참여할 수 있는 구멍이 있었다.
+        result = await db.get_party_join_eligibility(self.message_id, discord_id)
+        if not result["can_join"]:
+            await interaction.response.edit_message(content=f"❌ {result['reason']}", view=None)
             self.stop()
             return
-        cached    = await db.get_cached_characters(discord_id, max_age_hours=99999)
-        cache_map = {c["character_name"]: c for c in cached}
-        qualifying = [
-            {"name": n, "level": cache_map[n]["item_level"], "class": cache_map[n]["character_class"]}
-            for n in registered
-            if n in cache_map and cache_map[n]["item_level"] and cache_map[n]["item_level"] >= party["min_level"]
-        ]
+        qualifying = result["qualifying"]
         if not qualifying:
-            # 캐시가 전혀 없는 캐릭터가 있으면 원인을 구체적으로 안내
-            no_cache = [n for n in registered if n not in cache_map or not cache_map[n].get("item_level")]
-            if no_cache:
-                await interaction.response.edit_message(
-                    content=(
-                        f"❌ 캐릭터 정보가 아직 로드되지 않았습니다.\n"
-                        f"`/원정대` 명령어를 한 번 실행한 후 다시 시도해주세요."
-                    ),
-                    view=None,
-                )
-            else:
-                await interaction.response.edit_message(
-                    content=f"❌ 최소 아이템 레벨 **{party['min_level']}** 이상의 캐릭터가 없습니다.",
-                    view=None,
-                )
+            lines: list[str] = []
+            if result["gold_done"]:
+                names = ', '.join(f"**{n}**" for n in result["gold_done"])
+                lines.append(f"🏆 이번 주 골드 완료: {names}")
+            if result["in_other_party"]:
+                names = ', '.join(f"**{n}**" for n in result["in_other_party"])
+                lines.append(f"⚔️ 다른 공대 참여 중: {names}")
+            if result["level_too_low"]:
+                low = ', '.join(f"**{c['name']}** ({c['level']:.0f})" for c in result["level_too_low"])
+                lines.append(f"📉 레벨 미달 (최소 {result['min_level']}): {low}")
+            if result["no_cache"]:
+                names = ', '.join(f"**{n}**" for n in result["no_cache"])
+                lines.append(f"❓ 레벨 미확인: {names} — `/원정대`에서 동기화 후 다시 시도해주세요.")
+            detail = "\n".join(lines) if lines else "(원인 불명)"
+            await interaction.response.edit_message(
+                content=f"❌ **{party['raid_name']} {party['difficulty']}** 에 참여 가능한 캐릭터가 없습니다.\n{detail}",
+                view=None,
+            )
             self.stop()
             return
         if len(qualifying) == 1:
@@ -609,6 +663,39 @@ def _parse_schedule(date_str: str, time_str: str) -> datetime | None:
         return None
 
 
+def validate_party_schedule(dt: datetime, raid_info: dict) -> str | None:
+    """공대 일정(dt)이 유효한지 검증 — 과거 날짜 거부 + 익스트림 레이드 운영 기간 확인.
+    디스코드 ScheduleAndMemoModal과 웹 공대 개설 API(internal.create_party)가 공유하는
+    단일 검증 로직 — 웹 경로가 이 검증을 하지 않아 과거 일정·운영 기간 밖 익스트림
+    공대를 만들 수 있던 버그가 있었다.
+    반환: 문제 없으면 None, 있으면 사용자에게 보여줄 에러 메시지."""
+    if dt < datetime.now(KST):
+        return "❌ 과거 날짜로는 설정할 수 없습니다."
+
+    if raid_info.get("is_extreme"):
+        avail_from  = raid_info.get("available_from")
+        avail_until = raid_info.get("available_until")
+        if avail_from:
+            try:
+                from_dt = datetime.fromisoformat(avail_from)
+                if dt < from_dt:
+                    return (
+                        f"❌ 이 익스트림 레이드는 **{from_dt.month}/{from_dt.day}**부터 진행 가능합니다.\n"
+                        f"공대 모집은 가능하지만 일정은 그 이후로 잡아주세요."
+                    )
+            except ValueError:
+                pass
+        if avail_until:
+            try:
+                until_dt = datetime.fromisoformat(avail_until)
+                if dt > until_dt:
+                    return f"❌ 이 익스트림 레이드는 **{until_dt.month}/{until_dt.day}**까지 진행 가능합니다."
+            except ValueError:
+                pass
+
+    return None
+
+
 def _is_extreme_expired(info: dict) -> bool:
     """익스트림 레이드의 운영 기간이 지났으면 True."""
     if not info.get("is_extreme"):
@@ -840,7 +927,7 @@ class RemoveCharacterView(View):
 
     async def _on_select(self, interaction: discord.Interaction) -> None:
         name    = interaction.data["values"][0]
-        removed = await db.remove_character(self.discord_id, name)
+        removed = await remove_character_and_leave_parties(interaction.client, self.discord_id, name)
         msg     = f"🗑️ **{name}** 삭제 완료." if removed else "캐릭터를 찾을 수 없습니다."
         await interaction.response.edit_message(content=msg, view=None)
         if removed and self.expedition_message:
@@ -1080,39 +1167,10 @@ class ScheduleAndMemoModal(Modal, title="일정 및 메모 설정"):
                 ephemeral=True,
             )
             return
-        if dt < datetime.now(KST):
-            await interaction.response.send_message(
-                "❌ 과거 날짜로는 설정할 수 없습니다.", ephemeral=True
-            )
+        error = validate_party_schedule(dt, self.raid_info)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
             return
-
-        # 익스트림 레이드 기간 검증 — 파티 일정이 운영 기간 안에 있어야 함
-        if self.raid_info.get("is_extreme"):
-            avail_from  = self.raid_info.get("available_from")
-            avail_until = self.raid_info.get("available_until")
-            if avail_from:
-                try:
-                    from_dt = datetime.fromisoformat(avail_from)
-                    if dt < from_dt:
-                        await interaction.response.send_message(
-                            f"❌ 이 익스트림 레이드는 **{from_dt.month}/{from_dt.day}**부터 진행 가능합니다.\n"
-                            f"공대 모집은 가능하지만 일정은 그 이후로 잡아주세요.",
-                            ephemeral=True,
-                        )
-                        return
-                except ValueError:
-                    pass
-            if avail_until:
-                try:
-                    until_dt = datetime.fromisoformat(avail_until)
-                    if dt > until_dt:
-                        await interaction.response.send_message(
-                            f"❌ 이 익스트림 레이드는 **{until_dt.month}/{until_dt.day}**까지 진행 가능합니다.",
-                            ephemeral=True,
-                        )
-                        return
-                except ValueError:
-                    pass
 
         self.recruit_view.scheduled_time     = _format_schedule(dt)
         self.recruit_view.scheduled_datetime = dt.isoformat()
@@ -1433,14 +1491,17 @@ async def _auto_join_dps(
         # fetch_message가 조용히 실패해 embed가 안 갱신되는 버그가 있었다(리더는
         # DB엔 정상 참여됐지만 화면엔 안 보이다가, 다른 사람이 스레드 안에서 참여
         # 버튼을 눌러야 그제서야 함께 나타남).
-        try:
-            channel = interaction.client.get_channel(int(party_info["channel_id"]))
-            if channel is None:
-                channel = await interaction.client.fetch_channel(int(party_info["channel_id"]))
-            msg = await channel.fetch_message(int(message_id))
-            await party_view._refresh_party(msg)
-        except discord.HTTPException:
-            pass
+        # party_info가 None일 수 있다(참여 직후 파티가 곧바로 purge된 극히 드문
+        # 경쟁 상황) — 그 경우 embed 갱신과 리더 DM 모두 건너뛴다.
+        if party_info:
+            try:
+                channel = interaction.client.get_channel(int(party_info["channel_id"]))
+                if channel is None:
+                    channel = await interaction.client.fetch_channel(int(party_info["channel_id"]))
+                msg = await channel.fetch_message(int(message_id))
+                await party_view._refresh_party(msg)
+            except discord.HTTPException:
+                pass
         if party_info and party_info["leader_id"] != discord_id:
             raid_title = f"{party_info['raid_name']} {party_info['difficulty']}"
             link = _party_url(party_info)

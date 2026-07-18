@@ -132,6 +132,29 @@ async def register_character_auto_detect(
     }
 
 
+async def remove_character_and_leave_parties(bot, discord_id: str, character_name: str) -> bool:
+    """캐릭터 삭제 + 그 캐릭터가 현재 참여 중이던 활성 공대에서 자동으로 나가기까지 처리.
+
+    Discord /캐릭터삭제(bot.cogs.expedition), RemoveCharacterView(bot/ui/views.py),
+    웹 POST /characters/remove(bot/api/routes/internal.py)가 공유하는 핵심 로직.
+    이전에는 캐릭터를 삭제해도 참여 중이던 파티 슬롯이 그대로 남아 유령 파티원이
+    되는 문제가 있었다. bot이 None이어도(봇 준비 전) 안전하게 동작한다 — 그 경우
+    embed 갱신·DM 등 discord 부수효과만 건너뛴다(_leave_party_core가 처리).
+    """
+    active_message_ids = await db.get_active_party_slots_for_character(discord_id, character_name)
+    removed = await db.remove_character(discord_id, character_name)
+    if not removed:
+        return False
+
+    if active_message_ids:
+        from bot.ui.views import _leave_party_core
+
+        for message_id in active_message_ids:
+            await _leave_party_core(bot, message_id, discord_id)
+
+    return True
+
+
 async def sync_characters_for_discord_id(discord_id: str) -> tuple[int, int]:
     """유저의 등록된 모든 캐릭터를, 각자 연결된 계정(api_key_id)별로 그룹핑해서 동기화.
 

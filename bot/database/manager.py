@@ -451,13 +451,23 @@ async def _migrate_backfill_user_api_keys() -> None:
 
 
 async def delete_user(discord_id: str) -> None:
-    """유저 데이터 전체 삭제 (관리자용). user_api_keys(부계정 포함)도 함께 정리해
-    고아 row가 남지 않도록 한다."""
+    """유저 데이터 전체 삭제 (관리자용). user_api_keys(부계정 포함)뿐 아니라 참여
+    중이던 파티 슬롯·대기열·초대·구독·레이드 선택 상태까지 함께 정리해 고아 row가
+    남지 않도록 한다 — 이전에는 이 테이블들이 안 지워져서, 유저를 삭제해도 활성
+    공대 화면에 유령 파티원이 계속 표시될 수 있었다. 파티 자체(리더 위임/해체 등
+    discord 부수효과가 필요한 처리)는 여기서 다루지 않는다 — 관리자의 강제 탈퇴는
+    즉시 반영되는 하드 삭제가 목적이라 봇 인스턴스 없이도 동작해야 하기 때문."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM users          WHERE discord_id=?", (discord_id,))
         await db.execute("DELETE FROM user_characters WHERE discord_id=?", (discord_id,))
         await db.execute("DELETE FROM user_preferences WHERE discord_id=?", (discord_id,))
         await db.execute("DELETE FROM user_api_keys    WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM party_slots      WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM party_waitlist   WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM party_invites    WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM raid_subscriptions WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM character_raid_selection WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM character_raid_selection_state WHERE discord_id=?", (discord_id,))
         await db.commit()
 
 
@@ -632,6 +642,22 @@ async def remove_character(discord_id: str, character_name: str) -> bool:
         )
         await db.commit()
         return cur.rowcount > 0
+
+
+async def get_active_party_slots_for_character(discord_id: str, character_name: str) -> list[str]:
+    """이 discord_id가 이 캐릭터로 현재 참여 중인 활성(recruiting/full/closed) 파티의
+    message_id 목록. 캐릭터 삭제 시 그 파티에서도 자동으로 나가게 하기 위한 조회 —
+    이전에는 캐릭터를 삭제해도 참여 중이던 파티 슬롯이 그대로 남아 유령 파티원이 됐다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT ps.party_message_id FROM party_slots ps "
+            "JOIN parties p ON p.message_id = ps.party_message_id "
+            "WHERE ps.discord_id=? AND ps.character_name=? "
+            "AND p.status IN ('recruiting', 'full', 'closed')",
+            (discord_id, character_name),
+        )
+        rows = await cur.fetchall()
+    return [r[0] for r in rows]
 
 
 async def get_user_characters(discord_id: str) -> list[str]:
@@ -1763,6 +1789,26 @@ async def delete_invite(message_id: str, discord_id: str) -> None:
             (message_id, discord_id),
         )
         await db.commit()
+
+
+async def get_expired_invites(hours: int = 1) -> list[dict]:
+    """invited_at 기준으로 hours시간이 지난 초대(예약 슬롯) 목록.
+
+    InviteResponseView의 1시간 timeout은 discord.py View 인스턴스(메모리)에만 있어서
+    봇이 재시작되면 사라진다 — 그러면 party_invites 행이 영구히 남아 슬롯 하나가
+    계속 "예약중"으로 막히는 문제가 있었다. party_notification_task가 이 함수로
+    주기적으로 만료 대상을 찾아 정리한다. find_recent_duplicate_party와 동일하게
+    SQLite의 datetime('now', ...)로 비교해 파이썬 쪽 타임존(KST) 변환 없이 처리한다
+    (invited_at은 CURRENT_TIMESTAMP로 저장되는 naive UTC)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT message_id, discord_id, slot_number FROM party_invites "
+            "WHERE invited_at < datetime('now', ?)",
+            (f"-{hours} hours",),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
 
 
 async def get_reserved_slots(message_id: str) -> dict[int, str]:

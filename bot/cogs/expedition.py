@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import bot.database.manager as db
-from bot.services.expedition import sync_characters_for_discord_id
+from bot.services.expedition import remove_character_and_leave_parties, sync_characters_for_discord_id
 from bot.ui.embeds import expedition_embed, no_characters_embed
 from bot.ui.views import ExpeditionView, AddCharacterModal
 
@@ -69,7 +69,7 @@ class Expedition(commands.Cog):
     @app_commands.describe(char_name="삭제할 캐릭터 이름")
     @app_commands.rename(char_name="캐릭터명")
     async def unregister_char(self, interaction: discord.Interaction, char_name: str) -> None:
-        removed = await db.remove_character(str(interaction.user.id), char_name)
+        removed = await remove_character_and_leave_parties(interaction.client, str(interaction.user.id), char_name)
         if removed:
             await interaction.response.send_message(f"🗑️ **{char_name}** 삭제 완료.", ephemeral=True)
         else:

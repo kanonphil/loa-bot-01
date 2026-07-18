@@ -7,11 +7,14 @@ os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
 os.environ.setdefault("WEBAPP_API_KEY", "test-webapp-key")
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
+import bot.data.raids as raids_module
 import bot.database.manager as db
+from bot.api import bot_ref
 from bot.api.routes import internal
 
 HEADERS = {"X-Webapp-Key": "test-webapp-key"}
@@ -132,6 +135,41 @@ def test_remove_character_success(client):
     assert resp.status_code == 200
     assert resp.json() == {"success": True}
     assert asyncio.run(db.get_user_characters("111")) == []
+
+
+def test_remove_character_leaves_active_party(client):
+    """회귀 테스트: 참여 중이던 캐릭터를 삭제하면 그 공대에서도 자동으로 나가야 한다
+    — 이전에는 캐릭터만 지워지고 party_slots에는 유령 파티원으로 계속 남아 있었다."""
+    asyncio.run(raids_module.reload())
+    asyncio.run(db.add_character("111", "발키리"))
+    asyncio.run(
+        db.create_party(
+            message_id="700", channel_id="600", guild_id="1", leader_id="222",
+            raid_name="아르모체(4막)", difficulty="노말", proficiency="숙련",
+            scheduled_time="05/20 20:00", scheduled_datetime="2026-05-20T20:00:00+09:00",
+            total_slots=8, min_level=1700,
+        )
+    )
+    asyncio.run(db.auto_assign_slot("700", "111", "발키리", "홀리나이트", "support", 8))
+
+    fake_msg = AsyncMock()
+    fake_channel = MagicMock()
+    fake_channel.fetch_message = AsyncMock(return_value=fake_msg)
+    fake_bot = MagicMock()
+    fake_bot.get_channel = MagicMock(return_value=fake_channel)
+    bot_ref.set_bot(fake_bot)
+    try:
+        resp = client.post(
+            "/api/internal/characters/remove",
+            json={"discord_id": "111", "character_name": "발키리"},
+            headers=HEADERS,
+        )
+    finally:
+        bot_ref.set_bot(None)
+
+    assert resp.json() == {"success": True}
+    slots = asyncio.run(db.get_party_slots("700"))
+    assert not any(s["discord_id"] == "111" for s in slots)
 
 
 def test_remove_character_not_registered(client):

@@ -6,6 +6,7 @@ os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
 os.environ.setdefault("WEBAPP_API_KEY", "test-webapp-key")
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,6 +17,9 @@ import bot.database.manager as db
 from bot.api import bot_ref
 
 HEADERS = {"X-Webapp-Key": "test-webapp-key"}
+KST = timezone(timedelta(hours=9))
+# 하드코딩된 날짜는 시간이 지나면 "과거 날짜" 검증에 걸려버리므로 항상 미래인 값을 계산.
+FUTURE_DATETIME = (datetime.now(KST) + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M")
 
 
 @pytest.fixture()
@@ -57,7 +61,7 @@ def _payload(**overrides):
         "raid_name": "아르모체(4막)",
         "difficulty": "노말",
         "proficiency": "숙련",
-        "scheduled_datetime": "2026-05-20T20:00",
+        "scheduled_datetime": FUTURE_DATETIME,
         "memo": "음성 필수",
     }
     payload.update(overrides)
@@ -196,6 +200,48 @@ def test_find_recent_duplicate_party_ignores_different_leader_or_condition(clien
     assert asyncio.run(
         db.find_recent_duplicate_party("111", "아르모체(4막)", "노말", "2026-05-21T20:00:00+09:00")
     ) is None
+
+
+def test_create_party_rejects_past_datetime(client, fake_bot):
+    """회귀 테스트: 디스코드 모달(ScheduleAndMemoModal)은 과거 날짜를 거부하는데
+    웹 개설 API는 이 검증이 빠져 있어 과거 일정으로 공대를 만들 수 있었다."""
+    asyncio.run(db.set_forum_channel("1", "999"))
+    past = (datetime.now(KST) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    resp = client.post(
+        "/api/internal/parties/create",
+        json=_payload(scheduled_datetime=past),
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "과거 날짜" in body["reason"]
+    _, fake_forum, _, _ = fake_bot
+    assert not fake_forum.create_thread.called
+
+
+def test_create_party_rejects_extreme_raid_outside_available_period(client, fake_bot):
+    """회귀 테스트: 익스트림 레이드는 운영 기간(available_from~available_until) 밖의
+    일정으로 공대를 만들 수 없어야 한다 — 디스코드 모달과 동일한 검증을 웹에도 적용."""
+    asyncio.run(db.set_forum_channel("1", "999"))
+    future_until = (datetime.now(KST) + timedelta(days=5)).isoformat()
+    asyncio.run(db.add_category("익스트림카테고리", 99))
+    asyncio.run(db.add_raid("익스트림레이드", "익스", "🔥", "익스트림카테고리"))
+    asyncio.run(db.update_category_extreme("익스트림카테고리", True))
+    asyncio.run(db.set_raid_period("익스트림레이드", None, future_until))
+    asyncio.run(db.add_difficulty("익스트림레이드", "노말", 1600, 4, None, 1, 0))
+    asyncio.run(raids_module.reload())
+
+    too_late = (datetime.now(KST) + timedelta(days=10)).strftime("%Y-%m-%dT%H:%M")
+    resp = client.post(
+        "/api/internal/parties/create",
+        json=_payload(raid_name="익스트림레이드", scheduled_datetime=too_late),
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "까지 진행 가능" in body["reason"]
+    _, fake_forum, _, _ = fake_bot
+    assert not fake_forum.create_thread.called
 
 
 def test_create_party_proficiency_options_endpoint(client, fake_bot):
