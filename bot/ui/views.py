@@ -1426,9 +1426,18 @@ async def _auto_join_dps(
     if ok:
         await db.remove_waitlist(message_id, discord_id)
         party_info = await db.get_party(message_id)
-        # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록
+        # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록.
+        # interaction.channel이 아니라 party의 실제 channel_id로 채널을 가져와야 한다 —
+        # 공대 생성 직후 리더가 바로 참여할 때처럼 interaction이 스레드 밖(명령어를
+        # 실행한 채널)에서 온 경우 interaction.channel은 그 스레드가 아니라서
+        # fetch_message가 조용히 실패해 embed가 안 갱신되는 버그가 있었다(리더는
+        # DB엔 정상 참여됐지만 화면엔 안 보이다가, 다른 사람이 스레드 안에서 참여
+        # 버튼을 눌러야 그제서야 함께 나타남).
         try:
-            msg = await interaction.channel.fetch_message(int(message_id))
+            channel = interaction.client.get_channel(int(party_info["channel_id"]))
+            if channel is None:
+                channel = await interaction.client.fetch_channel(int(party_info["channel_id"]))
+            msg = await channel.fetch_message(int(message_id))
             await party_view._refresh_party(msg)
         except discord.HTTPException:
             pass
@@ -2104,9 +2113,14 @@ class RoleSelectView(View):
                 view=None,
             )
             await db.remove_waitlist(self.message_id, self.discord_id)
-            # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록
+            # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록.
+            # interaction.channel이 아니라 party의 실제 channel_id를 써야 한다
+            # (공대 생성 직후 리더 참여처럼 interaction이 스레드 밖에서 온 경우 대응).
             try:
-                msg = await interaction.channel.fetch_message(int(self.message_id))
+                channel = interaction.client.get_channel(int(party["channel_id"]))
+                if channel is None:
+                    channel = await interaction.client.fetch_channel(int(party["channel_id"]))
+                msg = await channel.fetch_message(int(self.message_id))
                 await self.party_view._refresh_party(msg)
             except discord.HTTPException:
                 pass
