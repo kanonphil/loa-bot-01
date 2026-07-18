@@ -1489,6 +1489,17 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   transform: translateY(-1px);
 }
 
+.landing-error {
+  margin-top: 12px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(224, 86, 86, 0.12);
+  border: 1px solid rgba(224, 86, 86, 0.3);
+  color: #f28b82;
+  font-size: 13px;
+  max-width: 360px;
+}
+
 /* ── Flatpickr 다크 테마 (사이트 색상에 맞춤) ──────────────── */
 
 .flatpickr-calendar {

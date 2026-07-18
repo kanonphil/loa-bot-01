@@ -4,6 +4,9 @@
   <div>
     <h1>로아봇 웹</h1>
     <p>등록된 길드원만 이용할 수 있습니다.</p>
+    {% if login_error %}
+    <p class="landing-error">{{ login_error }}</p>
+    {% endif %}
     <a href="/login">디스코드로 로그인</a>
   </div>
 </div>
