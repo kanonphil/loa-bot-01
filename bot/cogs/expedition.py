@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import bot.database.manager as db
-from bot.services.expedition import remove_character_and_leave_parties, sync_characters_for_discord_id
+from bot.services.expedition import remove_character_and_leave_parties
 from bot.ui.embeds import expedition_embed, no_characters_embed
 from bot.ui.views import ExpeditionView, AddCharacterModal
 
@@ -34,10 +34,11 @@ class Expedition(commands.Cog):
             )
             return
 
-        # 등록된 모든 계정(부계정 포함)을 그룹핑해서 조회하는 공용 로직 —
-        # sync_btn/웹 동기화 API/일일 자동 동기화와 동일한 코드.
-        await sync_characters_for_discord_id(discord_id)
-
+        # 캐시를 그대로 즉시 보여준다 — 이전에는 열 때마다 sync_characters_for_discord_id를
+        # 호출해서 캐릭터당 아머리 조회 1회+0.2초 sleep이 들어가 캐릭터가 많은 유저는
+        # 명령어 하나 실행에 수십 초씩 걸렸다. 최신화는 화면의 "동기화" 버튼
+        # (ExpeditionView.sync_btn)으로 명시적으로 눌러야 하도록 캐릭터 상세 페이지와
+        # 동일한 캐시 우선 철학으로 통일한다.
         cached = await db.get_cached_characters(discord_id, max_age_hours=99999)
         characters = [
             {

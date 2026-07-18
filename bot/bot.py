@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import discord
 from discord.ext import commands, tasks
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, time, timezone, timedelta
 
 import bot.database.manager as db
 import bot.api.lostark as loa
@@ -37,6 +37,7 @@ class LoABot(commands.Bot):
         intents.members = True
         super().__init__(command_prefix="!", intents=intents, help_command=None)
         self._thread_purge_failures: dict[str, int] = {}  # channel_id → 실패 횟수
+        self._api_server_task: asyncio.Task | None = None
 
     async def setup_hook(self) -> None:
         await db.init_db()
@@ -64,8 +65,20 @@ class LoABot(commands.Bot):
             log_level="warning",
         )
         server = uvicorn.Server(config)
-        asyncio.get_event_loop().create_task(server.serve())
+        # 태스크 참조를 인스턴스에 보관 — asyncio는 태스크를 약한 참조로만 들고 있어서,
+        # 참조를 안 잡아두면 실행 중에도 가비지 컬렉션될 수 있다(공식 문서에 명시된
+        # 함정). done_callback으로 예외 발생 시 로그를 남겨, API 서버가 조용히
+        # 죽어버려도(포트 충돌 등) 알아챌 수 있게 한다.
+        self._api_server_task = asyncio.get_event_loop().create_task(server.serve())
+        self._api_server_task.add_done_callback(self._on_api_server_done)
         print("[LoABot] FastAPI 서버 시작 완료 (port 8000)")
+
+    def _on_api_server_done(self, task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            print(f"[LoABot] FastAPI 서버가 예외로 종료됨: {type(exc).__name__}: {exc}")
 
     async def on_ready(self) -> None:
         print(f"[LoABot] {self.user} 로그인 완료")
@@ -81,10 +94,14 @@ class LoABot(commands.Bot):
             )
         )
 
-    @tasks.loop(hours=24)
+    # hours=24 대신 KST 새벽 4시 고정 시각 실행 — hours=24는 루프의 첫 실행이 .start()를
+    # 호출한 "그 즉시"라서, 봇이 재시작될 때마다(하루에도 여러 번일 수 있음) 등록된 모든
+    # 유저의 모든 캐릭터를 다시 전부 동기화하는 낭비가 있었다. time= 방식은 하루 중
+    # 지정된 시각에 한 번만 실행되므로 재시작 횟수와 무관하다.
+    @tasks.loop(time=time(hour=4, minute=0, tzinfo=KST))
     async def account_sync_task(self) -> None:
-        """등록된 모든 유저의 모든 계정(부계정 포함) 캐릭터 정보를 하루 한 번 자동 동기화.
-        수동 "동기화" 버튼/웹 sync API와 동일한 핵심 로직을 공유한다
+        """등록된 모든 유저의 모든 계정(부계정 포함) 캐릭터 정보를 매일 새벽 4시(KST)에
+        자동 동기화. 수동 "동기화" 버튼/웹 sync API와 동일한 핵심 로직을 공유한다
         (bot.services.expedition.sync_all_accounts_daily)."""
         print("[LoABot] 일일 계정 동기화 시작")
         await sync_all_accounts_daily()

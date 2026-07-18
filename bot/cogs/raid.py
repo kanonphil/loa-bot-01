@@ -139,16 +139,29 @@ class Raid(commands.Cog):
             )
             return
 
+        # 캐시 우선 조회 — 이전에는 캐릭터마다 매번 로스트아크 API를 호출해서
+        # 캐릭터가 많은 유저는 명령어 하나에 API 호출이 N번씩 발생했다. /레이드체크
+        # (_show_checklist)와 동일하게, 캐시된 아이템레벨이 있으면 그대로 쓰고
+        # 캐시가 없는 캐릭터만 실시간으로 보충 조회한다.
+        cached = {c["character_name"]: c for c in await db.get_cached_characters(discord_id)}
+
         embeds: list[discord.Embed] = []
         for name in char_names:
-            resolved_key = await _resolve_api_key_for_character(discord_id, name, api_key)
-            try:
-                char = await loa.get_character_info(resolved_key, name)
-            except RuntimeError:
-                continue
-            if not char:
-                continue
-            item_level  = loa.parse_item_level(char)
+            c = cached.get(name)
+            if c and c["item_level"] is not None:
+                item_level = c["item_level"]
+            else:
+                resolved_key = await _resolve_api_key_for_character(discord_id, name, api_key)
+                try:
+                    char = await loa.get_character_info(resolved_key, name)
+                except RuntimeError:
+                    continue
+                if not char:
+                    continue
+                item_level = loa.parse_item_level(char)
+                char_class = char.get("CharacterClassName", "?")
+                if item_level > 0:
+                    await db.update_character_cache(discord_id, name, item_level, char_class)
             completions = await db.get_completions(discord_id, name)
             embeds.append(raid_checklist_embed(name, item_level, completions))
 

@@ -393,11 +393,17 @@ async def get_board_settings(guild_id: str) -> Optional[dict]:
 # ──────────────────────────────────────────────
 
 async def _migrate_encrypt_api_keys() -> None:
-    """ENCRYPTION_KEY 설정 시 기존 평문 API 키를 암호화 (1회성 마이그레이션)."""
+    """ENCRYPTION_KEY 설정 시 기존 평문 API 키를 암호화 (1회성 마이그레이션).
+
+    레거시 단일 키(users.loa_api_key)뿐 아니라 부계정 테이블(user_api_keys.api_key)도
+    함께 처리한다 — 이전에는 users만 마이그레이션해서, ENCRYPTION_KEY를 나중에
+    설정한 서버에서 그 이전에 부계정으로 등록된 키들이 영구히 평문으로 남는 문제가
+    있었다(add_user_api_key는 저장 "당시"의 ENCRYPTION_KEY 유무만 반영하기 때문)."""
     async with aiosqlite.connect(DB_PATH) as db:
+        migrated = 0
+
         cur = await db.execute("SELECT discord_id, loa_api_key FROM users")
         rows = await cur.fetchall()
-        migrated = 0
         for discord_id, stored in rows:
             if stored and is_plaintext_key(stored):
                 await db.execute(
@@ -405,6 +411,17 @@ async def _migrate_encrypt_api_keys() -> None:
                     (encrypt_api_key(stored), discord_id),
                 )
                 migrated += 1
+
+        cur = await db.execute("SELECT id, api_key FROM user_api_keys")
+        rows = await cur.fetchall()
+        for key_id, stored in rows:
+            if stored and is_plaintext_key(stored):
+                await db.execute(
+                    "UPDATE user_api_keys SET api_key=? WHERE id=?",
+                    (encrypt_api_key(stored), key_id),
+                )
+                migrated += 1
+
         if migrated > 0:
             await db.commit()
             print(f"[DB] API 키 암호화 마이그레이션 완료: {migrated}개")
@@ -725,11 +742,15 @@ async def get_expedition_ranking(metric: str, limit: int = 100) -> list[dict]:
         db.row_factory = aiosqlite.Row
         if metric == "weekly_clears":
             week = get_week_key()
+            # user_characters와 INNER JOIN — 게스트 초대(API 키 미등록자)로 참여해
+            # 클리어된 raid_completions 행은 user_characters에 매칭되는 캐릭터가 없어
+            # LEFT JOIN이면 class/item_level이 NULL인 채로 랭킹에 노출됐다. "원정대
+            # 랭킹"은 실제 등록된 길드원 캐릭터만 보여줘야 하므로 INNER JOIN으로 제외한다.
             cur = await db.execute(
                 "SELECT c.discord_id, c.character_name, uc.character_class, uc.item_level, "
                 "uc.combat_power, COUNT(*) AS value "
                 "FROM raid_completions c "
-                "LEFT JOIN user_characters uc "
+                "JOIN user_characters uc "
                 "  ON uc.discord_id=c.discord_id AND uc.character_name=c.character_name "
                 "WHERE c.week_key=? "
                 "GROUP BY c.discord_id, c.character_name "

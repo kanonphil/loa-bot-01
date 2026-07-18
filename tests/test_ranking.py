@@ -74,6 +74,19 @@ def test_ranking_excludes_characters_without_metric(seeded):
     assert "신규캐릭" in [r["character_name"] for r in il_rows]
 
 
+def test_ranking_weekly_clears_excludes_unregistered_guest_characters(seeded):
+    """회귀 테스트: 게스트 초대(API 키 미등록자)로 참여해 클리어된 캐릭터는
+    user_characters에 매칭되는 행이 없어 이전에는 class/item_level이 NULL인 채로
+    주간 클리어 랭킹에 노출됐다. 등록된 캐릭터만 나와야 한다."""
+    week = db.get_week_key()
+    asyncio.run(db.add_completion("999", "떠돌이게스트", "카멘", "하드", week))
+
+    rows = asyncio.run(db.get_expedition_ranking("weekly_clears"))
+    names = [r["character_name"] for r in rows]
+    assert "떠돌이게스트" not in names
+    assert names == ["발키리", "바드"]
+
+
 def test_ranking_endpoint(seeded):
     from bot.api.server import app
 

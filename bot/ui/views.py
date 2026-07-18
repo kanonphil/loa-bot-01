@@ -1422,10 +1422,22 @@ async def _post_party(
 ) -> None:
     leader_id = str(interaction.user.id)
     await interaction.response.edit_message(content="✅ 공대 모집 게시물을 생성합니다.", view=None)
-    party = await _create_party_core(
-        interaction.client, str(interaction.guild_id), leader_id, forum_channel_id,
-        raid_name, difficulty, proficiency, scheduled_time, scheduled_datetime, memo,
-    )
+    try:
+        party = await _create_party_core(
+            interaction.client, str(interaction.guild_id), leader_id, forum_channel_id,
+            raid_name, difficulty, proficiency, scheduled_time, scheduled_datetime, memo,
+        )
+    except discord.HTTPException as e:
+        # 포럼 채널이 삭제됐거나 권한이 없는 등 스레드 생성이 실패한 경우 — 이전에는
+        # 예외가 조용히 사라져서 사용자가 "생성합니다" 메시지만 보고 방치됐다(스레드는
+        # 안 만들어졌는데 재시도할 방법도 안내되지 않음).
+        try:
+            await interaction.edit_original_response(
+                content=f"❌ 공대 생성에 실패했습니다: {e}\n`/공대모집`으로 다시 시도해주세요.",
+            )
+        except discord.HTTPException:
+            pass
+        return
     await _offer_leader_join(interaction, party)
 
 
