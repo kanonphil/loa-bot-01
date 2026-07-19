@@ -32,5 +32,5 @@ async def lookup_guest_character(character_name: str) -> dict:
         "character_name": profile.get("CharacterName") or character_name,
         "character_class": profile.get("CharacterClassName") or "?",
         "item_level": loa.parse_item_level(profile),
-        "combat_power": profile.get("CombatPower"),
+        "combat_power": loa.parse_combat_power(profile.get("CombatPower")),
     }

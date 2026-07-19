@@ -56,7 +56,7 @@ def test_lookup_returns_parsed_character_info(db_setup, monkeypatch):
     assert result["character_name"] == "게스트캐릭"
     assert result["character_class"] == "디스트로이어"
     assert result["item_level"] == 1680.0
-    assert result["combat_power"] == "98765432"
+    assert result["combat_power"] == 98765432  # parse_combat_power로 콤마 파싱까지 처리된 정수
 
 
 def test_lookup_returns_error_when_character_not_found(db_setup, monkeypatch):

@@ -52,12 +52,15 @@ def _item_level(char: dict) -> str:
 # 캐릭터 대시보드
 # ─────────────────────────────────────────────────────
 
-def _combat_power(profile: dict) -> str:
-    """Stats 배열에서 전투력 추출"""
-    for stat in profile.get("Stats") or []:
-        if stat.get("Type") == "전투력":
-            return stat.get("Value", "?")
-    return None
+def _combat_power(profile: dict) -> str | None:
+    """전투력(CombatPower)은 Stats 배열이 아니라 프로필 최상위 필드다 — Stats에는
+    치명/특화/제압/신속/인내/숙련/최대 생명력/공격력만 있고 "전투력" 타입 항목은
+    없어서, 예전에는 이 함수가 항상 None을 반환해 /대시보드에 전투력이 표시되지
+    않았다. lostark.parse_combat_power로 콤마 파싱 문제를 해결해서 포맷한다."""
+    from bot.api.lostark import parse_combat_power
+
+    cp = parse_combat_power(profile.get("CombatPower"))
+    return f"{cp:,}" if cp is not None else None
 
 
 def _gem_skill_from_tooltip(tooltip_str: str) -> str:

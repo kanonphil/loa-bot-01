@@ -792,9 +792,13 @@ def parse_ark_grid(ark_grid: dict | None) -> dict:
 
 
 def _format_combat_power(raw) -> str | None:
-    """전투력은 문자열 숫자로 내려오는데, 천단위 콤마 없이 그대로 보여주면 자릿수를
-    가늠하기 어려워 콤마를 붙인다. 숫자가 아니면(예외적인 경우) 원본을 그대로 반환."""
-    return _format_int(raw)
+    """전투력은 쉼표 섞인 문자열로 내려오는데(예: "4,368.47"), 콤마 때문에 그냥
+    숫자로 파싱하면 실패한다 — lostark.parse_combat_power로 콤마를 제거해 정수로
+    만든 뒤 다시 천단위 콤마를 붙인다."""
+    from bot.api.lostark import parse_combat_power
+
+    cp = parse_combat_power(raw)
+    return f"{cp:,}" if cp is not None else None
 
 
 def parse_armory_detail(raw: dict) -> dict:

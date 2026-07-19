@@ -406,13 +406,18 @@ def test_parse_ark_grid_handles_none():
     assert result == {"cores": [], "effects": []}
 
 
-def test_format_combat_power_adds_thousands_separators():
+def test_format_combat_power_strips_commas_before_parsing():
+    """회귀 테스트: 로스트아크 오픈API는 CombatPower를 쉼표 섞인 문자열로 내려준다
+    (예: "4,368.47" — 실측 확인된 실제 게임 내 전투력과 동일한 값). 이 쉼표 때문에
+    그냥 float() 파싱하면 실패해서 대부분의 캐릭터가 전투력 랭킹에서 빠지던 버그가
+    있었다. 쉼표를 제거하고 반올림한 뒤 다시 천단위 콤마를 붙여야 한다."""
+    assert parser._format_combat_power("4,368.47") == "4,368"
     assert parser._format_combat_power("123456789") == "123,456,789"
 
 
 def test_format_combat_power_handles_none_and_non_numeric():
     assert parser._format_combat_power(None) is None
-    assert parser._format_combat_power("모름") == "모름"
+    assert parser._format_combat_power("모름") is None
 
 
 def test_parse_armory_detail_combines_all_sections():
@@ -421,7 +426,7 @@ def test_parse_armory_detail_combines_all_sections():
             "CharacterName": "테스트캐릭",
             "CharacterClassName": "홀리나이트",
             "ItemAvgLevel": "1680.00",
-            "CombatPower": "123456789",
+            "CombatPower": "4,368.47",
             "CharacterImage": "https://example.com/char.png",
             "CharacterLevel": 70,
             "ExpeditionLevel": 293,
@@ -447,7 +452,7 @@ def test_parse_armory_detail_combines_all_sections():
     result = parser.parse_armory_detail(raw)
     assert result["character_name"] == "테스트캐릭"
     assert result["character_class"] == "홀리나이트"
-    assert result["combat_power"] == "123,456,789"
+    assert result["combat_power"] == "4,368"
     assert result["guild_name"] == "동물롱장"
     assert result["guild_member_grade"] == "일반 길드원"
     assert result["character_level"] == 70

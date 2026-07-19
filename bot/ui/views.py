@@ -563,7 +563,7 @@ class GuestCharacterNameModal(Modal, title="게스트 캐릭터 확인"):
             return
 
         cp      = info.get("combat_power")
-        cp_text = f"{int(float(cp)):,}" if cp else "?"
+        cp_text = f"{cp:,}" if cp else "?"
         header  = (
             f"✅ **{info['character_name']}** ({info['character_class']}, "
             f"Lv.{info['item_level']:.0f}, 전투력 {cp_text})\n"
