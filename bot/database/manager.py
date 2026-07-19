@@ -687,15 +687,18 @@ async def get_user_characters(discord_id: str) -> list[str]:
     return [r[0] for r in rows]
 
 
-async def update_character_combat_power(discord_id: str, character_name: str, combat_power: int) -> bool:
+async def update_character_combat_power(discord_id: str, character_name: str, combat_power: float) -> bool:
     """전투력 캐시 갱신 (랭킹용). 아머리 조회로 얻은 값을 저장한다.
+    소수점 2자리까지 그대로 저장한다 — 로스트아크 오픈API 원본이 "4,368.47"처럼
+    소수점을 포함해서 내려주고, SQLite는 INTEGER 선언 컬럼이라도 소수부가 있는 값을
+    잘라내지 않고 REAL로 그대로 보존한다(정수로 반올림해서 버리지 않음).
     반환값 False는 discord_id+character_name이 user_characters에 없어(등록 안 된 캐릭터,
     또는 다른 계정 소유) 아무 행도 갱신되지 않았다는 뜻 — 호출부가 로깅할 수 있게 알려준다."""
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
             "UPDATE user_characters SET combat_power=?, combat_power_at=CURRENT_TIMESTAMP "
             "WHERE discord_id=? AND character_name=?",
-            (int(combat_power), discord_id, character_name),
+            (float(combat_power), discord_id, character_name),
         )
         await db.commit()
         return cur.rowcount > 0

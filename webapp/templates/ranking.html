@@ -37,7 +37,7 @@
     <span class="rank-col-name">{{ e.character_name }}</span>
     <span class="rank-col-class">{{ e.character_class or "—" }}</span>
     <span class="rank-col-value">
-      {% if metric == "combat_power" %}{{ "{:,}".format(e.value|int) }}
+      {% if metric == "combat_power" %}{{ "{:,.2f}".format(e.value|float) }}
       {% elif metric == "item_level" %}{{ "%.2f"|format(e.value|float) }}
       {% else %}{{ e.value|int }}개{% endif %}
     </span>

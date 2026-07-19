@@ -60,7 +60,7 @@ def _combat_power(profile: dict) -> str | None:
     from bot.api.lostark import parse_combat_power
 
     cp = parse_combat_power(profile.get("CombatPower"))
-    return f"{cp:,}" if cp is not None else None
+    return f"{cp:,.2f}" if cp is not None else None
 
 
 def _gem_skill_from_tooltip(tooltip_str: str) -> str:

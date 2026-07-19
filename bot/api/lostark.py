@@ -73,22 +73,23 @@ async def get_armory(api_key: str, character_name: str, filters: str = ARMORY_FI
     )
 
 
-def parse_combat_power(raw) -> Optional[int]:
+def parse_combat_power(raw) -> Optional[float]:
     """CombatPower 필드 파싱. 로스트아크 오픈API는 이 값을 쉼표가 섞인 문자열로
     내려준다(예: "4,368.47") — 콤마 때문에 float() 파싱이 그대로 실패해서 대부분의
     캐릭터(전투력이 1,000 이상이라 쉼표가 붙는 경우)가 조용히 None 처리되어 랭킹에서
     아예 빠지던 버그가 있었다. 콤마만 제거하면 게임 내 전투정보실에 표시되는 값과
-    동일하다(실측 확인됨) — 소수점은 반올림해 정수로 저장한다."""
+    동일하다(실측 확인됨). 소수점 2자리까지도 의미 있는 정보라 반올림해서 버리지
+    않고 그대로 보존한다(정수로 반올림하지 않음)."""
     if raw is None:
         return None
     try:
         cleaned = str(raw).replace(",", "")
-        return round(float(cleaned))
+        return round(float(cleaned), 2)
     except (TypeError, ValueError):
         return None
 
 
-async def get_combat_power(api_key: str, character_name: str) -> Optional[int]:
+async def get_combat_power(api_key: str, character_name: str) -> Optional[float]:
     """캐릭터 전투력(CombatPower) 하나만 가볍게 조회 — 랭킹 캐시 갱신용.
     프로필 필터만 써서 응답을 최소화한다. 값이 없거나 숫자가 아니면 None."""
     data = await get_armory(api_key, character_name, filters="profiles")
