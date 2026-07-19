@@ -1853,10 +1853,14 @@ a.calendar-party:hover {
   white-space: nowrap;
 }
 
-/* 칸 폭보다 긴 레이드명은 좌우로 천천히 왕복 슬라이드해서 전체 이름을 보여준다.
+/* 칸 폭보다 긴 레이드명은 왼쪽으로 천천히 흘러가고, 끝까지 보여준 뒤 처음으로
+   돌아가 다시 흘러가는 전광판 방식으로 전체 이름을 보여준다(좌우 왕복은 돌아올 때
+   텍스트를 거꾸로 훑게 돼 읽기 어색해서 단방향 루프로 변경). 처음(0~18%)과 끝
+   (70~92%)에서 잠깐 멈춰 읽을 시간을 주고, 복귀 점프는 짧은 페이드아웃(92~95%)
+   중에 일어나 깜빡임처럼 보이지 않게 한다.
    is-marquee 클래스와 --marquee-distance/--marquee-duration은 calendar-marquee.js가
    실제로 잘린(scrollWidth > clientWidth) 이름에만 계산해서 붙인다 — 짧은 이름까지
-   움직이면 산만하기 때문. 양 끝에서 잠깐 멈춰(키프레임 0~18%, 82~100%) 읽을 시간을 준다. */
+   움직이면 산만하기 때문. */
 .calendar-party-name.is-marquee {
   text-overflow: clip;
 }
@@ -1866,12 +1870,15 @@ a.calendar-party:hover {
 }
 
 .calendar-party-name.is-marquee .marquee-inner {
-  animation: calendar-marquee var(--marquee-duration, 6s) linear infinite alternate;
+  animation: calendar-marquee var(--marquee-duration, 6s) linear infinite;
 }
 
 @keyframes calendar-marquee {
-  0%, 18% { transform: translateX(0); }
-  82%, 100% { transform: translateX(var(--marquee-distance, 0px)); }
+  0%, 18% { transform: translateX(0); opacity: 1; }
+  70%, 92% { transform: translateX(var(--marquee-distance, 0px)); opacity: 1; }
+  95% { transform: translateX(var(--marquee-distance, 0px)); opacity: 0; }
+  96% { transform: translateX(0); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

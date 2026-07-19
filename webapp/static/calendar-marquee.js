@@ -14,8 +14,9 @@
 
       nameEl.classList.add("is-marquee");
       nameEl.style.setProperty("--marquee-distance", -overflow + "px");
-      // 잘린 길이에 비례한 속도(약 25px/s) + 양 끝 정지 구간 몫까지 고려한 최소 4초
-      var duration = Math.max(4, overflow / 25 + 2.5);
+      // 이동 구간이 사이클의 약 절반(키프레임 18~70%)이므로, 실제 흐르는 속도를
+      // 약 25px/s로 맞추려면 잘린 길이/13초 — 정지·복귀 구간 포함 최소 4초.
+      var duration = Math.max(4, overflow / 13);
       nameEl.style.setProperty("--marquee-duration", duration + "s");
     });
   }
