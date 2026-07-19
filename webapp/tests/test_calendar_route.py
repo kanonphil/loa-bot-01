@@ -207,6 +207,19 @@ def test_calendar_view_toggle_links_present_in_both_views(client, monkeypatch):
     assert 'href="/calendar?view=month' in week_resp.text
 
 
+def test_calendar_party_names_are_wrapped_for_marquee(client, monkeypatch):
+    """레이드명 슬라이드(마퀴)를 위해 이름이 .marquee-inner로 감싸져 있고,
+    잘림 여부를 측정해 애니메이션을 붙이는 스크립트가 포함돼야 한다."""
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=PARTIES))
+        resp = client.get("/calendar")
+
+    assert '<span class="marquee-inner">카멘 노말</span>' in resp.text
+    assert "/static/calendar-marquee.js" in resp.text
+
+
 def test_calendar_week_shows_all_parties_without_truncation(client, monkeypatch):
     many_parties = [
         {

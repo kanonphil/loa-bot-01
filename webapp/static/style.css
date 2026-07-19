@@ -1745,7 +1745,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 .calendar-weekdays {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* minmax(0, 1fr) — 1fr만 쓰면 grid 아이템의 min-width:auto 때문에 내용(레이드명)이
+     긴 열이 다른 열보다 넓어져 7개 열 폭이 제각각이 된다. 0을 하한으로 줘야 항상 7등분. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   background: var(--sidebar-bg);
   border-bottom: 1px solid var(--border);
 }
@@ -1763,11 +1765,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 .calendar-week {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .calendar-cell {
   min-height: 112px;
+  min-width: 0; /* 긴 레이드명이 열 폭을 밀어내지 않도록 — 폭은 항상 7등분 고정 */
   padding: 6px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -1844,9 +1847,40 @@ a.calendar-party:hover {
 
 .calendar-party-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 칸 폭보다 긴 레이드명은 좌우로 천천히 왕복 슬라이드해서 전체 이름을 보여준다.
+   is-marquee 클래스와 --marquee-distance/--marquee-duration은 calendar-marquee.js가
+   실제로 잘린(scrollWidth > clientWidth) 이름에만 계산해서 붙인다 — 짧은 이름까지
+   움직이면 산만하기 때문. 양 끝에서 잠깐 멈춰(키프레임 0~18%, 82~100%) 읽을 시간을 준다. */
+.calendar-party-name.is-marquee {
+  text-overflow: clip;
+}
+
+.calendar-party-name .marquee-inner {
+  display: inline-block;
+}
+
+.calendar-party-name.is-marquee .marquee-inner {
+  animation: calendar-marquee var(--marquee-duration, 6s) linear infinite alternate;
+}
+
+@keyframes calendar-marquee {
+  0%, 18% { transform: translateX(0); }
+  82%, 100% { transform: translateX(var(--marquee-distance, 0px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-party-name.is-marquee {
+    text-overflow: ellipsis;
+  }
+  .calendar-party-name.is-marquee .marquee-inner {
+    animation: none;
+  }
 }
 
 .calendar-party-badge {

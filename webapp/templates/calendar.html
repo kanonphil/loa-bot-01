@@ -4,7 +4,7 @@
 {% for p in parties %}
 {% set inner %}
   <span class="calendar-party-time">{{ p.time_label }}</span>
-  <span class="calendar-party-name">{{ p.raid_name }} {{ p.difficulty }}</span>
+  <span class="calendar-party-name"><span class="marquee-inner">{{ p.raid_name }} {{ p.difficulty }}</span></span>
   <span class="calendar-party-badge">{{ p.status_label }}</span>
 {% endset %}
 {% if p.is_active %}
@@ -75,4 +75,5 @@
     {% endif %}
   </div>
 </div>
+<script src="/static/calendar-marquee.js"></script>
 {% endblock %}
