@@ -21,6 +21,19 @@ STATUS_LABELS = {
     "disbanded": "클리어",
 }
 
+# Python datetime.weekday(): 월=0, 화=1, 수=2, 목=3, 금=4, 토=5, 일=6
+_WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def _weekday_labels(start_weekday: int) -> list[dict]:
+    """start_weekday(월=0...일=6)부터 7일치 요일 헤더 라벨. 일/토에는 강조 클래스를 붙인다."""
+    labels = []
+    for i in range(7):
+        wd = (start_weekday + i) % 7
+        css_class = "sun" if wd == 6 else ("sat" if wd == 5 else "")
+        labels.append({"label": _WEEKDAY_NAMES[wd], "css_class": css_class})
+    return labels
+
 
 def _month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
     first = datetime(year, month, 1, tzinfo=KST)
@@ -47,9 +60,11 @@ def _build_weeks(year: int, month: int) -> list[list[int]]:
 
 
 def _week_start_of(dt: datetime) -> datetime:
-    """dt가 속한 주의 일요일(00:00) — 월 그리드와 동일하게 일요일 시작 기준."""
-    days_since_sunday = (dt.weekday() + 1) % 7
-    return (dt - timedelta(days=days_since_sunday)).replace(
+    """dt가 속한 주의 수요일(00:00) — 로스트아크 주간 레이드 리셋(수요일)과 같은
+    기준으로 "이번 주"를 정의한다. bot.database.manager.get_week_key()가 쓰는
+    수요일 기준과 동일하게 맞춰서, 길드원이 인지하는 "이번 주"와 어긋나지 않게 한다."""
+    days_since_wed = (dt.weekday() - 2) % 7
+    return (dt - timedelta(days=days_since_wed)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 
@@ -126,15 +141,11 @@ async def calendar_view(
                 "user": user,
                 "active": "calendar",
                 "view": "week",
+                "weekday_labels": _weekday_labels(2),  # 수요일 시작
                 "week_days": week_days,
                 "week_label": week_label,
                 "prev_week_start": (w_start - timedelta(days=7)).strftime("%Y-%m-%d"),
                 "next_week_start": (w_start + timedelta(days=7)).strftime("%Y-%m-%d"),
-                # "월간" 탭으로 전환할 때 이 주가 속한 달로 이동시키기 위함
-                "month_toggle_year": w_start.year,
-                "month_toggle_month": w_start.month,
-                # "주간" 탭 자체 링크(현재 주 유지)에도 필요
-                "current_week_start": w_start.strftime("%Y-%m-%d"),
             },
         )
 
@@ -168,6 +179,7 @@ async def calendar_view(
             "user": user,
             "active": "calendar",
             "view": "month",
+            "weekday_labels": _weekday_labels(6),  # 일요일 시작
             "year": y,
             "month": m,
             "weeks": _build_weeks(y, m),
@@ -177,7 +189,5 @@ async def calendar_view(
             "prev_month": prev_last.month,
             "next_year": next_first.year,
             "next_month": next_first.month,
-            # "주간" 탭으로 전환할 때 이 달의 1일이 속한 주로 이동시키기 위함
-            "week_toggle_start": first.strftime("%Y-%m-%d"),
         },
     )

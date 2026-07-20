@@ -29,22 +29,16 @@
       {% endif %}
     </div>
     <div class="calendar-view-toggle">
-      <a href="/calendar?view=week&week_start={{ current_week_start if view == 'week' else week_toggle_start }}"
-         class="calendar-view-btn{% if view == 'week' %} is-active{% endif %}">주간</a>
-      <a href="/calendar?view=month&year={{ month_toggle_year if view == 'week' else year }}&month={{ month_toggle_month if view == 'week' else month }}"
-         class="calendar-view-btn{% if view == 'month' %} is-active{% endif %}">월간</a>
+      <a href="/calendar?view=week" class="calendar-view-btn{% if view == 'week' %} is-active{% endif %}">주간</a>
+      <a href="/calendar?view=month" class="calendar-view-btn{% if view == 'month' %} is-active{% endif %}">월간</a>
     </div>
   </div>
 
   <div class="calendar-grid">
     <div class="calendar-weekdays">
-      <span class="calendar-weekday sun">일</span>
-      <span class="calendar-weekday">월</span>
-      <span class="calendar-weekday">화</span>
-      <span class="calendar-weekday">수</span>
-      <span class="calendar-weekday">목</span>
-      <span class="calendar-weekday">금</span>
-      <span class="calendar-weekday sat">토</span>
+      {% for wd in weekday_labels %}
+      <span class="calendar-weekday{% if wd.css_class %} {{ wd.css_class }}{% endif %}">{{ wd.label }}</span>
+      {% endfor %}
     </div>
 
     {% if view == "week" %}

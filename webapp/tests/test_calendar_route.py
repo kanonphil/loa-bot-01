@@ -158,7 +158,9 @@ def test_calendar_shows_all_parties_without_truncation(client, monkeypatch):
 
 def test_calendar_week_view_shows_current_week_by_default(client, monkeypatch):
     """view=week 파라미터만 주면(week_start 없이) "오늘"이 속한 주가 기본으로 보여야 한다.
-    2026-05-15(금)이 속한 주는 2026-05-10(일)~05-16(토)이라 p1/p2 둘 다 포함된다."""
+    주는 로스트아크 레이드 리셋과 동일하게 수요일 시작 — 2026-05-15(금)이 속한 주는
+    2026-05-13(수)~05-19(화)라 그 안의 p2(5/15)만 포함되고, 그 전 주인 p1(5/10)은
+    빠져야 한다(전에는 일요일 시작이라 둘 다 같은 주에 잡혀 헷갈렸다)."""
     _freeze_today(monkeypatch)
     with respx.mock:
         log_in(client)
@@ -166,9 +168,9 @@ def test_calendar_week_view_shows_current_week_by_default(client, monkeypatch):
         resp = client.get("/calendar", params={"view": "week"})
 
     assert resp.status_code == 200
-    assert "5월 10일" in resp.text
-    assert "카멘 노말" in resp.text
+    assert "5월 13일" in resp.text
     assert "아르모체(4막) 노말" in resp.text
+    assert "카멘 노말" not in resp.text  # 5/10은 이전 주(수요일 기준)라 이 뷰엔 없어야 함
 
 
 def test_calendar_week_view_highlights_today(client, monkeypatch):
@@ -182,15 +184,49 @@ def test_calendar_week_view_highlights_today(client, monkeypatch):
 
 
 def test_calendar_week_navigation_stays_within_seven_days(client, monkeypatch):
+    """2026-05-15(금)이 속한 수요일 시작 주는 5/13~5/19 — 이전/다음 주 링크는
+    각각 7일 전인 5/6, 7일 후인 5/20이어야 한다."""
     _freeze_today(monkeypatch)
     with respx.mock:
         log_in(client)
         respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
         resp = client.get("/calendar", params={"view": "week"})
 
-    # 이전 주(5/3)와 다음 주(5/17) 링크가 있어야 한다
-    assert "week_start=2026-05-03" in resp.text
-    assert "week_start=2026-05-17" in resp.text
+    assert "week_start=2026-05-06" in resp.text
+    assert "week_start=2026-05-20" in resp.text
+
+
+def test_calendar_toggle_from_other_month_always_targets_today(client, monkeypatch):
+    """회귀 테스트: 6월을 보고 있다가 "주간"을 누르면 6월 기준 주가 아니라 오늘(5/15)이
+    속한 주(5/13~5/19)로 가야 한다 — 이전에는 링크에 현재 보고 있던 달의 1일이 속한
+    주가 박혀 있어서, 주간↔월간을 오갈 때마다 날짜가 계속 밀렸다."""
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
+        june_resp = client.get("/calendar", params={"year": 2026, "month": 6})
+        assert 'href="/calendar?view=week"' in june_resp.text
+
+        week_resp = client.get("/calendar", params={"view": "week"})
+
+    assert "5월 13일" in week_resp.text  # 6월이 아니라 오늘이 속한 주
+
+
+def test_calendar_toggle_from_other_week_always_targets_today(client, monkeypatch):
+    """회귀 테스트: 6월 첫째 주를 보고 있다가 "월간"을 누르면 그 주가 속한 6월이 아니라
+    오늘(5/15)이 속한 5월로 가야 한다."""
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
+        other_week_resp = client.get(
+            "/calendar", params={"view": "week", "week_start": "2026-06-03"}
+        )
+        assert 'href="/calendar?view=month"' in other_week_resp.text
+
+        month_resp = client.get("/calendar", params={"view": "month"})
+
+    assert "2026년 5월" in month_resp.text  # 6월이 아니라 오늘이 속한 달
 
 
 def test_calendar_view_toggle_links_present_in_both_views(client, monkeypatch):
