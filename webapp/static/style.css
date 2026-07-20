@@ -3887,6 +3887,36 @@ a.calendar-party:hover {
   border-bottom-color: var(--accent);
 }
 
+.rank-role-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  width: fit-content;
+  margin-bottom: 16px;
+}
+
+.rank-role-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rank-role-btn:hover {
+  color: var(--text);
+}
+
+.rank-role-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .rank-table {
   display: flex;
   flex-direction: column;

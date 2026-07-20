@@ -9,9 +9,17 @@
 
 <div class="rank-tabs">
   {% for m in metrics %}
-  <a href="/ranking?metric={{ m }}" class="rank-tab{% if m == metric %} is-active{% endif %}">{{ metric_labels[m] }}</a>
+  <a href="/ranking?metric={{ m }}{% if m == 'combat_power' %}&role={{ role }}{% endif %}" class="rank-tab{% if m == metric %} is-active{% endif %}">{{ metric_labels[m] }}</a>
   {% endfor %}
 </div>
+
+{% if metric == "combat_power" %}
+<div class="rank-role-toggle">
+  {% for r in ["dps", "support"] %}
+  <a href="/ranking?metric=combat_power&role={{ r }}" class="rank-role-btn{% if r == role %} is-active{% endif %}">{{ role_labels[r] }}</a>
+  {% endfor %}
+</div>
+{% endif %}
 
 {% if not entries %}
 <div class="party-empty-card">

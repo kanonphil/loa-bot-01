@@ -736,9 +736,13 @@ async def set_character_armory_cache(discord_id: str, character_name: str, detai
         return cur.rowcount > 0
 
 
-async def get_expedition_ranking(metric: str, limit: int = 100) -> list[dict]:
+async def get_expedition_ranking(metric: str, limit: int = 100, role: str | None = None) -> list[dict]:
     """전체 원정대(모든 유저의 모든 캐릭터) 랭킹.
     metric: 'combat_power' | 'item_level' | 'weekly_clears'.
+    role: 'dps' | 'support' | None — combat_power 지표에서만 적용되는 딜러/서포터 필터.
+    딜러가 압도적으로 많고(서포터는 전체 직업의 일부뿐) 두 그룹의 전투력 체급이
+    달라서, 섞어서 한 줄로 세우면 서포터가 상위권에 거의 안 보였다. item_level/
+    weekly_clears에는 적용하지 않는다(요청 범위가 전투력 랭킹으로 한정됨).
     반환 각 항목: discord_id, character_name, character_class, value(정렬 기준값),
     item_level, combat_power(참고 표시용)."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -775,10 +779,18 @@ async def get_expedition_ranking(metric: str, limit: int = 100) -> list[dict]:
             )
         else:
             column = "combat_power" if metric == "combat_power" else "item_level"
+            role_join = ""
+            role_filter = ""
+            if metric == "combat_power" and role in ("dps", "support"):
+                role_join = "JOIN job_classes jc ON jc.name = user_characters.character_class "
+                role_filter = f"AND jc.is_support = {1 if role == 'support' else 0} "
             cur = await db.execute(
-                f"SELECT discord_id, character_name, character_class, item_level, combat_power, "
-                f"{column} AS value FROM user_characters "
-                f"WHERE {column} IS NOT NULL AND {column} > 0 "
+                f"SELECT user_characters.discord_id, user_characters.character_name, "
+                f"user_characters.character_class, user_characters.item_level, "
+                f"user_characters.combat_power, user_characters.{column} AS value "
+                f"FROM user_characters {role_join}"
+                f"WHERE user_characters.{column} IS NOT NULL AND user_characters.{column} > 0 "
+                f"{role_filter}"
                 f"ORDER BY value DESC LIMIT ?",
                 (limit,),
             )

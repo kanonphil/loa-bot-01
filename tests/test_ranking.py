@@ -50,6 +50,22 @@ def test_ranking_by_combat_power_desc(seeded):
     assert {r["discord_id"] for r in rows} == {"111", "222"}
 
 
+def test_ranking_by_combat_power_filters_by_role(seeded):
+    """딜러/서포터 분리 — 홀리나이트(발키리)/바드는 서포터, 워로드는 딜러.
+    role 필터는 combat_power에서만 적용된다."""
+    support_rows = asyncio.run(db.get_expedition_ranking("combat_power", role="support"))
+    assert [r["character_name"] for r in support_rows] == ["발키리", "바드"]
+
+    dps_rows = asyncio.run(db.get_expedition_ranking("combat_power", role="dps"))
+    assert [r["character_name"] for r in dps_rows] == ["워로드부캐"]
+
+
+def test_ranking_role_filter_ignored_for_other_metrics(seeded):
+    """role은 combat_power 전용 — item_level/weekly_clears에서는 무시되고 전체가 나온다."""
+    il_rows = asyncio.run(db.get_expedition_ranking("item_level", role="support"))
+    assert {r["character_name"] for r in il_rows} == {"발키리", "바드", "워로드부캐"}
+
+
 def test_ranking_by_item_level_desc(seeded):
     rows = asyncio.run(db.get_expedition_ranking("item_level"))
     assert [r["character_name"] for r in rows] == ["발키리", "바드", "워로드부캐"]
@@ -123,6 +139,34 @@ def test_ranking_endpoint_defaults_invalid_metric(seeded):
     client = TestClient(app)
     resp = client.get("/api/internal/ranking", params={"metric": "hax"}, headers=HEADERS)
     assert resp.json()["metric"] == "combat_power"
+
+
+def test_ranking_endpoint_applies_role_filter(seeded):
+    from bot.api.server import app
+
+    client = TestClient(app)
+    resp = client.get(
+        "/api/internal/ranking",
+        params={"metric": "combat_power", "role": "support"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["role"] == "support"
+    assert [e["character_name"] for e in body["entries"]] == ["발키리", "바드"]
+
+
+def test_ranking_endpoint_ignores_invalid_role(seeded):
+    from bot.api.server import app
+
+    client = TestClient(app)
+    resp = client.get(
+        "/api/internal/ranking",
+        params={"metric": "combat_power", "role": "healer"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["role"] is None
+    assert len(body["entries"]) == 3
 
 
 def test_update_combat_power_sets_value(seeded):

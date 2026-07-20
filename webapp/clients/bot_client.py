@@ -117,11 +117,14 @@ async def sync_armory_detail(discord_id: str, character_name: str) -> dict:
         return resp.json()
 
 
-async def get_ranking(metric: str, limit: int = 100) -> dict:
+async def get_ranking(metric: str, limit: int = 100, role: str | None = None) -> dict:
+    params = {"metric": metric, "limit": limit}
+    if role:
+        params["role"] = role
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
             f"{config.BOT_API_BASE_URL}/api/internal/ranking",
-            params={"metric": metric, "limit": limit},
+            params=params,
             headers=_headers(),
         )
         resp.raise_for_status()

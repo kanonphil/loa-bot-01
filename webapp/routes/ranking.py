@@ -15,15 +15,23 @@ _METRIC_LABELS = {
     "item_level": "아이템 레벨",
     "weekly_clears": "주간 클리어",
 }
+_ROLE_LABELS = {"dps": "딜러", "support": "서포터"}
 
 
 @router.get("/ranking")
 async def ranking_page(
-    request: Request, metric: str = "combat_power", user: dict = Depends(get_current_user)
+    request: Request,
+    metric: str = "combat_power",
+    role: str = "dps",
+    user: dict = Depends(get_current_user),
 ):
     if metric not in _METRICS:
         metric = "combat_power"
-    data = await bot_client.get_ranking(metric)
+    if role not in _ROLE_LABELS:
+        role = "dps"
+    # 딜러/서포터 구분은 전투력 랭킹에서만 의미가 있다 — 딜러가 압도적으로 많고
+    # 서포터와 체급이 달라서 섞으면 서포터가 상위권에 거의 안 보였다.
+    data = await bot_client.get_ranking(metric, role=role if metric == "combat_power" else None)
     entries = data.get("entries", [])
     for i, e in enumerate(entries):
         e["rank"] = i + 1
@@ -36,6 +44,8 @@ async def ranking_page(
             "metric": metric,
             "metrics": _METRICS,
             "metric_labels": _METRIC_LABELS,
+            "role": role,
+            "role_labels": _ROLE_LABELS,
             "entries": entries,
         },
     )
