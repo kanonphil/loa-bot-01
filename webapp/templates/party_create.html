@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block content %}
 <link rel="stylesheet" href="/static/flatpickr.min.css">
 <div class="page-content">
@@ -10,82 +11,189 @@
 {% endif %}
 
 <form method="post" action="/parties/create" class="party-create-form">
-  <label>
-    레이드
-    <select name="raid_name" id="raid-name-select" required>
-      {% for raid_name, raid_info in raids.items() %}
-      <option value="{{ raid_name }}">{{ raid_info.icon }} {{ raid_info.short_name }}</option>
-      {% endfor %}
-    </select>
-  </label>
+  <input type="hidden" name="raid_name" id="raid-name-input" required>
+  <input type="hidden" name="difficulty" id="difficulty-input" required>
 
-  <label>
-    난이도
-    <select name="difficulty" id="difficulty-select" required></select>
-  </label>
+  <div class="raid-picker">
+    <div class="raid-picker-main">
+      {% call ui.toolbar() %}
+        <label class="raid-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+          <input type="search" id="raid-search" placeholder="레이드명 또는 약칭 검색" aria-label="레이드 검색" autocomplete="off">
+        </label>
+        <label class="ui-filter is-active" id="only-enterable-wrap">
+          <input type="checkbox" id="only-enterable" checked> 입장 가능만
+        </label>
+      {% endcall %}
 
-  <label>
-    숙련도
-    <select name="proficiency" required>
-      {% for p in proficiency_options %}
-      <option value="{{ p.value }}" title="{{ p.description }}">{{ p.label }}</option>
-      {% endfor %}
-    </select>
-  </label>
+      {% if not groups %}
+      {{ ui.empty("모집 가능한 레이드가 없습니다", "관리자가 레이드를 등록하면 여기에 나타납니다.", icon="⚔️") }}
+      {% else %}
+      <div id="raid-groups">
+        {% for g in groups %}
+        <section class="raid-group" data-group="{{ loop.index0 }}">
+          <h2 class="raid-group-label">{% if g.pinned %}📌 {% endif %}{{ g.label }}</h2>
+          <div class="raid-cards">
+            {% for r in g.raids %}
+            <div class="raid-pick{% if not r.enterable %} is-locked{% endif %}"
+                 data-raid="{{ r.raid_name }}"
+                 data-search="{{ (r.raid_name ~ ' ' ~ r.short_name) | lower }}"
+                 data-enterable="{{ 1 if r.enterable else 0 }}">
+              <div class="raid-pick-top">
+                <span aria-hidden="true">{{ r.icon }}</span>
+                <span class="raid-pick-name">{{ r.short_name }}</span>
+                {% if r.is_pinned %}<span class="raid-pick-pin" title="상단 고정">📌</span>{% endif %}
+              </div>
+              <div class="raid-pick-sub">{{ r.raid_name }}{% if r.min_level %} · 최소 {{ r.min_level }}{% endif %}</div>
+              <div class="raid-pick-diffs">
+                {% for d in r.difficulties %}
+                <button type="button" class="raid-diff"
+                        data-raid="{{ r.raid_name }}" data-diff="{{ d.name }}"
+                        data-min="{{ d.min_level }}" data-enterable="{{ 1 if d.enterable else 0 }}"
+                        data-slots="{{ d.total_slots }}" data-split="{{ d.party_split or 0 }}"
+                        data-gates="{{ d.gates }}"
+                        aria-pressed="false"
+                        aria-label="{{ r.raid_name }} {{ d.name }}">{{ d.name }}</button>
+                {% endfor %}
+                {% if not r.difficulties %}
+                <span class="ui-card-meta">난이도 미등록</span>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+        {% endfor %}
+      </div>
+      <p class="raid-picker-noresult" id="raid-noresult" hidden>
+        조건에 맞는 레이드가 없습니다. 검색어를 지우거나 “입장 가능만”을 꺼보세요.
+      </p>
+      {% endif %}
+    </div>
 
-  <label>
-    일정
-    <input type="text" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" required>
-  </label>
+    <aside class="raid-picker-side">
+      <div class="ui-card raid-summary" id="raid-summary">
+        <span class="ui-card-title">개설할 공대</span>
+        <p class="ui-card-meta" id="raid-summary-empty">위에서 레이드의 난이도를 누르면 인원·관문·분할이 여기에 채워집니다.</p>
+        <dl class="raid-summary-kv" id="raid-summary-kv" hidden></dl>
+      </div>
 
-  <label>
-    공지/메모 (선택)
-    <input type="text" name="memo" maxlength="150" placeholder="예) 음성 채널 필수">
-  </label>
+      <label>
+        숙련도
+        <select name="proficiency" required>
+          {% for p in proficiency_options %}
+          <option value="{{ p.value }}" title="{{ p.description }}">{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
 
-  <label>
-    참여할 캐릭터 (선택 — 나중에 직접 참여해도 됩니다)
-    <select name="character_name" id="character-name-select">
-      <option value="">선택 안 함</option>
-      {% for c in characters %}
-      <option value="{{ c.character_name }}">{{ c.character_name }} ({{ c.character_class }})</option>
-      {% endfor %}
-    </select>
-  </label>
+      <label>
+        일정
+        <input type="text" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" required>
+      </label>
 
-  <label>
-    역할
-    <select name="role" id="role-select">
-      <option value="dps">딜러</option>
-      <option value="support">서포터</option>
-    </select>
-  </label>
+      <label>
+        공지/메모 (선택)
+        <input type="text" name="memo" maxlength="150" placeholder="예) 음성 채널 필수">
+      </label>
 
-  <button type="submit" id="party-create-submit">공대 개설</button>
+      <label>
+        참여할 캐릭터 (선택 — 나중에 직접 참여해도 됩니다)
+        <select name="character_name" id="character-name-select">
+          <option value="">선택 안 함</option>
+          {% for c in characters %}
+          <option value="{{ c.character_name }}">{{ c.character_name }} ({{ c.character_class }} · {{ c.item_level }})</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        역할
+        <select name="role" id="role-select">
+          <option value="dps">딜러</option>
+          <option value="support">서포터</option>
+        </select>
+      </label>
+
+      <button type="submit" id="party-create-submit" class="ui-btn" disabled>레이드를 먼저 고르세요</button>
+    </aside>
+  </div>
 </form>
 </div>
 
 <script>
-  const difficultiesByRaid = {{ difficulties_by_raid_json | safe }};
-  const raidSelect = document.getElementById("raid-name-select");
-  const diffSelect = document.getElementById("difficulty-select");
-
-  function fillDifficulties() {
-    const diffs = difficultiesByRaid[raidSelect.value] || [];
-    diffSelect.innerHTML = diffs.map((d) => `<option value="${d}">${d}</option>`).join("");
-  }
-
-  raidSelect.addEventListener("change", fillDifficulties);
-  fillDifficulties();
-
-  // 딜러 전용 직업은 서포터 역할을 고를 수 없다 (참여 API도 동일하게 검증) — 선택한
-  // 캐릭터가 서포터 직업이 아니면 "서포터" 옵션을 막고 자동으로 딜러로 되돌리고,
-  // 서포터 직업이면 편의상 역할을 자동으로 서포터로 맞춰준다.
+  const characterLevels = {{ character_levels_json | safe }};
   const characterIsSupport = {{ character_is_support_json | safe }};
+
+  const raidInput = document.getElementById("raid-name-input");
+  const diffInput = document.getElementById("difficulty-input");
+  const submitBtn = document.getElementById("party-create-submit");
+  const searchInput = document.getElementById("raid-search");
+  const onlyEnterable = document.getElementById("only-enterable");
+  const onlyWrap = document.getElementById("only-enterable-wrap");
+  const noResult = document.getElementById("raid-noresult");
+  const summaryEmpty = document.getElementById("raid-summary-empty");
+  const summaryKv = document.getElementById("raid-summary-kv");
   const characterSelect = document.getElementById("character-name-select");
   const roleSelect = document.getElementById("role-select");
-  const supportOption = roleSelect.querySelector('option[value="support"]');
 
+  // 난이도 버튼 하나가 곧 "레이드 + 난이도" 선택 — 드롭다운 두 번을 한 번으로 줄인다.
+  function selectDifficulty(btn) {
+    document.querySelectorAll(".raid-diff[aria-pressed='true']").forEach((b) => b.setAttribute("aria-pressed", "false"));
+    document.querySelectorAll(".raid-pick.is-selected").forEach((c) => c.classList.remove("is-selected"));
+    btn.setAttribute("aria-pressed", "true");
+    btn.closest(".raid-pick").classList.add("is-selected");
+
+    raidInput.value = btn.dataset.raid;
+    diffInput.value = btn.dataset.diff;
+    submitBtn.disabled = false;
+    submitBtn.textContent = "공대 개설";
+
+    const slots = Number(btn.dataset.slots);
+    const split = Number(btn.dataset.split);
+    const rows = [
+      ["레이드", btn.dataset.raid],
+      ["난이도", btn.dataset.diff],
+      ["최소 레벨", btn.dataset.min],
+      ["인원", slots + "인"],
+      ["구성", split > 0 ? (slots / split) + "파티 × " + split + "인" : "단일 파티"],
+      ["관문", btn.dataset.gates + "관문"],
+    ];
+    summaryKv.innerHTML = rows
+      .map(([k, v]) => `<div class="kv"><dt>${k}</dt><dd>${v}</dd></div>`)
+      .join("");
+    summaryKv.hidden = false;
+    summaryEmpty.hidden = true;
+  }
+
+  document.querySelectorAll(".raid-diff").forEach((btn) => {
+    btn.addEventListener("click", () => selectDifficulty(btn));
+  });
+
+  // 검색 + "입장 가능만" 필터. 서버 왕복 없이 화면에서만 걸러낸다.
+  function applyFilters() {
+    const q = searchInput.value.trim().toLowerCase();
+    const onlyOk = onlyEnterable.checked;
+    onlyWrap.classList.toggle("is-active", onlyOk);
+
+    let visible = 0;
+    document.querySelectorAll(".raid-pick").forEach((card) => {
+      const matches = !q || card.dataset.search.includes(q);
+      const enterable = !onlyOk || card.dataset.enterable === "1";
+      const show = matches && enterable;
+      card.hidden = !show;
+      if (show) visible++;
+    });
+    document.querySelectorAll(".raid-group").forEach((group) => {
+      group.hidden = !group.querySelector(".raid-pick:not([hidden])");
+    });
+    if (noResult) noResult.hidden = visible > 0;
+  }
+  if (searchInput) searchInput.addEventListener("input", applyFilters);
+  if (onlyEnterable) onlyEnterable.addEventListener("change", applyFilters);
+
+  // 딜러 전용 직업은 서포터 역할을 고를 수 없다 (참여 API도 동일하게 검증).
+  const supportOption = roleSelect.querySelector('option[value="support"]');
   function updateRoleOptions() {
     const isSupport = characterIsSupport[characterSelect.value];
     supportOption.disabled = characterSelect.value !== "" && !isSupport;
@@ -95,19 +203,17 @@
       roleSelect.value = "support";
     }
   }
-
   characterSelect.addEventListener("change", updateRoleOptions);
   updateRoleOptions();
 
   // 응답이 느릴 때 더블클릭/재제출로 스레드가 중복 생성되는 것을 막는다
-  // (서버에도 동일 유저의 짧은 시간 내 중복 요청 방지가 있지만, 클라이언트에서
-  // 먼저 막아 불필요한 왕복 자체를 줄인다).
-  const createForm = document.querySelector(".party-create-form");
-  const submitBtn = document.getElementById("party-create-submit");
-  createForm.addEventListener("submit", function () {
+  // (서버에도 중복 요청 방지가 있지만, 불필요한 왕복 자체를 줄인다).
+  document.querySelector(".party-create-form").addEventListener("submit", function () {
     submitBtn.disabled = true;
     submitBtn.textContent = "개설 중...";
   });
+
+  applyFilters();
 </script>
 <script src="/static/flatpickr.min.js"></script>
 <script src="/static/party-datetime.js"></script>

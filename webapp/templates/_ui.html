@@ -1,0 +1,74 @@
+{#
+  공용 UI 프리미티브.
+
+  페이지마다 카드·빈 상태·배지를 다시 만들던 걸 여기로 모은다. 대응 CSS는
+  style.css의 "공용 프리미티브" 섹션에 있고, 전부 --sp-* / --r-* / --fs-* 토큰만 쓴다.
+  새 화면은 여기 있는 것부터 찾아 쓰고, 없으면 여기에 추가한다.
+#}
+
+{# ── Chip — 상태·난이도·숙련도·기간을 전부 같은 형태로 ── #}
+{% macro chip(label, tone="", title="") -%}
+<span class="ui-chip{% if tone %} is-{{ tone }}{% endif %}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</span>
+{%- endmacro %}
+
+{# ── Card — href를 주면 링크 카드, stripe를 주면 왼쪽에 상태 색 띠 ── #}
+{% macro card(href=none, stripe="", extra="") %}
+{% if href %}
+<a class="ui-card{% if stripe %} has-stripe is-{{ stripe }}{% endif %} {{ extra }}" href="{{ href }}">{{ caller() }}</a>
+{% else %}
+<div class="ui-card{% if stripe %} has-stripe is-{{ stripe }}{% endif %} {{ extra }}">{{ caller() }}</div>
+{% endif %}
+{% endmacro %}
+
+{# ── Stat — 큰 숫자 + 라벨(+ 게이지) ── #}
+{% macro stat(value, label, pct=none, tone="") %}
+<div class="ui-stat">
+  <b class="ui-stat-value">{{ value }}</b>
+  <span class="ui-stat-label">{{ label }}</span>
+  {% if pct is not none %}{{ gauge(pct, tone) }}{% endif %}
+</div>
+{% endmacro %}
+
+{# ── Gauge — 채움 비율 막대 ── #}
+{% macro gauge(pct, tone="") %}
+<div class="ui-gauge{% if tone %} is-{{ tone }}{% endif %}" role="presentation">
+  <i style="width: {{ [[pct, 0] | max, 100] | min }}%"></i>
+</div>
+{% endmacro %}
+
+{# ── SlotBar — 참여 인원을 읽기 전에 보이게 ── #}
+{% macro slotbar(slots, total, pct=none) %}
+<div class="ui-slotbar">
+  <span class="ui-avatars">
+    {% for s in slots[:6] %}
+    <i title="{{ s.character_name }} ({{ s.character_class }})">{{ s.character_name[0] }}</i>
+    {% endfor %}
+    {% set empty = (total or 0) - (slots | length) %}
+    {% if empty > 0 %}<i class="is-empty" title="빈 자리 {{ empty }}">+{{ empty }}</i>{% endif %}
+  </span>
+  <span class="ui-slotbar-count">{{ slots | length }}/{{ total }}</span>
+</div>
+{{ gauge(pct if pct is not none else 0, "ok" if (total and (slots | length) >= total) else "") }}
+{% endmacro %}
+
+{# ── EmptyState — "없다"에서 끝내지 않고 다음 행동을 항상 붙인다 ── #}
+{% macro empty(title, desc="", action_label=none, action_href=none, icon="") %}
+<div class="ui-empty">
+  {% if icon %}<span class="ui-empty-icon" aria-hidden="true">{{ icon }}</span>{% endif %}
+  <b class="ui-empty-title">{{ title }}</b>
+  {% if desc %}<p class="ui-empty-desc">{{ desc }}</p>{% endif %}
+  {% if action_label and action_href %}
+  <a class="ui-btn" href="{{ action_href }}">{{ action_label }}</a>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# ── Toolbar — 필터 + 주요 동작. 목록형 화면 상단은 전부 이 형태 ── #}
+{% macro toolbar() %}
+<div class="ui-toolbar">{{ caller() }}</div>
+{% endmacro %}
+
+{# ── Filter — 툴바 안에 들어가는 링크형 필터 ── #}
+{% macro filter_link(label, href, active=false, count=none) -%}
+<a class="ui-filter{% if active %} is-active{% endif %}" href="{{ href }}">{{ label }}{% if count is not none %} <b>{{ count }}</b>{% endif %}</a>
+{%- endmacro %}

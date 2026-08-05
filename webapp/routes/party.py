@@ -1,4 +1,5 @@
 """공대 모집 페이지 — 목록/상세/참여/나가기/개설/파티장 관리."""
+import asyncio
 import json
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -7,16 +8,79 @@ from starlette.responses import RedirectResponse
 from webapp import config
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
+from webapp.format import party_view
+from webapp.raids import picker_groups
 from webapp.templating import templates
 
 router = APIRouter()
 
+# 목록 상단 필터 — 라벨과 순서를 한 곳에서 관리한다.
+PARTY_FILTERS = [
+    ("all", "전체"),
+    ("recruiting", "모집중"),
+    ("mine", "내 공대"),
+    ("eligible", "입장 가능"),
+]
+
+
+def _max_item_level(characters: list[dict]) -> float:
+    return max((c.get("item_level") or 0) for c in characters) if characters else 0
+
+
+def filter_parties(parties: list[dict], key: str, discord_id: str, max_level: float) -> list[dict]:
+    """목록 필터. '입장 가능'은 내 캐릭터 중 가장 높은 레벨 기준으로,
+    아직 자리가 남아 있고 이미 참여하지 않은 공대만 남긴다."""
+    if key == "recruiting":
+        return [p for p in parties if p["status"] == "recruiting"]
+    if key == "mine":
+        return [
+            p for p in parties
+            if p.get("leader_id") == discord_id
+            or any(s["discord_id"] == discord_id for s in p.get("slots") or [])
+        ]
+    if key == "eligible":
+        return [
+            p for p in parties
+            if p["status"] == "recruiting"
+            and (p.get("min_level") or 0) <= max_level
+            and not any(s["discord_id"] == discord_id for s in p.get("slots") or [])
+        ]
+    return parties
+
 
 @router.get("/parties")
-async def party_list(request: Request, user: dict = Depends(get_current_user)):
-    parties = await bot_client.list_parties(config.DISCORD_GUILD_ID)
+async def party_list(
+    request: Request, filter: str = "all", user: dict = Depends(get_current_user)
+):
+    if filter not in dict(PARTY_FILTERS):
+        filter = "all"
+    parties, characters = await asyncio.gather(
+        bot_client.list_parties(config.DISCORD_GUILD_ID),
+        bot_client.get_user_characters(user["discord_id"]),
+    )
+    max_level = _max_item_level(characters)
+    discord_id = user["discord_id"]
+
+    counts = {
+        key: len(filter_parties(parties, key, discord_id, max_level))
+        for key, _ in PARTY_FILTERS
+    }
+    visible = [party_view(p) for p in filter_parties(parties, filter, discord_id, max_level)]
+    # 가까운 일정부터 — 일정이 없는 공대는 뒤로.
+    visible.sort(key=lambda p: (p.get("scheduled_datetime") is None, p.get("scheduled_datetime") or ""))
+
     return templates.TemplateResponse(
-        request, "party_list.html", {"user": user, "active": "parties", "parties": parties}
+        request,
+        "party_list.html",
+        {
+            "user": user,
+            "active": "parties",
+            "parties": visible,
+            "filters": PARTY_FILTERS,
+            "active_filter": filter,
+            "counts": counts,
+            "has_any": bool(parties),
+        },
     )
 
 
@@ -24,18 +88,21 @@ async def party_list(request: Request, user: dict = Depends(get_current_user)):
 async def create_party_form(
     request: Request, error: str | None = None, user: dict = Depends(get_current_user)
 ):
-    raids = await bot_client.get_raids()
-    proficiency_options = await bot_client.get_proficiency_options()
-    active_raids = {name: info for name, info in raids.items() if info.get("is_active", True)}
-    # 레이드 선택에 따라 난이도 select를 채우는 용도 (서버 왕복 없이 JS로 처리)
-    difficulties_by_raid = {
-        name: list(info["difficulties"].keys()) for name, info in active_raids.items()
+    raids, proficiency_options, characters, support_classes = await asyncio.gather(
+        bot_client.get_raids(),
+        bot_client.get_proficiency_options(),
+        bot_client.get_user_characters_grouped(user["discord_id"]),
+        bot_client.get_support_classes(),
+    )
+    # 관리자가 정한 순서(카테고리 → sort_order → 상단 고정) 그대로 보여준다.
+    groups = picker_groups(raids, _max_item_level(characters) or None)
+    character_levels = {
+        c["character_name"]: c.get("item_level") or 0 for c in characters
     }
-    characters = await bot_client.get_user_characters_grouped(user["discord_id"])
-    support_classes = set(await bot_client.get_support_classes())
     # 캐릭터 직업이 서포터가 아니면 "서포터" 역할을 고를 수 없다 — 참여 API도 동일하게 검증한다.
+    support_set = set(support_classes)
     character_is_support = {
-        c["character_name"]: c["character_class"] in support_classes for c in characters
+        c["character_name"]: c["character_class"] in support_set for c in characters
     }
     return templates.TemplateResponse(
         request,
@@ -43,10 +110,11 @@ async def create_party_form(
         {
             "user": user,
             "active": "parties",
-            "raids": active_raids,
-            "difficulties_by_raid_json": json.dumps(difficulties_by_raid, ensure_ascii=False),
+            "groups": groups,
+            "groups_json": json.dumps(groups, ensure_ascii=False),
             "proficiency_options": proficiency_options,
             "characters": characters,
+            "character_levels_json": json.dumps(character_levels, ensure_ascii=False),
             "character_is_support_json": json.dumps(character_is_support, ensure_ascii=False),
             "error": error,
         },

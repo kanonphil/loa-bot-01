@@ -51,8 +51,8 @@ def test_ranking_combat_power_defaults_to_dps_role(client):
         resp = client.get("/ranking")
 
     assert route.calls.last.request.url.params["role"] == "dps"
-    assert 'class="rank-role-btn is-active">딜러' in resp.text
-    assert 'href="/ranking?metric=combat_power&role=support"' in resp.text
+    assert 'ui-filter is-active" href="/ranking?metric=combat_power&amp;role=dps"' in resp.text
+    assert 'href="/ranking?metric=combat_power&amp;role=support"' in resp.text
 
 
 def test_ranking_combat_power_support_role_is_selectable(client):
@@ -64,7 +64,7 @@ def test_ranking_combat_power_support_role_is_selectable(client):
         resp = client.get("/ranking", params={"metric": "combat_power", "role": "support"})
 
     assert route.calls.last.request.url.params["role"] == "support"
-    assert 'class="rank-role-btn is-active">서포터' in resp.text
+    assert 'ui-filter is-active" href="/ranking?metric=combat_power&amp;role=support"' in resp.text
 
 
 def test_ranking_role_toggle_hidden_outside_combat_power_tab(client):

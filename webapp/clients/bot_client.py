@@ -72,6 +72,19 @@ async def get_raid_categories() -> list[dict]:
         return resp.json()
 
 
+async def get_raid_progress(discord_id: str) -> dict:
+    """원정대 전체의 이번 주 진행률 — 봇이 한 번에 계산해서 준다.
+    예전엔 캐릭터마다 completions/raid-selection을 따로 불러 왕복이 N배였다."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{config.BOT_API_BASE_URL}/api/internal/raid-progress",
+            params={"discord_id": discord_id},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_support_classes() -> list[str]:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(

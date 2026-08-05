@@ -4,7 +4,10 @@ import discord
 from discord.ui import View, Button, Select, Modal, TextInput
 from datetime import datetime, timezone, timedelta
 
-from bot.data.raids import RAIDS, get_applicable_raids, get_difficulty_info, SUPPORT_CLASSES, PROFICIENCY
+from bot.data.raids import (
+    RAIDS, get_applicable_raids, get_difficulty_info, recruit_order,
+    SUPPORT_CLASSES, PROFICIENCY,
+)
 import bot.database.manager as db
 import bot.api.lostark as loa
 from bot.services.expedition import (
@@ -696,19 +699,6 @@ def validate_party_schedule(dt: datetime, raid_info: dict) -> str | None:
     return None
 
 
-def _is_extreme_expired(info: dict) -> bool:
-    """익스트림 레이드의 운영 기간이 지났으면 True."""
-    if not info.get("is_extreme"):
-        return False
-    until = info.get("available_until")
-    if not until:
-        return False
-    try:
-        return datetime.fromisoformat(until) < datetime.now(KST)
-    except ValueError:
-        return False
-
-
 def _format_schedule(dt: datetime) -> str:
     """datetime → 12시간제 한국어 표시 문자열."""
     hour = dt.hour
@@ -941,10 +931,15 @@ class RemoveCharacterView(View):
 class RecruitView(View):
     """레이드·난이도·숙련도·일정을 한 화면에서 설정하는 공대 모집 뷰."""
 
+    SELECT_LIMIT = 25          # 디스코드 Select 옵션 최대 개수
+    PAGE_SIZE    = SELECT_LIMIT - 1  # 마지막 한 칸은 "더 보기"용
+    MORE_VALUE   = "__more__"
+
     def __init__(self, leader_id: str, forum_channel_id: str) -> None:
         super().__init__(timeout=300)
         self.leader_id       = leader_id
         self.forum_channel_id = forum_channel_id
+        self.raid_page:          int = 0
         self.selected_raid:       str | None = None
         self.selected_difficulty: str | None = None
         self.selected_proficiency:str | None = None
@@ -958,32 +953,66 @@ class RecruitView(View):
 
     # ── 뷰 재구성 ──────────────────────────────────
 
+    @classmethod
+    def _paginate(cls, ordered: list) -> list[list]:
+        """25개 이하면 한 페이지에 전부, 넘으면 24개씩 끊는다."""
+        if not ordered:
+            return []
+        if len(ordered) <= cls.SELECT_LIMIT:
+            return [ordered]
+        return [
+            ordered[i:i + cls.PAGE_SIZE]
+            for i in range(0, len(ordered), cls.PAGE_SIZE)
+        ]
+
+    def _raid_option(self, name: str, info: dict) -> discord.SelectOption:
+        levels = [d["min_level"] for d in info["difficulties"].values()]
+        desc = f"{info['category']}"
+        if levels:
+            desc += f" | 최소 {min(levels)}"
+        else:
+            desc += " | 난이도 미등록"
+        if info.get("is_extreme") and info.get("available_until"):
+            try:
+                until_dt = datetime.fromisoformat(info["available_until"])
+                desc += f" | ~{until_dt.month}/{until_dt.day} 까지"
+            except ValueError:
+                pass
+        return discord.SelectOption(
+            label=("📌 " + name) if info.get("is_pinned") else name,
+            description=desc, emoji=info["icon"],
+            value=name, default=(name == self.selected_raid),
+        )
+
     def _build(self) -> None:
         self.clear_items()
 
-        # 레이드 Select (비활성·기간만료 레이드 제외)
-        raid_options = []
-        for name, info in RAIDS.items():
-            if not info.get("is_active", True):
-                continue
-            if _is_extreme_expired(info):
-                continue
-            min_lv = min(d["min_level"] for d in info["difficulties"].values())
-            desc = f"{info['category']} | 최소 {min_lv}"
-            if info.get("is_extreme") and info.get("available_until"):
-                try:
-                    until_dt = datetime.fromisoformat(info["available_until"])
-                    desc += f" | ~{until_dt.month}/{until_dt.day} 까지"
-                except ValueError:
-                    pass
+        # 레이드 Select — 상단 고정 → 카테고리 → 관리자가 정한 순서.
+        # 디스코드 Select는 옵션이 최대 25개라, 그보다 많으면 24개씩 끊고
+        # 마지막 한 칸을 "더 보기"로 써서 페이지를 넘긴다(예전엔 자르지 않고
+        # 전부 넣어서, 26개째가 생기는 순간 /공대모집 자체가 죽었다).
+        ordered = recruit_order()
+        pages = self._paginate(ordered)
+        if self.raid_page >= len(pages):
+            self.raid_page = 0
+        page = pages[self.raid_page] if pages else []
+
+        raid_options = [self._raid_option(name, info) for name, info in page]
+        if len(pages) > 1:
+            nxt = (self.raid_page + 1) % len(pages)
             raid_options.append(discord.SelectOption(
-                label=name, description=desc, emoji=info["icon"],
-                value=name, default=(name == self.selected_raid),
+                label=f"▼ 다른 레이드 더 보기 ({nxt + 1}/{len(pages)} 페이지)",
+                description="레이드 목록의 다음 묶음을 봅니다",
+                value=self.MORE_VALUE,
             ))
+        if not raid_options:
+            raid_options = [discord.SelectOption(label="모집 가능한 레이드가 없습니다", value="-")]
+
         u = self._uid
         raid_sel = Select(
             custom_id=f"rc:{u}:r",
             placeholder="레이드 선택", options=raid_options, row=0,
+            disabled=not ordered,
         )
         raid_sel.callback = self._on_raid
         self.add_item(raid_sel)
@@ -1086,7 +1115,14 @@ class RecruitView(View):
         if str(interaction.user.id) != self.leader_id:
             await interaction.response.send_message("파티장만 설정할 수 있습니다.", ephemeral=True)
             return
-        self.selected_raid = interaction.data["values"][0]
+        chosen = interaction.data["values"][0]
+        if chosen == self.MORE_VALUE:
+            # 레이드를 고른 게 아니라 목록의 다음 묶음을 보려는 것 — 선택은 유지한다.
+            self.raid_page += 1
+            self._build()
+            await interaction.response.edit_message(content=self._status_text(), view=self)
+            return
+        self.selected_raid = chosen
         self.selected_difficulty = None
         self._build()
         await interaction.response.edit_message(content=self._status_text(), view=self)

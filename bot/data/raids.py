@@ -49,6 +49,36 @@ def get_difficulty_info(raid_name: str, difficulty: str) -> dict | None:
     return None
 
 
+def is_recruitable(raid_info: dict) -> bool:
+    """모집 목록에 띄울 레이드인지 — 비활성이거나 익스트림 기간이 지났으면 뺀다."""
+    from datetime import datetime, timezone, timedelta
+    if not raid_info.get("is_active", True):
+        return False
+    if raid_info.get("is_extreme"):
+        until = raid_info.get("available_until")
+        if until:
+            try:
+                if datetime.fromisoformat(until) < datetime.now(timezone(timedelta(hours=9))):
+                    return False
+            except ValueError:
+                pass
+    return True
+
+
+def recruit_order(raids: dict | None = None) -> list[tuple[str, dict]]:
+    """공대 모집에서 보여줄 레이드를 표시 순서대로 반환한다.
+
+    RAIDS 자체는 카테고리 → sort_order 순으로 정렬돼 있고, 여기서 상단 고정만
+    앞으로 끌어올린다. 고정을 RAIDS 정렬에 섞지 않는 이유는 레이드 체크처럼
+    카테고리 순서를 그대로 써야 하는 화면이 따로 있기 때문."""
+    source = RAIDS if raids is None else raids
+    items = [(name, info) for name, info in source.items() if is_recruitable(info)]
+    return (
+        [x for x in items if x[1].get("is_pinned")]
+        + [x for x in items if not x[1].get("is_pinned")]
+    )
+
+
 def get_applicable_raids(item_level: float) -> list[tuple[str, str, dict]]:
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone(timedelta(hours=9)))

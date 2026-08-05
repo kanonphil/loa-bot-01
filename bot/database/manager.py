@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS raid_categories (
     is_extreme INTEGER NOT NULL DEFAULT 0
 );
 
+-- sort_order: 카테고리 안에서의 표시 순서. 이게 없던 시절엔 rowid(= 추가한 순서)로
+-- 정렬해서 나중에 추가한 레이드를 위로 올릴 방법이 아예 없었다.
+-- is_pinned: 카테고리를 무시하고 모집 목록 맨 위로 올리는 "상단 고정".
 CREATE TABLE IF NOT EXISTS raids_data (
     name            TEXT PRIMARY KEY,
     short_name      TEXT NOT NULL,
@@ -126,7 +129,9 @@ CREATE TABLE IF NOT EXISTS raids_data (
     category        TEXT NOT NULL,
     is_active       INTEGER NOT NULL DEFAULT 1,
     available_from  TEXT,
-    available_until TEXT
+    available_until TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    is_pinned       INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS raid_difficulties (
@@ -292,6 +297,8 @@ async def init_db() -> None:
             ("is_active",       "INTEGER NOT NULL DEFAULT 1"),
             ("available_from",  "TEXT"),
             ("available_until", "TEXT"),
+            ("sort_order",      "INTEGER NOT NULL DEFAULT 0"),
+            ("is_pinned",       "INTEGER NOT NULL DEFAULT 0"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE raids_data ADD COLUMN {col} {definition}")
@@ -339,6 +346,7 @@ async def init_db() -> None:
     await seed_game_data()
     await _migrate_encrypt_api_keys()
     await _migrate_backfill_user_api_keys()
+    await _migrate_backfill_raid_sort_order()
 
 
 # ──────────────────────────────────────────────
@@ -465,6 +473,39 @@ async def _migrate_backfill_user_api_keys() -> None:
         if migrated > 0:
             await db.commit()
             print(f"[DB] user_api_keys 백필 마이그레이션 완료: {migrated}명")
+
+
+async def _migrate_backfill_raid_sort_order() -> None:
+    """sort_order 컬럼이 생기기 전에 등록된 레이드는 전부 0이라 정렬이 동점이 된다.
+    배포 직후 순서가 바뀌면 안 되므로, 기존 정렬 기준이던 rowid 순서를 그대로
+    0..N-1로 옮겨 담는다(카테고리별로 따로 매김). 한 카테고리 안에서 이미
+    0이 아닌 값이 하나라도 있으면 사람이 정한 순서로 보고 건드리지 않는다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT name, category, sort_order FROM raids_data ORDER BY rowid"
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+        by_cat: dict[str, list[dict]] = {}
+        for r in rows:
+            by_cat.setdefault(r["category"], []).append(r)
+
+        backfilled = 0
+        for raids in by_cat.values():
+            if len(raids) < 2:
+                continue
+            if any(r["sort_order"] for r in raids):
+                continue  # 이미 순서가 매겨진 카테고리
+            for i, r in enumerate(raids):
+                await db.execute(
+                    "UPDATE raids_data SET sort_order=? WHERE name=?", (i, r["name"])
+                )
+                backfilled += 1
+
+        if backfilled > 0:
+            await db.commit()
+            print(f"[DB] raids_data.sort_order 백필 완료: {backfilled}개")
 
 
 async def delete_user(discord_id: str) -> None:
@@ -2069,12 +2110,14 @@ async def get_raids_dict() -> dict:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT r.name, r.short_name, r.icon, r.category, "
-            "r.is_active, r.available_from, r.available_until, c.is_extreme, "
+            "r.is_active, r.available_from, r.available_until, "
+            "r.sort_order AS raid_sort_order, r.is_pinned, c.is_extreme, "
             "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates, d.sort_order "
             "FROM raids_data r "
             "JOIN raid_categories c ON r.category = c.name "
             "LEFT JOIN raid_difficulties d ON r.name = d.raid_name "
-            "ORDER BY c.sort_order, r.rowid, d.sort_order"
+            # rowid를 마지막에 남겨, sort_order가 동점일 때의 순서를 예전과 동일하게 유지한다.
+            "ORDER BY c.sort_order, r.sort_order, r.rowid, d.sort_order"
         )
         rows = await cur.fetchall()
     result: dict = {}
@@ -2090,6 +2133,8 @@ async def get_raids_dict() -> dict:
                 "is_active":      bool(r["is_active"]),
                 "available_from": r["available_from"],
                 "available_until":r["available_until"],
+                "sort_order":     r["raid_sort_order"],
+                "is_pinned":      bool(r["is_pinned"]),
                 "difficulties":   {},
             }
         if r["difficulty"]:
@@ -2103,17 +2148,98 @@ async def get_raids_dict() -> dict:
     return result
 
 
+async def get_next_raid_sort_order(category: str) -> int:
+    """이 카테고리에 레이드를 추가할 때 쓸 sort_order(현재 최댓값+1).
+    난이도(get_next_difficulty_sort_order)와 같은 이유 — 전부 0으로 넣으면
+    정렬이 동점이 되어 추가한 순서가 지켜지지 않는다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) FROM raids_data WHERE category=?",
+            (category,),
+        )
+        return (await cur.fetchone())[0] + 1
+
+
 async def add_raid(name: str, short_name: str, icon: str, category: str) -> bool:
     try:
+        sort_order = await get_next_raid_sort_order(category)
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(
-                "INSERT INTO raids_data (name, short_name, icon, category) VALUES (?, ?, ?, ?)",
-                (name, short_name, icon, category),
+                "INSERT INTO raids_data (name, short_name, icon, category, sort_order) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (name, short_name, icon, category, sort_order),
             )
             await db.commit()
         return True
     except aiosqlite.IntegrityError:
         return False
+
+
+async def reorder_raids(category: str, order: list[str]) -> int:
+    """한 카테고리의 레이드 순서를 통째로 다시 매긴다. 관리 화면의 드래그 정렬은
+    "최종 배열"을 만들기 때문에, 항목마다 숫자를 따로 보내면 중간 상태가 저장돼
+    순서가 깨진다 — 배열 하나를 한 트랜잭션에서 적용한다.
+    order에 없는 레이드는 뒤로 밀리되 기존 상대 순서를 유지한다.
+    반환값은 실제로 순서를 부여한 레이드 수."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT name FROM raids_data WHERE category=? ORDER BY sort_order, rowid",
+            (category,),
+        )
+        existing = [r[0] for r in await cur.fetchall()]
+        if not existing:
+            return 0
+
+        wanted = [n for n in order if n in existing]
+        final = wanted + [n for n in existing if n not in wanted]
+        for i, name in enumerate(final):
+            await db.execute(
+                "UPDATE raids_data SET sort_order=? WHERE name=?", (i, name)
+            )
+        await db.commit()
+        return len(final)
+
+
+async def reorder_categories(order: list[str]) -> int:
+    """카테고리 순서를 배열로 통째로 재부여. reorder_raids와 같은 이유."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT name FROM raid_categories ORDER BY sort_order, name"
+        )
+        existing = [r[0] for r in await cur.fetchall()]
+        if not existing:
+            return 0
+
+        wanted = [n for n in order if n in existing]
+        final = wanted + [n for n in existing if n not in wanted]
+        for i, name in enumerate(final):
+            await db.execute(
+                "UPDATE raid_categories SET sort_order=? WHERE name=?", (i, name)
+            )
+        await db.commit()
+        return len(final)
+
+
+async def set_raid_pinned(name: str, is_pinned: bool) -> bool:
+    """상단 고정 — 카테고리를 무시하고 모집 목록 맨 위로 올린다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raids_data SET is_pinned=? WHERE name=?", (int(is_pinned), name)
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def move_raid_category(name: str, category: str) -> bool:
+    """레이드를 다른 카테고리로 옮긴다(순서는 그 카테고리 맨 뒤)."""
+    next_sort = await get_next_raid_sort_order(category)
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raids_data SET category=?, sort_order=? WHERE name=?",
+            (category, next_sort, name),
+        )
+        await db.commit()
+        return cur.rowcount > 0
 
 
 async def remove_raid(name: str) -> bool:
@@ -2250,6 +2376,28 @@ async def add_difficulty(
         return True
     except aiosqlite.IntegrityError:
         return False
+
+
+async def reorder_difficulties(raid_name: str, order: list[str]) -> int:
+    """한 레이드의 난이도 순서를 배열로 통째로 재부여. reorder_raids와 같은 이유."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT difficulty FROM raid_difficulties WHERE raid_name=? ORDER BY sort_order",
+            (raid_name,),
+        )
+        existing = [r[0] for r in await cur.fetchall()]
+        if not existing:
+            return 0
+
+        wanted = [d for d in order if d in existing]
+        final = wanted + [d for d in existing if d not in wanted]
+        for i, diff in enumerate(final):
+            await db.execute(
+                "UPDATE raid_difficulties SET sort_order=? WHERE raid_name=? AND difficulty=?",
+                (i, raid_name, diff),
+            )
+        await db.commit()
+        return len(final)
 
 
 async def update_difficulty_sort(raid_name: str, difficulty: str, sort_order: int) -> bool:

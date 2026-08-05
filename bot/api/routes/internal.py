@@ -131,6 +131,56 @@ async def raid_selection(discord_id: str, character_name: str):
   return {"customized": selected is not None, "selected_raids": selected or []}
 
 
+@router.get("/raid-progress")
+async def raid_progress(discord_id: str):
+  """원정대 전체의 이번 주 레이드 진행률을 한 번에 계산해 준다.
+
+  웹앱이 캐릭터마다 completions/raid-selection을 따로 부르면 캐릭터 수만큼
+  왕복이 생긴다(대시보드·사이드바 배지가 매번 그랬다). 봇 서버는 DB가 로컬이라
+  여기서 한 번에 세는 게 훨씬 싸다. 진행률은 레이드 단위 — 한 레이드에서
+  어느 난이도든 하나만 끝내면 그 레이드는 완료로 친다(웹 계산과 동일 규칙)."""
+  from bot.data.raids import get_applicable_raids
+
+  week_key = db.get_week_key()
+  # 캐시가 오래됐다고 레벨을 None으로 지우면 진행률이 0이 된다 —
+  # /user-characters-grouped와 같은 기준으로 캐시 나이를 무시하고 읽는다.
+  characters = await db.get_cached_characters(discord_id, max_age_hours=99999)
+
+  per_character = []
+  for char in characters:
+    name = char["character_name"]
+    applicable = get_applicable_raids(char.get("item_level") or 0)
+    raid_names = []
+    for raid_name, _diff, _info in applicable:
+      if raid_name not in raid_names:
+        raid_names.append(raid_name)
+
+    selected = await db.get_selected_raids(discord_id, name)
+    if selected is not None:
+      chosen = set(selected)
+      raid_names = [r for r in raid_names if r in chosen]
+
+    done = await db.get_completions(discord_id, name, week_key)
+    done_raids = {key.rsplit("_", 1)[0] for key in done}
+    done_count = sum(1 for r in raid_names if r in done_raids)
+
+    per_character.append({
+      "character_name":  name,
+      "character_class": char.get("character_class"),
+      "item_level":      char.get("item_level"),
+      "done_count":      done_count,
+      "total_slots":     len(raid_names),
+      "remaining":       len(raid_names) - done_count,
+    })
+
+  return {
+    "week_key":   week_key,
+    "characters": per_character,
+    "done":       sum(c["done_count"] for c in per_character),
+    "total":      sum(c["total_slots"] for c in per_character),
+  }
+
+
 class SetRaidSelectionBody(BaseModel):
   discord_id: str
   character_name: str

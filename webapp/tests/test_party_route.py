@@ -61,6 +61,80 @@ def test_party_list_renders_cards(client):
     assert "1/8" in body
 
 
+# ── 목록 필터 ────────────────────────────────────────────
+
+CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters"
+
+PARTY_MINE = {**PARTY, "message_id": "mine", "raid_name": "내공대",
+              "slots": [{"slot_number": 1, "discord_id": "111", "character_name": "발키리",
+                         "character_class": "홀리나이트", "role": "support"}]}
+PARTY_HIGH = {**PARTY, "message_id": "high", "raid_name": "고레벨공대", "min_level": 9999}
+PARTY_CLOSED = {**PARTY, "message_id": "closed", "raid_name": "마감공대", "status": "closed"}
+
+
+def _mock_list(parties, characters=None):
+    respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=parties))
+    respx.get(CHARACTERS_URL).mock(
+        return_value=httpx.Response(200, json=characters if characters is not None else [])
+    )
+
+
+def test_party_list_filter_recruiting(client):
+    with respx.mock:
+        log_in(client)
+        _mock_list([PARTY, PARTY_CLOSED])
+        resp = client.get("/parties?filter=recruiting")
+
+    assert "마감공대" not in resp.text
+    assert "아르모체(4막)" in resp.text
+
+
+def test_party_list_filter_mine(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        _mock_list([PARTY, PARTY_MINE])
+        resp = client.get("/parties?filter=mine")
+
+    assert "내공대" in resp.text
+    assert "아르모체(4막) 노말" not in resp.text
+
+
+def test_party_list_filter_eligible_uses_my_highest_level(client):
+    """입장 가능 = 내 최고 레벨로 들어갈 수 있고, 아직 참여하지 않은 모집중 공대."""
+    with respx.mock:
+        log_in(client, discord_id="111")
+        _mock_list(
+            [PARTY, PARTY_HIGH, PARTY_MINE],
+            characters=[{"character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0}],
+        )
+        resp = client.get("/parties?filter=eligible")
+
+    body = resp.text
+    assert "아르모체(4막)" in body   # 1700 ≤ 1720
+    assert "고레벨공대" not in body   # 9999 > 1720
+    assert "내공대" not in body       # 이미 참여 중
+
+
+def test_party_list_unknown_filter_falls_back_to_all(client):
+    with respx.mock:
+        log_in(client)
+        _mock_list([PARTY, PARTY_CLOSED])
+        resp = client.get("/parties?filter=엉뚱한값")
+
+    assert "마감공대" in resp.text
+    assert "아르모체(4막)" in resp.text
+
+
+def test_party_list_empty_state_offers_next_action(client):
+    with respx.mock:
+        log_in(client)
+        _mock_list([])
+        resp = client.get("/parties")
+
+    assert "진행 중인 공대가 없습니다" in resp.text
+    assert "/parties/create" in resp.text
+
+
 def test_party_detail_shows_join_form_when_eligible(client):
     with respx.mock:
         log_in(client, discord_id="111")

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
 <div class="party-list-header">
@@ -6,25 +7,31 @@
   <a href="/board/create" class="party-create-link">+ 글쓰기</a>
 </div>
 
-<div class="account-tabs">
-  <a class="account-tab {% if not selected_category %}active{% endif %}" href="/board">전체</a>
+{% call ui.toolbar() %}
+  {{ ui.filter_link("전체", "/board", not selected_category) }}
   {% for c in categories %}
-  <a class="account-tab {% if selected_category == c %}active{% endif %}" href="/board?category={{ c }}">{{ c }}</a>
+  {{ ui.filter_link(c, "/board?category=" ~ c, selected_category == c) }}
   {% endfor %}
-</div>
+{% endcall %}
 
 {% if not posts %}
-<p>등록된 게시글이 없습니다.</p>
+{{ ui.empty(
+    "등록된 게시글이 없습니다",
+    "공지·이벤트·자유글을 올리면 디스코드에도 알림이 갑니다.",
+    "글쓰기", "/board/create", "💬") }}
 {% else %}
-<div class="party-list">
+<div class="ui-list">
   {% for p in posts %}
-  <a class="party-card" href="/board/{{ p.id }}">
-    <div class="party-card-title">{{ p.title }}</div>
-    <div class="party-card-meta">
-      {% if p.scheduled_datetime %}{{ p.scheduled_datetime }} &middot; {% endif %}
+  {% call ui.card(href="/board/" ~ p.id) %}
+    <div class="ui-row">
+      <span class="ui-card-title">{{ p.title }}</span>
+      <span class="ui-spacer"></span>
       <span class="board-category-badge board-category-{{ p.category }}">{{ p.category }}</span>
     </div>
-  </a>
+    {% if p.scheduled_datetime %}
+    <div class="ui-row"><span class="ui-card-meta">{{ p.scheduled_datetime }}</span></div>
+    {% endif %}
+  {% endcall %}
   {% endfor %}
 </div>
 {% endif %}

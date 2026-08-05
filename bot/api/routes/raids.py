@@ -42,6 +42,19 @@ class CategorySortBody(BaseModel):
 class CategoryExtremeBody(BaseModel):
   is_extreme: bool
 
+class OrderBody(BaseModel):
+  order: list[str]
+
+class RaidOrderBody(BaseModel):
+  category: str
+  order: list[str]
+
+class PinBody(BaseModel):
+  is_pinned: bool
+
+class RaidCategoryBody(BaseModel):
+  category: str
+
 
 # ── 카테고리 ─────────────────────────────────────────────
 
@@ -55,8 +68,17 @@ async def add_category(body: CategoryBody):
   await raids_module.reload()
   return {"success": added}
 
+@router.put("/categories/order")
+async def reorder_categories(body: OrderBody):
+  """카테고리 순서를 배열 통째로 저장. 드래그 정렬은 "최종 배열"을 만드는데,
+  항목마다 숫자를 따로 PATCH하면 중간 상태가 저장돼 순서가 깨진다."""
+  count = await db.reorder_categories(body.order)
+  await raids_module.reload()
+  return {"success": count > 0, "count": count}
+
 @router.patch("/categories/{name}/sort")
 async def sort_category(name: str, body: CategorySortBody):
+  """단건 순서 변경 — 배열 저장(PUT /categories/order) 이전부터 쓰던 하위호환 경로."""
   updated = await db.update_category_sort(name, body.sort_order)
   await raids_module.reload()
   return {"success": updated}
@@ -85,6 +107,31 @@ async def add_raid(body: RaidBody):
   added = await db.add_raid(body.name, body.short_name, body.icon, body.category)
   await raids_module.reload()
   return {"success": added}
+
+@router.put("/order")
+async def reorder_raids(body: RaidOrderBody):
+  """한 카테고리의 레이드 순서를 배열 통째로 저장.
+  이 순서가 그대로 공대 모집 드롭다운(디스코드·웹)의 순서가 된다."""
+  count = await db.reorder_raids(body.category, body.order)
+  await raids_module.reload()
+  return {"success": count > 0, "count": count}
+
+@router.patch("/{raid_name}/pin")
+async def set_raid_pinned(raid_name: str, body: PinBody):
+  """상단 고정 — 카테고리를 무시하고 모집 목록 맨 위로 올린다."""
+  updated = await db.set_raid_pinned(raid_name, body.is_pinned)
+  await raids_module.reload()
+  return {"success": updated}
+
+@router.patch("/{raid_name}/category")
+async def move_raid_category(raid_name: str, body: RaidCategoryBody):
+  """레이드를 다른 카테고리로 이동(그 카테고리 맨 뒤에 붙는다)."""
+  cats = {c["name"] for c in await db.get_categories()}
+  if body.category not in cats:
+    return {"success": False, "reason": f"{body.category} 카테고리가 없습니다."}
+  updated = await db.move_raid_category(raid_name, body.category)
+  await raids_module.reload()
+  return {"success": updated}
 
 @router.patch("/{raid_name}/active")
 async def set_raid_active(raid_name: str, body: ActiveBody):
@@ -126,6 +173,12 @@ async def add_difficulty(raid_name: str, body: DifficultyBody):
   )
   await raids_module.reload()
   return {"success": added}
+
+@router.put("/{raid_name}/difficulties/order")
+async def reorder_difficulties(raid_name: str, body: OrderBody):
+  count = await db.reorder_difficulties(raid_name, body.order)
+  await raids_module.reload()
+  return {"success": count > 0, "count": count}
 
 @router.patch("/{raid_name}/difficulties/{difficulty}/sort")
 async def sort_difficulty(raid_name: str, difficulty: str, body: DifficultySortBody):

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
 <div class="party-list-header">
@@ -6,18 +7,54 @@
   <a href="/parties/create" class="party-create-link">+ 공대 개설</a>
 </div>
 
+{% call ui.toolbar() %}
+  {% for key, label in filters %}
+  {{ ui.filter_link(label, "/parties?filter=" ~ key, key == active_filter, counts[key]) }}
+  {% endfor %}
+{% endcall %}
+
 {% if not parties %}
-<p>진행 중인 공대가 없습니다.</p>
+  {% if not has_any %}
+  {{ ui.empty(
+      "진행 중인 공대가 없습니다",
+      "개설하면 디스코드 포럼에도 같이 올라갑니다.",
+      "공대 개설", "/parties/create", "⚔️") }}
+  {% elif active_filter == "eligible" %}
+  {{ ui.empty(
+      "지금 들어갈 수 있는 공대가 없습니다",
+      "내 캐릭터 레벨로 입장 가능하고 자리가 남은 공대만 추립니다. 직접 열어보세요.",
+      "공대 개설", "/parties/create", "🔍") }}
+  {% elif active_filter == "mine" %}
+  {{ ui.empty(
+      "참여 중인 공대가 없습니다",
+      "전체 목록에서 자리가 남은 공대를 찾아보세요.",
+      "전체 보기", "/parties", "🙋") }}
+  {% else %}
+  {{ ui.empty(
+      "조건에 맞는 공대가 없습니다",
+      "다른 필터를 눌러보세요.",
+      "전체 보기", "/parties", "🔍") }}
+  {% endif %}
 {% else %}
-<div class="party-list">
+<div class="ui-list party-list">
   {% for p in parties %}
-  <a class="party-card" href="/parties/{{ p.message_id }}">
-    <div class="party-card-title">{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }}</div>
-    <div class="party-card-meta">{{ p.scheduled_time }} &middot; {{ p.slots | length }}/{{ p.total_slots }}인 &middot; 최소 {{ p.min_level }}</div>
-    <span class="party-status status-{{ p.status }}">
-      {% if p.status == "recruiting" %}모집중{% elif p.status == "full" %}파티완성{% else %}마감{% endif %}
-    </span>
-  </a>
+  {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.status_tone) %}
+    <div class="ui-row">
+      <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
+      {{ ui.chip(p.proficiency) }}
+      <span class="ui-spacer"></span>
+      {{ ui.chip(p.status_label, p.status_tone) }}
+    </div>
+    <div class="ui-row">
+      <span class="ui-card-meta">{{ p.schedule.when }}</span>
+      {% if p.schedule.countdown %}{{ ui.chip(p.schedule.countdown, p.schedule.tone) }}
+      {% elif p.schedule.is_past %}{{ ui.chip("지난 일정", "past") }}{% endif %}
+      <span class="ui-spacer"></span>
+      <span class="ui-card-meta">최소 {{ p.min_level }}</span>
+    </div>
+    {{ ui.slotbar(p.slots, p.total_slots, p.pct) }}
+    {% if p.memo %}<p class="party-card-memo">{{ p.memo }}</p>{% endif %}
+  {% endcall %}
   {% endfor %}
 </div>
 {% endif %}

@@ -30,8 +30,8 @@
       <ul class="sidebar-nav">
         <li><a href="/main" class="{% if active == 'main' %}active{% endif %}">메인</a></li>
         <li><a href="/expedition" class="{% if active == 'expedition' %}active{% endif %}">원정대 관리</a></li>
-        <li><a href="/raid-check" class="{% if active == 'raid_check' %}active{% endif %}">레이드 체크</a></li>
-        <li><a href="/parties" class="{% if active == 'parties' %}active{% endif %}">공대 모집</a></li>
+        <li><a href="/raid-check" class="{% if active == 'raid_check' %}active{% endif %}">레이드 체크<span class="nav-badge" data-badge="raid_check" hidden></span></a></li>
+        <li><a href="/parties" class="{% if active == 'parties' %}active{% endif %}">공대 모집<span class="nav-badge" data-badge="parties" hidden></span></a></li>
         <li><a href="/ranking" class="{% if active == 'ranking' %}active{% endif %}">원정대 랭킹</a></li>
         <li><a href="/calendar" class="{% if active == 'calendar' %}active{% endif %}">일정 캘린더</a></li>
         <li><a href="/board" class="{% if active == 'board' %}active{% endif %}">커뮤니티 게시판</a></li>
@@ -61,7 +61,17 @@
     <main class="main">
       {% block content %}{% endblock %}
     </main>
+    {# 모바일에서 햄버거를 매번 열지 않도록, 자주 쓰는 5개는 하단 탭으로 상시 노출 #}
+    <nav class="bottom-tabs" aria-label="주요 메뉴">
+      <a href="/main" class="{% if active == 'main' %}active{% endif %}"><span aria-hidden="true">🏠</span>메인</a>
+      <a href="/raid-check" class="{% if active == 'raid_check' %}active{% endif %}"><span aria-hidden="true">✅</span>레이드<span class="nav-badge" data-badge="raid_check" hidden></span></a>
+      <a href="/parties" class="{% if active == 'parties' %}active{% endif %}"><span aria-hidden="true">⚔️</span>공대<span class="nav-badge" data-badge="parties" hidden></span></a>
+      <a href="/calendar" class="{% if active == 'calendar' %}active{% endif %}"><span aria-hidden="true">📅</span>일정</a>
+      <a href="/board" class="{% if active == 'board' %}active{% endif %}"><span aria-hidden="true">💬</span>게시판</a>
+    </nav>
   </div>
+  <script src="/static/nav-badges.js"></script>
+  <script src="/static/form-busy.js"></script>
   <script src="/static/mobile-nav.js"></script>
   <script src="/static/party-live.js"></script>
   <script src="/static/toast.js"></script>
