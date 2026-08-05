@@ -1002,59 +1002,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   filter: brightness(1.1);
 }
 
-/* ── 공대 개설 폼 ──────────────────────────────────────── */
-
-.party-create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 420px;
-}
-
-.party-create-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.party-create-form select,
-.party-create-form input {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 14px;
-  transition: border-color 0.15s ease;
-}
-
-.party-create-form select:focus,
-.party-create-form input:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
 /* 다크 테마에서 브라우저 기본 달력 아이콘이 검은색이라 안 보이는 문제 수정 */
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
   cursor: pointer;
-}
-
-.party-create-form button {
-  padding: 10px 18px;
-  border-radius: 8px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
-
-.party-create-form button:hover {
-  filter: brightness(1.1);
 }
 
 /* ── 파티장 관리 패널 ──────────────────────────────────── */
