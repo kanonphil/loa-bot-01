@@ -41,7 +41,6 @@ PAGES = [
     "/ranking",
     "/ranking?metric=weekly_clears",
     "/ranking?metric=item_level",
-    "/board",
     "/calendar",
     "/calendar?view=week",
     "/settings",
@@ -71,7 +70,6 @@ def _mock_everything():
     respx.get(f"{B}/ranking").mock(
         return_value=httpx.Response(200, json={"metric": "combat_power", "role": "dps", "entries": []})
     )
-    respx.get(f"{B}/board/posts").mock(return_value=httpx.Response(200, json=[]))
 
 
 @pytest.mark.parametrize("path", PAGES)

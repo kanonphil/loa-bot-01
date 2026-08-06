@@ -8,14 +8,12 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
-from webapp import chat_store, config, guild_info, notification_store, party_events
+from webapp import config, guild_info, notification_store, party_events
 from webapp.auth.dependencies import NotAuthenticated
 from webapp.routes import (
     auth_routes,
-    board,
     calendar,
     character,
-    chat,
     dashboard,
     events,
     expedition,
@@ -30,17 +28,11 @@ from webapp.templating import templates
 
 logger = logging.getLogger("webapp")
 
-CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60  # 6시간마다 보관기간 지난 대화 정리
+CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60  # 6시간마다 보관기간 지난 알림 정리
 
 
 async def _cleanup_loop() -> None:
     while True:
-        try:
-            deleted = await chat_store.delete_expired_sessions(config.CHAT_RETENTION_DAYS)
-            if deleted:
-                logger.info("만료된 채팅 세션 %d개 삭제 (보관기간 %d일)", deleted, config.CHAT_RETENTION_DAYS)
-        except Exception:
-            logger.exception("채팅 세션 자동 정리 중 오류")
         try:
             deleted = await notification_store.delete_expired(config.NOTIFICATION_RETENTION_DAYS)
             if deleted:
@@ -59,7 +51,6 @@ async def _cleanup_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await chat_store.init_db()
     await notification_store.init_db()
     await guild_info.refresh()
     cleanup_task = asyncio.create_task(_cleanup_loop())
@@ -90,7 +81,6 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(auth_routes.router)
 app.include_router(pages.router)
-app.include_router(chat.router)
 app.include_router(dashboard.router)
 app.include_router(expedition.router)
 app.include_router(character.router)
@@ -98,7 +88,6 @@ app.include_router(raid_check.router)
 app.include_router(ranking.router)
 app.include_router(party.router)
 app.include_router(calendar.router)
-app.include_router(board.router)
 app.include_router(tools.router)
 app.include_router(events.router)
 app.include_router(notifications.router)

@@ -1,34 +1,43 @@
-/* ── 디자인 토큰 ─────────────────────────────────────────
-   기존 색 변수 8개는 이름을 그대로 둔다 — 4,500줄이 이미 참조하고 있어서
-   이름을 바꾸면 개편이 아니라 대공사가 된다. 아래 스케일은 "추가"이고,
-   새로 만드는 화면과 _ui.html 프리미티브가 이걸 쓴다.
+/* ── 디자인 토큰 — "브리지" ───────────────────────────────
+   변수 이름은 그대로 두고(4,500줄이 이미 참조 중) 값만 새 아이덴티티로
+   교체한다. 방향: 로스트아크의 아크 에너지 발광(청록)과 재화/고정 표시용
+   골드를 두 축으로, 배경은 무채색 회색이 아니라 청록 쪽으로 살짝 기운
+   잉크 네이비로 잡았다. 근거/Artifact: memory web-redesign-bridge 참고.
 
    브레이크포인트 규약: 640px(모바일) / 1024px(태블릿) 두 개만 쓴다.
    CSS 변수는 @media에서 못 쓰므로 값이 아니라 약속으로 관리한다.
    ─────────────────────────────────────────────────────── */
 :root {
-  --bg: #0f1115;
-  --sidebar-bg: #161923;
-  --panel: #1b1f2a;
-  --border: #2a2f3d;
-  --text: #e7e9ee;
-  --text-muted: #9aa0ae;
-  --accent: #7c8cff;
-  --accent-dim: #3a3f6b;
+  --bg: #0a1415;
+  --sidebar-bg: #101d1f;
+  --panel: #132224;
+  --border: #1e3436;
+  --text: #eef6f4;
+  --text-muted: #82a09d;
+  --accent: #35d6c4;
+  --accent-dim: #1b4a48;
 
   /* 표면 — panel보다 가라앉은 것(입력칸·트랙 바닥) */
-  --sunken: #14171f;
-  --border-soft: #232837;
+  --sunken: #060d0e;
+  --border-soft: #16282a;
 
   /* 의미색 — 브랜드 accent와 분리한다. 지금까지는 "모집중" 배지가 accent를
      써서, 강조색을 바꾸면 상태 표시의 의미까지 같이 흔들렸다. */
-  --ok: #4fc98a;
-  --warn: #e9b23c;
-  --danger: #f2585b;
-  --ok-soft: rgba(79, 201, 138, 0.13);
-  --warn-soft: rgba(233, 178, 60, 0.13);
-  --danger-soft: rgba(242, 88, 91, 0.13);
-  --accent-soft: rgba(124, 140, 255, 0.13);
+  --ok: #5ed67a;
+  --warn: #eeb453;
+  --danger: #ef6a63;
+  --ok-soft: rgba(94, 214, 122, 0.14);
+  --warn-soft: rgba(238, 180, 83, 0.14);
+  --danger-soft: rgba(239, 106, 99, 0.14);
+  --accent-soft: rgba(53, 214, 196, 0.14);
+
+  /* 골드 — 재화·고정(📌) 표시용 보조 신호. warn과 같은 값을 의도적으로 공유
+     (빨강만 6종이던 예전 문제를 반복하지 않으면서, 색 하나를 더 늘리지 않음) */
+  --gold: #eeb453;
+  --gold-soft: rgba(238, 180, 83, 0.14);
+
+  /* 숫자 전용 — 전투력·인원·타이머처럼 "맞춰 읽는" 값만 여기로 */
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", "D2Coding", monospace;
 
   /* 간격 6단 */
   --sp-1: 4px;
@@ -61,8 +70,8 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
-  background: var(--bg);
+  font-family: -apple-system, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", sans-serif;
+  background: radial-gradient(1200px 640px at 14% -8%, rgba(53, 214, 196, 0.07), transparent 60%), var(--bg);
   color: var(--text);
 }
 
@@ -131,12 +140,21 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 }
 
 .sidebar-nav li a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 20px;
   color: var(--text-muted);
   text-decoration: none;
   font-size: 14px;
   border-right: 3px solid transparent;
+}
+
+.sidebar-nav li a svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  opacity: 0.85;
 }
 
 .sidebar-nav li a:not(.disabled):not(.active):hover {
@@ -270,139 +288,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   margin: 0;
 }
 
-.ai-notice-chat {
-  max-width: 760px;
-  margin: 0 auto 12px;
-}
-
-.pill-input-form {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  max-width: 640px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 8px 8px 8px 22px;
-  transition: border-color 0.15s ease;
-}
-
-.pill-input-form:focus-within {
-  border-color: var(--accent);
-}
-
-.pill-input-form input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 15px;
-  outline: none;
-}
-
-.pill-input-form button {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  font-size: 16px;
-  cursor: pointer;
-  transition: filter 0.15s ease, transform 0.1s ease;
-}
-
-.pill-input-form button:hover {
-  filter: brightness(1.1);
-}
-
-.pill-input-form button:active {
-  transform: scale(0.95);
-}
-
-/* ── 이어지는 대화(스레드) ─────────────────────────────── */
-
-.chat-box {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  max-width: 760px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.chat-message {
-  max-width: 75%;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.chat-message.user {
-  align-self: flex-end;
-  background: var(--accent);
-  color: #fff;
-}
-
-.chat-message.ai {
-  align-self: flex-start;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-}
-
-.chat-form {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.chat-form input {
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-  transition: border-color 0.15s ease;
-}
-
-.chat-form input:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
-.chat-form button {
-  padding: 10px 18px;
-  border-radius: 8px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
-
-.chat-form button:hover {
-  filter: brightness(1.1);
-}
-
 /* ── 레이드 체크 (캐릭터 카드 그리드) ───────────────────── */
 
 .raid-card-grid {
@@ -513,7 +398,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .raid-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), #9aa4ff);
+  background: linear-gradient(90deg, var(--accent), #8ff2e6);
   transition: width 0.3s ease;
 }
 
@@ -1026,16 +911,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.board-post-actions {
-  display: flex;
-  gap: 8px;
-  margin: 16px 0;
-}
-
-.board-post-actions-inline-form {
-  display: contents;
 }
 
 .leader-form {
@@ -1887,7 +1762,7 @@ a.calendar-party:hover {
 }
 
 .calendar-party.status-recruiting {
-  border-color: rgba(124, 140, 255, 0.4);
+  border-color: rgba(53, 214, 196, 0.4);
 }
 
 .calendar-party.status-recruiting .calendar-party-badge {
@@ -1901,354 +1776,6 @@ a.calendar-party:hover {
 
 .calendar-party.status-disbanded .calendar-party-badge {
   color: var(--ok);
-}
-
-/* ── 커뮤니티 게시판 ───────────────────────────────────── */
-
-.board-category-badge {
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--sidebar-bg);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.board-category-badge.board-category-이벤트 {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.board-category-badge.board-category-공지 {
-  background: rgba(224, 92, 92, 0.15);
-  color: var(--danger);
-}
-
-.board-category-badge.board-category-자유 {
-  background: rgba(122, 208, 138, 0.15);
-  color: var(--ok);
-}
-
-.board-content {
-  margin: 16px 0;
-  padding: 16px 18px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  line-height: 1.7;
-  font-size: 14px;
-  word-break: break-word;
-}
-
-.board-content p {
-  margin: 0 0 10px;
-}
-
-.board-content p:last-child {
-  margin-bottom: 0;
-}
-
-.board-content img {
-  max-width: 100%;
-  border-radius: 8px;
-  margin: 8px 0;
-  display: block;
-}
-
-/* ── 게시글 작성 페이지 ────────────────────────────────── */
-
-.board-write-form {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 720px;
-}
-
-.board-title-input {
-  font-size: 26px;
-  font-weight: 700;
-  padding: 6px 0;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.board-title-input:focus {
-  border-bottom-color: var(--accent);
-}
-
-.board-title-input::placeholder {
-  color: var(--text-muted);
-}
-
-.board-write-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin: 18px 0 6px;
-}
-
-.board-write-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.board-write-label small {
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
-.board-write-field select,
-.board-write-field input {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 14px;
-}
-
-.board-write-field select:focus,
-.board-write-field input:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
-.board-submit-btn {
-  align-self: flex-start;
-  margin-top: 18px;
-  padding: 10px 24px;
-  border-radius: 8px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
-
-.board-submit-btn:hover {
-  filter: brightness(1.1);
-}
-
-/* ── 리치 텍스트 에디터 (게시글 작성/수정 공용) ──────────── */
-
-.board-editor {
-  margin: 16px 0;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--panel);
-}
-
-.board-editor-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--sidebar-bg);
-}
-
-.board-editor-btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.board-editor-btn:hover {
-  background: var(--accent-dim);
-}
-
-.board-editor-size-select {
-  appearance: auto;
-}
-
-.board-editor-color-input {
-  width: 32px;
-  height: 32px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.board-editor-content {
-  min-height: 280px;
-  padding: 16px 18px;
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.7;
-  outline: none;
-}
-
-.board-editor-content:empty::before {
-  content: attr(data-placeholder);
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
-.board-editor-content p {
-  margin: 0 0 10px;
-}
-
-.board-editor-content img {
-  max-width: 100%;
-  border-radius: 8px;
-  margin: 8px 0;
-  display: block;
-}
-
-.board-editor-image-wrap {
-  position: relative;
-  display: block;
-  width: fit-content;
-  max-width: 100%;
-  margin: 8px 0;
-}
-
-.board-editor-image-wrap img {
-  display: block;
-  max-width: 100%;
-  border-radius: 8px;
-  margin: 0;
-}
-
-.board-editor-image-remove {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease;
-}
-
-.board-editor-image-remove:hover {
-  background: rgba(0, 0, 0, 0.85);
-}
-
-.board-participants {
-  margin-top: 16px;
-  padding: 16px 18px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.board-participant-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.board-participant-chip {
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
-.board-edit-form {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.board-edit-form[hidden] {
-  display: none;
-}
-
-.board-comments {
-  margin-top: 24px;
-}
-
-.board-comment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.board-comment {
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.board-comment-author {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.board-comment-content {
-  font-size: 14px;
-  white-space: pre-wrap;
-}
-
-.board-comment-form {
-  display: flex;
-  gap: 8px;
-}
-
-.board-comment-form input {
-  flex: 1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-}
-
-.board-comment-form input:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
-.board-comment-form button {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.board-comment-form button:hover {
-  border-color: var(--accent);
 }
 
 /* ── 경매 분배금 계산기 ───────────────────────────────────── */
@@ -3959,6 +3486,8 @@ a.rank-row:hover {
 
 .rank-col-value {
   text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--accent);
 }
@@ -4160,8 +3689,7 @@ a.rank-row:hover {
   /* iOS Safari가 16px 미만 입력 필드에 포커스하면 자동으로 화면을 확대하는 문제 방지 */
   input,
   select,
-  textarea,
-  .board-editor-content {
+  textarea {
     font-size: 16px;
   }
 
@@ -4196,10 +3724,6 @@ a.rank-row:hover {
   .calendar-weekday,
   .calendar-day-number {
     font-size: 10px;
-  }
-
-  .board-title-input {
-    font-size: 20px;
   }
 }
 
@@ -4425,7 +3949,7 @@ a.rank-row:hover {
   background: var(--sidebar-bg);
 }
 
-.notif-icon-created { background: rgba(124, 140, 255, 0.14); }
+.notif-icon-created { background: rgba(53, 214, 196, 0.14); }
 .notif-icon-cleared { background: rgba(255, 182, 76, 0.14); }
 .notif-icon-guest_joined { background: rgba(111, 214, 138, 0.14); }
 
@@ -4662,6 +4186,7 @@ a.ui-card:hover {
 
 .ui-stat { display: flex; flex-direction: column; gap: var(--sp-1); }
 .ui-stat-value {
+  font-family: var(--font-mono);
   font-size: var(--fs-page);
   font-weight: 700;
   line-height: 1.15;
@@ -4705,6 +4230,7 @@ a.ui-card:hover {
 }
 .ui-slotbar-count {
   margin-left: auto;
+  font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -4767,7 +4293,10 @@ a.ui-card:hover {
 }
 .ui-filter:hover { color: var(--text); border-color: var(--accent-dim); }
 .ui-filter.is-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-.ui-filter b { font-variant-numeric: tabular-nums; font-weight: 700; }
+.ui-filter b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* 전투력·타이머·인원처럼 "맞춰 읽는" 숫자 전용 — 본문 서체와 분리해 HUD 판독성을 준다 */
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .ui-list { display: flex; flex-direction: column; gap: var(--sp-3); }
 .ui-grid {
@@ -4927,7 +4456,7 @@ a.ui-card:hover {
 }
 .raid-summary-kv .kv:last-child { border-bottom: 0; }
 .raid-summary-kv dt { margin: 0; color: var(--text-muted); }
-.raid-summary-kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.raid-summary-kv dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .party-card-memo {
   margin: 0;
@@ -4973,6 +4502,7 @@ a.ui-card:hover {
   border-radius: var(--r-pill);
   background: var(--accent-dim);
   color: var(--accent);
+  font-family: var(--font-mono);
   font-size: var(--fs-label);
   font-weight: 700;
   line-height: 18px;
@@ -5006,7 +4536,7 @@ a.ui-card:hover {
     text-decoration: none;
     position: relative;
   }
-  .bottom-tabs a span[aria-hidden] { font-size: 16px; line-height: 1; }
+  .bottom-tabs a svg { width: 20px; height: 20px; }
   .bottom-tabs a.active { color: var(--accent); }
   .bottom-tabs .nav-badge {
     position: absolute;

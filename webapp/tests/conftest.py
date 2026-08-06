@@ -10,7 +10,6 @@ os.environ.setdefault("SESSION_SECRET", "test-session-secret")
 # 로컬 실제 .env에 SESSION_HTTPS_ONLY=true가 있어도 테스트는 항상 http로 도니 강제로 false —
 # 안 그러면 세션 쿠키에 Secure가 붙어서 TestClient가 로그인 쿠키를 안 돌려보내 전부 로그아웃 상태로 보인다.
 os.environ["SESSION_HTTPS_ONLY"] = "false"
-# 실제 Gemini 키는 절대 여기 넣지 않음 — AI 응답 관련 테스트는 generate_reply를 직접 모킹한다.
 
 import asyncio
 from urllib.parse import parse_qs, urlparse
@@ -20,24 +19,13 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from webapp import chat_store, config, notification_store
+from webapp import config, notification_store
 from webapp.main import app
 
 TOKEN_URL = "https://discord.com/api/v10/oauth2/token"
 USER_URL = "https://discord.com/api/v10/users/@me"
 VERIFY_URL = "http://bot-server.internal/api/internal/verify-user"
 USER_CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters"
-
-STUB_AI_REPLY = "테스트용 AI 응답입니다."
-
-
-@pytest.fixture()
-def chat_db(tmp_path, monkeypatch):
-    """앱의 lifespan(startup)에 기대지 않고, 테스트가 직접 채팅 DB를 준비한다."""
-    path = str(tmp_path / "chat_test.db")
-    monkeypatch.setattr(config, "CHAT_DB_PATH", path)
-    asyncio.run(chat_store.init_db())
-    return path
 
 
 @pytest.fixture()
@@ -50,19 +38,8 @@ def notification_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def client(chat_db, notification_db):
+def client(notification_db):
     return TestClient(app, follow_redirects=False)
-
-
-@pytest.fixture()
-def mock_ai_reply(monkeypatch):
-    """chat.py가 실제 Gemini를 부르지 않도록 고정 응답으로 대체. 세션 흐름만 테스트할 때 사용."""
-
-    async def _fake_generate_reply(characters, history, new_message):
-        return STUB_AI_REPLY
-
-    monkeypatch.setattr("webapp.routes.chat.generate_reply", _fake_generate_reply)
-    return STUB_AI_REPLY
 
 
 def extract_state(location: str) -> str:

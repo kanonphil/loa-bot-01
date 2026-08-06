@@ -22,7 +22,6 @@ COGS = [
     "bot.cogs.expedition",
     "bot.cogs.raid",
     "bot.cogs.party",
-    "bot.cogs.board",
     "bot.cogs.admin",
     "bot.cogs.subscription",
     "bot.cogs.invite",
@@ -119,7 +118,7 @@ class LoABot(commands.Bot):
 
         # 시작 시각 알림 (채널 멘션)
         # 파티 하나에서 채널을 못 찾거나 전송이 실패해도(아카이브된 스레드, 권한 문제 등)
-        # 이 루프 자체가 죽어서 이후 처리(주간 정리, 게시판 리마인더)까지 멈추지 않도록
+        # 이 루프 자체가 죽어서 이후 처리(주간 정리 등)까지 멈추지 않도록
         # 각 파티를 개별적으로 감싼다. get_channel만 쓰면 캐시에 없는(아카이브된) 스레드는
         # 알림이 영영 안 나가고 notified도 안 찍혀 매 30초 재시도만 반복하므로
         # fetch_channel fallback도 함께 추가.
@@ -140,32 +139,6 @@ class LoABot(commands.Bot):
             except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
                 print(f"[시작 알림] 발송 실패 (message_id={party.get('message_id')}): {type(e).__name__}: {e}")
                 await db.mark_notified(party["message_id"])
-
-        # 게시판 이벤트 참여자 리마인더 (10분 전 / 시작 시각) — DM 발송.
-        # 파티 하나 실패가 나머지 게시글 처리를 막지 않도록 개별로 감싼다.
-        for post in await db.get_posts_due_10min_reminder(now_iso):
-            try:
-                participants = await db.list_board_participants(post["id"])
-                for p in participants:
-                    await _send_dm(
-                        self, p["discord_id"],
-                        f"⏰ **{post['title']}** 이벤트 시작 10분 전입니다!",
-                    )
-                await db.mark_board_reminder_sent(post["id"], "10min")
-            except Exception as e:
-                print(f"[게시판 리마인더] 10분 전 알림 처리 실패 (post_id={post.get('id')}): {type(e).__name__}: {e}")
-
-        for post in await db.get_posts_due_start_reminder(now_iso):
-            try:
-                participants = await db.list_board_participants(post["id"])
-                for p in participants:
-                    await _send_dm(
-                        self, p["discord_id"],
-                        f"🔔 **{post['title']}** 이벤트가 시작되었습니다!",
-                    )
-                await db.mark_board_reminder_sent(post["id"], "start")
-            except Exception as e:
-                print(f"[게시판 리마인더] 시작 알림 처리 실패 (post_id={post.get('id')}): {type(e).__name__}: {e}")
 
         # 초대(예약 슬롯) 만료 정리 — InviteResponseView의 1시간 timeout은 메모리(뷰
         # 인스턴스)에만 있어서 봇이 재시작되면 사라진다. 그러면 party_invites 행이
