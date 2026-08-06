@@ -652,13 +652,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 
 /* ── 공대 모집 ─────────────────────────────────────────── */
 
-.party-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 640px;
-}
-
 .party-card {
   display: flex;
   flex-direction: column;

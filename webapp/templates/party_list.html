@@ -36,7 +36,7 @@
       "전체 보기", "/parties", "🔍") }}
   {% endif %}
 {% else %}
-<div class="ui-list party-list">
+<div class="ui-list">
   {% for p in parties %}
   {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.status_tone) %}
     <div class="ui-row">
