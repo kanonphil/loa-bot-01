@@ -79,7 +79,6 @@ def test_raid_check_page_renders_checklist(client):
     assert resp.status_code == 200
     body = resp.text
     assert "발키리" in body
-    assert "카제로스" in body
     assert "4막" in body
     assert "0 / 1 완료" in body
 

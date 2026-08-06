@@ -402,25 +402,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   transition: width 0.3s ease;
 }
 
-.raid-card-category {
-  margin-bottom: 14px;
-}
-
-.raid-card-category + .raid-card-category {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--border);
-}
-
-.raid-card-category h3 {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0 0 8px;
-}
-
 .raid-card-row {
   padding: 6px 0;
 }

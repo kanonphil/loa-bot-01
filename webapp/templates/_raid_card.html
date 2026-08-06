@@ -17,34 +17,31 @@
 
   <div class="raid-card-checklist">
     {% for group in card.groups %}
-    <div class="raid-card-category">
-      <h3>{{ group.category }}</h3>
-      {% for r in group.raids %}
-      <div class="raid-card-row">
-        <div class="raid-card-row-top">
-          <span class="raid-card-raid-name">{{ r.short_name }}</span>
-        </div>
-        <div class="raid-card-diffs">
-          {% for diff_name, diff_info in r.difficulties %}
-          <form
-            class="diff-toggle-form"
-            hx-post="/raid-check/toggle"
-            hx-target="#raid-card-{{ card_index }}"
-            hx-swap="outerHTML"
-          >
-            <input type="hidden" name="raid_name" value="{{ r.raid_name }}">
-            <input type="hidden" name="difficulty" value="{{ diff_name }}">
-            <input type="hidden" name="character_name" value="{{ card.character_name }}">
-            <input type="hidden" name="card_index" value="{{ card_index }}">
-            <button type="submit" class="raid-card-diff-toggle {% if (r.raid_name ~ '_' ~ diff_name) in card.done %}done{% endif %}">
-              {{ diff_name }}
-            </button>
-          </form>
-          {% endfor %}
-        </div>
+    {% for r in group.raids %}
+    <div class="raid-card-row">
+      <div class="raid-card-row-top">
+        <span class="raid-card-raid-name">{{ r.short_name }}</span>
       </div>
-      {% endfor %}
+      <div class="raid-card-diffs">
+        {% for diff_name, diff_info in r.difficulties %}
+        <form
+          class="diff-toggle-form"
+          hx-post="/raid-check/toggle"
+          hx-target="#raid-card-{{ card_index }}"
+          hx-swap="outerHTML"
+        >
+          <input type="hidden" name="raid_name" value="{{ r.raid_name }}">
+          <input type="hidden" name="difficulty" value="{{ diff_name }}">
+          <input type="hidden" name="character_name" value="{{ card.character_name }}">
+          <input type="hidden" name="card_index" value="{{ card_index }}">
+          <button type="submit" class="raid-card-diff-toggle {% if (r.raid_name ~ '_' ~ diff_name) in card.done %}done{% endif %}">
+            {{ diff_name }}
+          </button>
+        </form>
+        {% endfor %}
+      </div>
     </div>
+    {% endfor %}
     {% endfor %}
   </div>
 </div>

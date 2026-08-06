@@ -876,7 +876,7 @@ def test_group_bracelet_option_lines_merges_multi_sentence_special_effect():
     options = parser._group_bracelet_option_lines(raw_lines)
 
     assert options[0] == {"text": "체력 +4620", "tier": None}
-    assert options[1] == {"text": "신속 +67", "tier": None}
+    assert options[1] == {"text": "신속 +67", "tier": "하"}
 
     assert options[2]["tier"] == "상"
     assert options[2]["text"] == (
@@ -894,12 +894,27 @@ def test_parse_extra_equipment_bracelet_lines_carry_tier():
     bracelet = next(x for x in result if x["type"] == "팔찌")
     options = bracelet["sections"][0]["options"]
     by_text = {o["text"]: o["tier"] for o in options}
-    assert by_text["체력 +4620"] is None  # 고정 효과(locked) — 색이 3등급 표에 없음
+    assert by_text["체력 +4620"] is None  # 힘/체력류(기본 효과)는 경계가 애매해 등급 없음
+    assert by_text["신속 +67"] == "하"  # 전투특성(+61~+120)은 수치로 등급 판정
     assert by_text["힘 +15168"] == "중"
     assert by_text["아군 공격력 강화 효과 +4.00%"] == "하"
     # 어빌리티 스톤 줄에는 팔찌 등급 판정을 적용하지 않는다
     stone = next(x for x in result if x["type"] == "어빌리티 스톤")
     assert all(o["tier"] is None for section in stone["sections"] for o in section["options"])
+
+
+def test_combat_stat_tier_uses_user_confirmed_range_breakpoints():
+    """전투특성(치명/특화/제압/신속/인내/숙련)은 팔찌 API 색이 등급별로 안 갈려서
+    (항상 고정 초록) 게임 클라이언트 참고표(+61~+120)와 사용자가 확인해준 실제
+    경계값(84 이하=하, 85~119=중, 120=상)으로 수치 판정한다."""
+    assert parser._combat_stat_tier("신속 +61") == "하"
+    assert parser._combat_stat_tier("신속 +84") == "하"
+    assert parser._combat_stat_tier("치명 +85") == "중"
+    assert parser._combat_stat_tier("치명 +119") == "중"
+    assert parser._combat_stat_tier("숙련 +120") == "상"
+    # 힘/민첩/지능/체력(기본 효과)은 경계가 애매해 이 판정 대상이 아니다(사용자 확인)
+    assert parser._combat_stat_tier("힘 +15168") is None
+    assert parser._combat_stat_tier("체력 +4620") is None
 
 
 # ── 프로필 전투특성 수치 ─────────────────────────────────
