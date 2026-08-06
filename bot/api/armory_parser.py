@@ -292,102 +292,67 @@ _EXTRA_SECTION_KEYWORDS = ("효과", "각인", "보너스")
 
 
 # ── 팔찌 부여 효과 상/중/하 등급 ─────────────────────────────
-# 팔찌는 종류별로 값 특성이 달라 세 갈래로 나눠 판정한다.
-_BRACELET_TIER_NAMES = ("하", "중", "상")
-
-# (1) 전투특성(기본 효과) — 고대 팔찌 61~100 연속값이라 3구간 근사 밴딩(경계 조정 여지 있음).
-_BRACELET_STAT_RE = re.compile(r"^(치명|특화|신속|제압|인내|숙련)\s*\+(\d+)$")
-# (2) 주 스탯 — 힘/민첩/지능 고정 수치. 상=14208(관측값) 기준 근사 밴딩.
-_BRACELET_MAIN_STAT_RE = re.compile(r"^(?:힘|민첩|지능)\s*\+([\d,]+)$")
-# (3) 전투 중 생명력 회복량 — 상=100 기준 근사 밴딩.
-_BRACELET_RECOVERY_RE = re.compile(r"전투 중 생명력 회복량\s*\+(\d+)")
-
-# (4) 부여 % 옵션 — 게임 공식 확률표의 하/중/상 고정 롤(고대 팔찌).
-# 정확히 일치할 때만 색을 입히므로, 표가 실제와 어긋나면 오분류 대신 색 미표시로 안전하게 빠진다.
-# "아군 공격력 강화 효과" 값은 2026-08 사용자 실측 보고(중=2.00%, 상=2.50%)로 재보정 —
-# 이전 값(3.00/4.00/5.00)은 어느 쪽으로도 안 맞아서 이 줄이 항상 등급 미표시로 빠지고 있었다.
-# 하=1.60%는 게임 내 공개된 간격(0.4%p 등폭)을 그대로 이어서 추정한 값이라 오차가 있을 수 있다.
-_BRACELET_PCT_TIERS = {
-    "추가 피해": (2.00, 2.60, 3.00),
-    "치명타 적중률": (3.40, 4.20, 5.00),
-    "치명타 피해": (5.00, 7.50, 10.00),
-    "게이지 획득량": (3.60, 4.80, 6.00),  # 세레나데/신앙/조화
-    "낙인력": (4.80, 6.40, 8.00),
-    "아군 공격력 강화 효과": (1.60, 2.00, 2.50),
-    "아군 피해량 강화 효과": (4.50, 6.00, 7.50),
-    "파티원 회복 효과": (2.10, 2.80, 3.50),
-    "파티원 보호막 효과": (2.10, 2.80, 3.50),
-    "상태이상 공격 지속시간": (0.50, 0.75, 1.00),
+# 2026-08 사용자가 실제 API 원본(scripts/inspect_armory.py)을 직접 떠 보내줘서 확인됨:
+# 로스트아크 API는 팔찌 부여 효과 수치에 이미 <FONT COLOR='...'>를 입혀서 내려준다.
+# 예) "몬스터에게... 방어력을 <FONT COLOR='#FE9600'>2.5%</FONT> 감소시킨다." — 값 자체가
+# 이미 등급색이 매겨진 채로 온다. 예전엔 이 색을 strip_html()이 통째로 지워버리고,
+# 수치를 확률표와 대조해 등급을 "추정"했다 — 이름 모르는 효과는 표에 없어서 등급이
+# 아예 안 붙었고(사용자가 지적한 문제), 심지어 표에 있는 값도 실측과 어긋났다
+# (예: "힘 +15168"이 색은 #CE43FC(중)인데 예전 코드는 값만 보고 "상"으로 잘못 판정).
+# → 수치 추정을 버리고 색을 그대로 읽는 것으로 교체.
+_FONT_COLOR_RE = re.compile(r"<font[^>]*\bcolor=['\"]?#?([0-9a-fA-F]{6})", re.IGNORECASE)
+_BRACELET_COLOR_TIER = {
+    "FE9600": "상",  # 금/주황 — 기존 표에서 확인된 상급값(예: 낙인력 8.00%)과 실측이 일치
+    "CE43FC": "중",  # 보라
+    "00B5FF": "하",  # 파랑
 }
 
-# 팔찌 "특수 효과"는 "[조건] ... 을/를 N% 증가/감소시킨다." 같은 서술형 문장으로 오고,
-# 부여 %옵션(예: "치명타 적중률 +4.20%")과 달리 "+" 기호가 없다. 등급을 가르는 숫자는
-# 보통 마지막의 "아군 공격력/피해량 강화 효과가 N% 증가한다." 문장에 있다.
-_BRACELET_SENTENCE_PCT_RE = re.compile(r"([\d.,]+)\s*%\s*(?:만큼\s*)?(?:증가|감소)")
 
-
-def _bracelet_pct_tier(line: str) -> str | None:
-    match = _GRIND_VALUE_RE.search(line)
-    has_plus = bool(match and match.group(2))
-    if not has_plus:
-        match = _BRACELET_SENTENCE_PCT_RE.search(line)
-    if not match:
-        return None
-    value = float(match.group(1).replace(",", ""))
-    for name in sorted(_BRACELET_PCT_TIERS, key=len, reverse=True):
-        if name in line:
-            for tier_name, tier_value in zip(_BRACELET_TIER_NAMES, _BRACELET_PCT_TIERS[name]):
-                if abs(value - tier_value) < 0.011:
-                    return tier_name
-            return None
+def bracelet_line_tier(raw_line: str) -> str | None:
+    """줄(HTML 태그 포함 원본) 안의 <FONT COLOR=...> 색으로 상/중/하를 가른다.
+    체력/전투특성 기본값처럼 등급 없는 고정 수치(다른 색이거나 색이 없음)는 None."""
+    for match in _FONT_COLOR_RE.finditer(raw_line):
+        tier = _BRACELET_COLOR_TIER.get(match.group(1).upper())
+        if tier:
+            return tier
     return None
 
 
-def bracelet_tier(line: str) -> str | None:
-    """팔찌 옵션 한 줄의 상/중/하 등급. 판정 못 하는 옵션(체력/무기공격력 등)은 None."""
-    line = line.strip()
-
-    match = _BRACELET_STAT_RE.match(line)  # 전투특성
-    if match:
-        value = int(match.group(2))
-        return "상" if value >= 87 else "중" if value >= 74 else "하"
-
-    match = _BRACELET_MAIN_STAT_RE.match(line)  # 힘/민첩/지능
-    if match:
-        value = int(match.group(1).replace(",", ""))
-        return "상" if value >= 13000 else "중" if value >= 10600 else "하"
-
-    match = _BRACELET_RECOVERY_RE.search(line)  # 전투 중 생명력 회복량
-    if match:
-        value = int(match.group(1))
-        return "상" if value >= 90 else "중" if value >= 70 else "하"
-
-    return _bracelet_pct_tier(line)  # 부여 % 옵션
+def _split_bracelet_raw_lines(raw_body: str) -> list[str]:
+    """<br>/<BR> 기준으로 원본 HTML을 줄 단위로 쪼갠다 — strip_html보다 먼저 해야
+    태그 안의 색 정보가 살아있다."""
+    return [line for line in re.split(r"<br\s*/?>", raw_body, flags=re.IGNORECASE) if strip_html(line).strip()]
 
 
-def _group_bracelet_option_lines(lines: list[str]) -> list[dict]:
+def _group_bracelet_option_lines(raw_lines: list[str]) -> list[dict]:
     """팔찌 문장형 특수 효과("[조건] ... N% 증가한다." 같은)는 조건/부가설명/보너스가
-    여러 줄에 걸쳐 나오는 하나의 옵션이다 — 지금까지는 줄마다 따로 떼어 보여줘서
-    한 옵션인지 구분이 안 됐다. "...다."로 끝나는 줄을 한 묶음으로 모으고, 등급을
-    가르는 문장(보통 "아군 OOO 강화 효과가 N% 증가한다.")이 나오면 그 등급을 묶음
-    전체에 적용한다. "이름 +숫자" 같은 짧은 스탯 줄은 지금처럼 한 줄 = 한 옵션."""
+    여러 줄에 걸쳐 나오는 하나의 옵션이다 — 줄마다 따로 떼어 보여주면 한 옵션인지
+    구분이 안 된다. "...다."로 끝나는 줄들을 한 묶음(같은 문장 흐름)으로 모으고,
+    그 안에서 색이 있는 줄이 나오면 묶음 전체의 등급으로 쓴다(보통 조건문 자체나
+    마지막 "아군 OOO 강화 효과" 보너스 문장에 색이 있다). "이름 +숫자" 같은 짧은
+    스탯 줄은 지금처럼 한 줄 = 한 옵션으로 남긴다."""
     options = []
-    pending: list[str] = []
+    pending_raw: list[str] = []
+    pending_tier: str | None = None
 
-    def flush(tier=None):
-        if pending:
-            options.append({"text": "\n".join(pending), "tier": tier})
-            pending.clear()
+    def flush():
+        nonlocal pending_tier
+        if pending_raw:
+            text = "\n".join(strip_html(r).strip() for r in pending_raw)
+            options.append({"text": text, "tier": pending_tier})
+            pending_raw.clear()
+        pending_tier = None
 
-    for line in lines:
-        if line.rstrip().endswith("다."):
-            pending.append(line)
-            tier = _bracelet_pct_tier(line)
+    for raw in raw_lines:
+        text = strip_html(raw).strip()
+        if text.endswith("다."):
+            pending_raw.append(raw)
+            tier = bracelet_line_tier(raw)
             if tier is not None:
-                flush(tier)
+                pending_tier = tier
         else:
             flush()
-            options.append({"text": line, "tier": bracelet_tier(line)})
+            options.append({"text": text, "tier": bracelet_line_tier(raw)})
     flush()
     return options
 
@@ -409,15 +374,19 @@ def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
                 continue
             value = element.get("value") or {}
             header = strip_html(value.get("Element_000", ""))
-            body = strip_html(value.get("Element_001", ""))
+            raw_body = value.get("Element_001", "") or ""
+            body = strip_html(raw_body)
             if not header or not body:
                 continue
             if not any(keyword in header for keyword in _EXTRA_SECTION_KEYWORDS):
                 continue
-            lines = [line for line in body.split("\n") if line.strip()]
             if item_type == "팔찌":
-                options = _group_bracelet_option_lines(lines)
+                # 색 정보가 태그 안에 있어서, strip_html로 지우기 전의 원본을 줄 단위로 다뤄야 한다.
+                raw_lines = _split_bracelet_raw_lines(raw_body)
+                lines = [strip_html(r).strip() for r in raw_lines]
+                options = _group_bracelet_option_lines(raw_lines)
             else:
+                lines = [line for line in body.split("\n") if line.strip()]
                 options = [{"text": line, "tier": None} for line in lines]
             sections.append({"header": header, "lines": lines, "options": options})
         quality = find_quality(tooltip)

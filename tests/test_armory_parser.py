@@ -775,6 +775,21 @@ def test_parse_aggregate_effects_includes_flat_values_and_value_text():
 
 # ── 팔찌/어빌리티 스톤 등 기타 장착 장비 ────────────────────
 
+# 2026-08 사용자가 scripts/inspect_armory.py로 직접 떠서 준 "찬란한 구원자의 팔찌" 원본
+# Tooltip 그대로(아이콘/색 태그 포함) — 색 기반 등급 판정을 실제 API 응답으로 검증한다.
+BRACELET_EFFECT_RAW = (
+    "<img src='emoticon_tooltip_bracelet_locked' vspace='-5'></img> 체력 <FONT COLOR='#91FE02'>+4620</FONT>"
+    "<BR><img src='emoticon_tooltip_bracelet_locked' vspace='-5'></img> 신속 <FONT COLOR='#91FE02'>+67</FONT>"
+    "<BR><img src='emoticon_tooltip_bracelet_changeable' width='20' height='20' vspace='-6'></img>"
+    "몬스터에게 공격 적중 시 8초 동안 대상의 방어력을 <FONT COLOR='#FE9600'>2.5%</FONT> 감소시킨다."
+    "<BR>해당 효과는 한 파티 당 하나만적용된다."
+    "<BR>아군 공격력 강화 효과가 <FONT COLOR='#FE9600'>3%</FONT> 증가한다."
+    "<BR><img src='emoticon_tooltip_bracelet_changeable' width='20' height='20' vspace='-6'></img>"
+    "아군 공격력 강화 효과 <font color='#00B5FF'>+4.00%</font>"
+    "<BR><img src='emoticon_tooltip_bracelet_changeable' width='20' height='20' vspace='-6'></img>"
+    "힘 <FONT COLOR='#CE43FC'>+15168</FONT>"
+)
+
 BRACELET_TOOLTIP = json.dumps(
     {
         "Element_001": {"type": "ItemTitle", "value": {"qualityValue": -1}},
@@ -782,7 +797,7 @@ BRACELET_TOOLTIP = json.dumps(
             "type": "ItemPartBox",
             "value": {
                 "Element_000": "<FONT COLOR='#A9D0F5'>팔찌 효과</FONT>",
-                "Element_001": "체력 +15000<BR>신속 +100<BR>[정밀] 치명타 적중률이 4.20% 증가한다.",
+                "Element_001": BRACELET_EFFECT_RAW,
             },
         },
         "Element_005": {
@@ -827,7 +842,7 @@ def test_parse_extra_equipment_keeps_only_bracelet_stone_orb_in_fixed_order():
     assert bracelet["name"] == "천선의 구슬치"
     assert bracelet["grade"] == "고대"
     assert bracelet["sections"][0]["header"] == "팔찌 효과"
-    assert bracelet["sections"][0]["lines"][0] == "체력 +15000"
+    assert bracelet["sections"][0]["lines"][0] == "체력 +4620"
 
 
 def test_parse_extra_equipment_skips_non_effect_sections():
@@ -841,69 +856,40 @@ def test_parse_extra_equipment_handles_none():
     assert parser.parse_extra_equipment(None) == []
 
 
-def test_bracelet_tier_combat_stat_banding():
-    """전투특성(치명/특화/…)은 고대 팔찌 범위를 3구간으로 밴딩."""
-    assert parser.bracelet_tier("특화 +95") == "상"
-    assert parser.bracelet_tier("신속 +80") == "중"
-    assert parser.bracelet_tier("치명 +68") == "하"
+def test_bracelet_line_tier_reads_font_color():
+    """등급은 수치 추정이 아니라 API가 이미 입혀준 <FONT COLOR>를 그대로 읽는다."""
+    assert parser.bracelet_line_tier("몬스터에게 공격을 <FONT COLOR='#FE9600'>2.5%</FONT> 감소시킨다.") == "상"
+    assert parser.bracelet_line_tier("아군 공격력 강화 효과 <font color='#00B5FF'>+4.00%</font>") == "하"
+    assert parser.bracelet_line_tier("힘 <FONT COLOR='#CE43FC'>+15168</FONT>") == "중"
 
 
-def test_bracelet_tier_main_stat_and_recovery_banding():
-    """주 스탯(힘/민첩/지능)과 전투 중 생명력 회복량도 관측 상급값 기준으로 밴딩."""
-    assert parser.bracelet_tier("지능 +14208") == "상"
-    assert parser.bracelet_tier("힘 +11840") == "중"
-    assert parser.bracelet_tier("민첩 +9472") == "하"
-    assert parser.bracelet_tier("전투 중 생명력 회복량 +100") == "상"
-    assert parser.bracelet_tier("전투 중 생명력 회복량 +80") == "중"
-
-
-def test_bracelet_tier_percent_options_use_game_disclosed_rolls():
-    """부여 % 옵션은 게임 공식 확률표의 하/중/상 고정 롤과 정확히 일치할 때만 색을 입힌다."""
-    assert parser.bracelet_tier("치명타 피해 +10.00%") == "상"
-    assert parser.bracelet_tier("치명타 적중률 +4.20%") == "중"
-    assert parser.bracelet_tier("추가 피해 +2.00%") == "하"
-    assert parser.bracelet_tier("아군 피해량 강화 효과 +7.50%") == "상"
-    assert parser.bracelet_tier("세레나데, 신앙, 조화 게이지 획득량 +6.00%") == "상"
-    # 표에 없는 값은 오분류하지 않고 None (색 미표시)
-    assert parser.bracelet_tier("치명타 피해 +6.66%") is None
-
-
-def test_bracelet_tier_returns_none_for_unsupported_options():
-    """정확한 수치표가 없는 옵션(체력/무기공격력)과, %가 아니라 고정 수치로만 오는
-    특수효과 문장(등급표를 알 수 없음)은 색을 넣지 않는다."""
-    assert parser.bracelet_tier("체력 +15000") is None
-    assert parser.bracelet_tier("무기 공격력 +195") is None
-    assert parser.bracelet_tier("[쇄빙] 방어력 감소 461 증가한다.") is None
-
-
-def test_bracelet_tier_sentence_style_special_effect_without_plus_sign():
-    """팔찌 특수 효과는 "+" 없이 "...N% 증가/감소한다." 문장으로 오는데, 표에 있는
-    이름이 걸리면 % 옵션과 동일하게 등급을 매길 수 있어야 한다."""
-    assert parser.bracelet_tier("[정밀] 치명타 적중률이 4.20% 증가한다.") == "중"
-    assert parser.bracelet_tier("몬스터에게 공격 적중 시 8초 동안 대상의 치명타 피해 저항을 4.2% 감소시킨다.") is None  # 표에 없는 이름
-    assert parser.bracelet_tier("아군 공격력 강화 효과가 2% 증가한다.") == "중"
-    assert parser.bracelet_tier("아군 공격력 강화 효과가 2.5% 증가한다.") == "상"
+def test_bracelet_line_tier_returns_none_for_unknown_or_missing_color():
+    """등급 3색(상/중/하)에 없는 색(예: 고정 스탯의 연두색)이나 색 자체가 없는 줄은
+    등급을 매기지 않는다 — 틀리게 우기는 것보다 안전하다."""
+    assert parser.bracelet_line_tier("체력 <FONT COLOR='#91FE02'>+4620</FONT>") is None
+    assert parser.bracelet_line_tier("체력 +15000") is None
+    assert parser.bracelet_line_tier("[쇄빙] 방어력 감소 461 증가한다.") is None
 
 
 def test_group_bracelet_option_lines_merges_multi_sentence_special_effect():
-    """조건문 + 부가설명 + "아군 OOO 강화 효과" 보너스로 이어지는 여러 줄은 한 옵션으로
-    묶이고, 마지막 보너스 문장의 등급이 묶음 전체에 적용된다. 스탯 줄(+숫자)은 그대로 한 줄=한 옵션."""
-    lines = [
-        "신속 +100",
-        "파티 효과로 보호 효과(보호막, 생명력 회복, 받는 피해 감소)가 적용된 대상이 5초 동안 적에게 주는 피해가 0.9% 증가한다.",
-        "해당 효과는 한 파티 당 하나만 적용되며, 지속 시간이 없는 보호 효과에는 적용되지 않는다.",
-        "아군 공격력 강화 효과가 2% 증가한다.",
-        "체력 +15000",
-    ]
-    options = parser._group_bracelet_option_lines(lines)
-    assert options[0] == {"text": "신속 +100", "tier": "상"}
-    assert options[1]["tier"] == "중"
-    assert options[1]["text"] == (
-        "파티 효과로 보호 효과(보호막, 생명력 회복, 받는 피해 감소)가 적용된 대상이 5초 동안 적에게 주는 피해가 0.9% 증가한다.\n"
-        "해당 효과는 한 파티 당 하나만 적용되며, 지속 시간이 없는 보호 효과에는 적용되지 않는다.\n"
-        "아군 공격력 강화 효과가 2% 증가한다."
+    """조건문 + 부가설명 + "아군 OOO 강화 효과" 보너스로 이어지는 여러 줄(원본 HTML)은
+    한 옵션으로 묶이고, 그 안에 있는 색이 묶음 전체의 등급이 된다. "이름 <색>+숫자</색>"
+    같은 짧은 스탯 줄은 그대로 한 줄 = 한 옵션."""
+    raw_lines = parser._split_bracelet_raw_lines(BRACELET_EFFECT_RAW)
+    options = parser._group_bracelet_option_lines(raw_lines)
+
+    assert options[0] == {"text": "체력 +4620", "tier": None}
+    assert options[1] == {"text": "신속 +67", "tier": None}
+
+    assert options[2]["tier"] == "상"
+    assert options[2]["text"] == (
+        "몬스터에게 공격 적중 시 8초 동안 대상의 방어력을 2.5% 감소시킨다.\n"
+        "해당 효과는 한 파티 당 하나만적용된다.\n"
+        "아군 공격력 강화 효과가 3% 증가한다."
     )
-    assert options[2] == {"text": "체력 +15000", "tier": None}
+
+    assert options[3] == {"text": "아군 공격력 강화 효과 +4.00%", "tier": "하"}
+    assert options[4] == {"text": "힘 +15168", "tier": "중"}
 
 
 def test_parse_extra_equipment_bracelet_lines_carry_tier():
@@ -911,9 +897,10 @@ def test_parse_extra_equipment_bracelet_lines_carry_tier():
     bracelet = next(x for x in result if x["type"] == "팔찌")
     options = bracelet["sections"][0]["options"]
     by_text = {o["text"]: o["tier"] for o in options}
-    assert by_text["신속 +100"] == "상"
-    assert by_text["체력 +15000"] is None  # 전투특성만 밴딩
-    # 어빌리티 스톤 줄에는 팔찌 밴딩을 적용하지 않는다
+    assert by_text["체력 +4620"] is None  # 고정 효과(locked) — 색이 3등급 표에 없음
+    assert by_text["힘 +15168"] == "중"
+    assert by_text["아군 공격력 강화 효과 +4.00%"] == "하"
+    # 어빌리티 스톤 줄에는 팔찌 등급 판정을 적용하지 않는다
     stone = next(x for x in result if x["type"] == "어빌리티 스톤")
     assert all(o["tier"] is None for section in stone["sections"] for o in section["options"])
 
