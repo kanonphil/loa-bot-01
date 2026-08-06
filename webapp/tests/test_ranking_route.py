@@ -32,7 +32,7 @@ def test_ranking_renders_combat_power_tab(client):
     assert "원정대 랭킹" in resp.text
     assert "발키리" in resp.text
     assert "4,300,000" in resp.text  # 전투력은 천단위 콤마
-    assert "🥇" in resp.text  # 1위 메달
+    assert "rank-medal-1" in resp.text  # 1위는 이모지 메달 대신 등급색 순위 숫자로 강조
     # 캐릭터명이 상세 페이지로 링크 (다른 유저 캐릭터는 discord_id 유지)
     assert "discord_id=222" in resp.text
     # 3개 탭

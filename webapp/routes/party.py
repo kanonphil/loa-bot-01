@@ -1,6 +1,7 @@
 """공대 모집 페이지 — 목록/상세/참여/나가기/개설/파티장 관리."""
 import asyncio
 import json
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse
@@ -162,8 +163,15 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
     is_leader = party["leader_id"] == discord_id
     other_members = [s for s in party["slots"] if s["discord_id"] != discord_id]
     eligibility = None
+    character_is_support_json = "{}"
     if not joined and party["status"] != "disbanded":
         eligibility = await bot_client.get_party_eligibility(message_id, discord_id)
+        if eligibility and eligibility.get("qualifying"):
+            support_classes = set(await bot_client.get_support_classes())
+            character_is_support_json = json.dumps(
+                {q["name"]: q["class"] in support_classes for q in eligibility["qualifying"]},
+                ensure_ascii=False,
+            )
 
     raids = await bot_client.get_raids()
     raid_info = raids.get(party["raid_name"], {})
@@ -194,8 +202,12 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
                     slots.append({**slot, "local_number": local_number, "filled": True})
                 else:
                     slots.append({"local_number": local_number, "filled": False})
+            has_support = any(s.get("filled") and s.get("role") == "support" for s in slots)
             party_groups.append(
-                {"group_number": g, "slots": slots, "filled_count": filled_count, "total": party_split}
+                {
+                    "group_number": g, "slots": slots, "filled_count": filled_count,
+                    "total": party_split, "has_support": has_support,
+                }
             )
     else:
         # 슬롯은 연속으로 채워지지 않을 수 있다 — 번호 순으로 병합해서 표시용 목록을 만든다
@@ -212,6 +224,7 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
         "is_leader": is_leader,
         "other_members": other_members,
         "eligibility": eligibility,
+        "character_is_support_json": character_is_support_json,
         "sub_parties": sub_parties,
         "party_groups": party_groups,
         "all_slots": all_slots,
@@ -223,15 +236,31 @@ async def party_detail(
     request: Request,
     message_id: str,
     join_error: str | None = None,
+    cancelled: bool = False,
     user: dict = Depends(get_current_user),
 ):
     ctx = await _detail_context(message_id, user["discord_id"])
-    action_result = {"success": False, "reason": join_error} if join_error else None
+    if join_error:
+        action_result = {"success": False, "reason": join_error}
+    elif cancelled:
+        action_result = {"success": True}
+    else:
+        action_result = None
     return templates.TemplateResponse(
         request,
         "party_detail.html",
         {"user": user, "active": "parties", "action_result": action_result, **ctx},
     )
+
+
+def _redirect_with_result(message_id: str, result: dict, fallback_reason: str) -> RedirectResponse:
+    """액션 결과를 렌더링 대신 redirect로 돌려준다 — POST 응답을 그대로 렌더하면
+    뒤로가기 시 브라우저가 "이 페이지를 다시 표시하려면..." 폼 재제출 경고를 띄우고,
+    실수로 뒤로 갔다 앞으로 오면 같은 액션(참여/퇴장/강제퇴장 등)이 다시 전송될 수 있다."""
+    if not result.get("success"):
+        reason = quote(result.get("reason") or fallback_reason)
+        return RedirectResponse(f"/parties/{message_id}?join_error={reason}", status_code=303)
+    return RedirectResponse(f"/parties/{message_id}", status_code=303)
 
 
 @router.post("/parties/{message_id}/join")
@@ -243,28 +272,18 @@ async def join(
     party_group: int | None = Form(None),
     user: dict = Depends(get_current_user),
 ):
-    action_result = await bot_client.join_party(
+    result = await bot_client.join_party(
         message_id, user["discord_id"], character_name, role, party_group
     )
-    ctx = await _detail_context(message_id, user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "party_detail.html",
-        {"user": user, "active": "parties", "action_result": action_result, **ctx},
-    )
+    return _redirect_with_result(message_id, result, "참여하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/leave")
 async def leave(
     request: Request, message_id: str, user: dict = Depends(get_current_user)
 ):
-    action_result = await bot_client.leave_party(message_id, user["discord_id"])
-    ctx = await _detail_context(message_id, user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "party_detail.html",
-        {"user": user, "active": "parties", "action_result": action_result, **ctx},
-    )
+    result = await bot_client.leave_party(message_id, user["discord_id"])
+    return _redirect_with_result(message_id, result, "나가지 못했습니다.")
 
 
 @router.get("/parties/{message_id}/switch")
@@ -293,21 +312,7 @@ async def switch_character_submit(
     user: dict = Depends(get_current_user),
 ):
     result = await bot_client.switch_character(message_id, user["discord_id"], character_name)
-    if not result.get("success"):
-        from urllib.parse import quote
-
-        reason = quote(result.get("reason") or "캐릭터를 변경하지 못했습니다.")
-        return RedirectResponse(f"/parties/{message_id}?join_error={reason}", status_code=303)
-    return RedirectResponse(f"/parties/{message_id}", status_code=303)
-
-
-async def _manage_response(request, message_id, user, action_result):
-    ctx = await _detail_context(message_id, user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "party_detail.html",
-        {"user": user, "active": "parties", "action_result": action_result, **ctx},
-    )
+    return _redirect_with_result(message_id, result, "캐릭터를 변경하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/close")
@@ -315,7 +320,7 @@ async def close_party(
     request: Request, message_id: str, user: dict = Depends(get_current_user)
 ):
     result = await bot_client.close_party(message_id, user["discord_id"])
-    return await _manage_response(request, message_id, user, result)
+    return _redirect_with_result(message_id, result, "마감하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/reopen")
@@ -323,7 +328,7 @@ async def reopen_party(
     request: Request, message_id: str, user: dict = Depends(get_current_user)
 ):
     result = await bot_client.reopen_party(message_id, user["discord_id"])
-    return await _manage_response(request, message_id, user, result)
+    return _redirect_with_result(message_id, result, "재개하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/clear")
@@ -331,7 +336,7 @@ async def clear_party(
     request: Request, message_id: str, user: dict = Depends(get_current_user)
 ):
     result = await bot_client.clear_party(message_id, user["discord_id"])
-    return await _manage_response(request, message_id, user, result)
+    return _redirect_with_result(message_id, result, "클리어 처리하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/cancel")
@@ -342,7 +347,12 @@ async def cancel_party(
     user: dict = Depends(get_current_user),
 ):
     result = await bot_client.cancel_party(message_id, user["discord_id"], reason.strip() or None)
-    return await _manage_response(request, message_id, user, result)
+    if not result.get("success"):
+        error = quote(result.get("reason") or "취소하지 못했습니다.")
+        return RedirectResponse(f"/parties/{message_id}?join_error={error}", status_code=303)
+    # 취소 성공 후에는 party 자체가 없어지므로(디스코드 파티와 동일하게), 빈 상태 화면에
+    # "취소되었습니다" 안내를 보여주도록 신호만 넘긴다.
+    return RedirectResponse(f"/parties/{message_id}?cancelled=1", status_code=303)
 
 
 @router.post("/parties/{message_id}/kick")
@@ -353,7 +363,7 @@ async def kick_member(
     user: dict = Depends(get_current_user),
 ):
     result = await bot_client.kick_member(message_id, user["discord_id"], target_discord_id)
-    return await _manage_response(request, message_id, user, result)
+    return _redirect_with_result(message_id, result, "강제 퇴장시키지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/reschedule")
@@ -367,7 +377,7 @@ async def reschedule_party(
     result = await bot_client.reschedule_party(
         message_id, user["discord_id"], scheduled_datetime, memo.strip() or None
     )
-    return await _manage_response(request, message_id, user, result)
+    return _redirect_with_result(message_id, result, "일정을 변경하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/transfer-leader")
@@ -380,4 +390,4 @@ async def transfer_leader(
     result = await bot_client.transfer_leader(
         message_id, user["discord_id"], new_leader_discord_id
     )
-    return await _manage_response(request, message_id, user, result)
+    return _redirect_with_result(message_id, result, "파티장을 위임하지 못했습니다.")

@@ -49,7 +49,7 @@
 {% else %}
 <form method="post" action="/expedition/sync" class="expedition-sync-form">
   {# 동기화는 캐릭터 수만큼 API를 도느라 오래 걸린다 — 눌린 티가 안 나면 계속 다시 누른다 #}
-  <button type="submit" data-busy-text="🔄 동기화 중...">🔄 전체 동기화</button>
+  <button type="submit" data-busy-text="동기화 중...">전체 동기화</button>
 </form>
 
 {% for group in character_groups %}

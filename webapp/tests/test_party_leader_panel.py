@@ -70,7 +70,8 @@ def test_close_action_calls_bot(client):
 
         resp = client.post("/parties/p1/close")
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303  # redirect-after-POST — 뒤로가기 시 폼 재제출 방지
+    assert resp.headers["location"] == "/parties/p1"
     assert close_route.called
 
 
@@ -83,7 +84,8 @@ def test_clear_action_shows_success(client):
 
         resp = client.post("/parties/p1/clear")
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
 
 
 def test_kick_action_shows_error_reason(client):
@@ -97,8 +99,14 @@ def test_kick_action_shows_error_reason(client):
 
         resp = client.post("/parties/p1/kick", data={"target_discord_id": "222"})
 
-    assert resp.status_code == 200
-    assert "파티원을 찾을 수 없습니다" in resp.text
+    assert resp.status_code == 303  # 실패도 렌더하지 않고 에러 사유를 쿼리파라미터로 redirect
+    assert "join_error=" in resp.headers["location"]
+
+    with respx.mock:
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        resp2 = client.get(resp.headers["location"])
+    assert "파티원을 찾을 수 없습니다" in resp2.text
 
 
 def test_reschedule_action_calls_bot_with_datetime(client):
@@ -115,7 +123,8 @@ def test_reschedule_action_calls_bot_with_datetime(client):
             data={"scheduled_datetime": "2026-05-21T21:00", "memo": "새 공지"},
         )
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
     assert reschedule_route.called
 
 
@@ -128,7 +137,8 @@ def test_transfer_leader_action_calls_bot(client):
 
         resp = client.post("/parties/p1/transfer-leader", data={"new_leader_discord_id": "222"})
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
     assert transfer_route.called
 
 
@@ -141,7 +151,8 @@ def test_cancel_action_calls_bot_with_reason(client):
 
         resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1?cancelled=1"
 
 
 def test_cancel_success_shows_styled_confirmation_when_party_purged(client):
@@ -153,10 +164,14 @@ def test_cancel_success_shows_styled_confirmation_when_party_purged(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, text="null"))
 
         resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/parties/p1?cancelled=1"
 
-    assert resp.status_code == 200
-    assert "공대가 취소되었습니다" in resp.text
-    assert "party-empty-card" in resp.text
+        resp2 = client.get(resp.headers["location"])
+
+    assert resp2.status_code == 200
+    assert "공대가 취소되었습니다" in resp2.text
+    assert "party-empty-card" in resp2.text
 
 
 def test_visiting_unknown_party_shows_not_found_not_cancelled_message(client):

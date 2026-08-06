@@ -10,6 +10,7 @@ ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibilit
 JOIN_URL = "http://bot-server.internal/api/internal/parties/p1/join"
 LEAVE_URL = "http://bot-server.internal/api/internal/parties/p1/leave"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
+SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 
 RAIDS = {
     "아르모체(4막)": {
@@ -153,6 +154,7 @@ def test_party_detail_shows_join_form_when_eligible(client):
                 },
             )
         )
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트", "바드", "도화가"]))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
@@ -230,6 +232,7 @@ def test_join_posts_to_bot_and_shows_error_on_failure(client):
                 },
             )
         )
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트", "바드", "도화가"]))
         join_route = respx.post(JOIN_URL).mock(
             return_value=httpx.Response(
                 200, json={"success": False, "reason": "다른 유저가 동시에 참여해 슬롯이 찼습니다."}
@@ -240,10 +243,13 @@ def test_join_posts_to_bot_and_shows_error_on_failure(client):
             "/parties/p1/join",
             data={"character_name": "발키리", "role": "support", "party_group": "1"},
         )
+        assert resp.status_code == 303  # redirect-after-POST — 뒤로가기 시 폼 재제출 방지
+        assert "join_error=" in resp.headers["location"]
+        assert join_route.called
 
-    assert resp.status_code == 200
-    assert join_route.called
-    assert "동시에 참여" in resp.text
+        resp2 = client.get(resp.headers["location"])
+
+    assert "동시에 참여" in resp2.text
 
 
 def test_leave_posts_to_bot(client):
@@ -261,7 +267,8 @@ def test_leave_posts_to_bot(client):
 
         resp = client.post("/parties/p1/leave")
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
     assert leave_route.called
 
 

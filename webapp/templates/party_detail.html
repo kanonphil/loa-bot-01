@@ -43,7 +43,7 @@
   </span>
 </div>
 <p class="party-meta">{{ party.scheduled_time }} &middot; 최소 {{ party.min_level }}</p>
-{% if party.memo %}<p class="party-memo">📌 {{ party.memo }}</p>{% endif %}
+{% if party.memo %}<p class="party-memo">{{ party.memo }}</p>{% endif %}
 
 {% if action_result and not action_result.success %}
 <div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
@@ -80,35 +80,68 @@
 {% elif eligibility and eligibility.can_join %}
   {% if eligibility.qualifying %}
   <form method="post" action="/parties/{{ party.message_id }}/join" class="party-join-form">
-    <select name="character_name">
+    <select name="character_name" id="join-character-select">
       {% for q in eligibility.qualifying %}
       <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
       {% endfor %}
     </select>
-    <select name="role">
-      <option value="dps">⚔️ 딜러</option>
-      <option value="support">🛡️ 서포터</option>
+    <select name="role" id="join-role-select">
+      <option value="dps">딜러</option>
+      <option value="support">서포터</option>
     </select>
-    {% if sub_parties %}
-    <select name="party_group">
-      {% for g in sub_parties %}
-      <option value="{{ g }}">{{ g }}파티</option>
+    {% if party_groups %}
+    <select name="party_group" id="join-group-select">
+      {% for g in party_groups %}
+      <option value="{{ g.group_number }}" data-has-support="{{ 1 if g.has_support else 0 }}">{{ g.group_number }}파티</option>
       {% endfor %}
     </select>
     {% endif %}
     <button type="submit">참여하기</button>
   </form>
+  <script>
+    (function () {
+      var isSupportMap = {{ character_is_support_json | safe }};
+      var charSelect = document.getElementById("join-character-select");
+      var roleSelect = document.getElementById("join-role-select");
+      var groupSelect = document.getElementById("join-group-select");
+      var supportOption = roleSelect.querySelector('option[value="support"]');
+
+      function syncRole() {
+        var isSupport = isSupportMap[charSelect.value];
+        supportOption.disabled = !isSupport;
+        if (isSupport) roleSelect.value = "support";
+        else if (roleSelect.value === "support") roleSelect.value = "dps";
+      }
+
+      // 서포터로 참여하면, 이미 서포터가 있는 파티를 피해 빈 파티를 먼저 골라준다
+      // (강제는 아니라 직접 바꿀 수 있음 — 그냥 기본값만 편하게).
+      function syncGroup() {
+        if (!groupSelect || roleSelect.value !== "support") return;
+        var current = groupSelect.selectedOptions[0];
+        if (current && current.dataset.hasSupport !== "1") return;
+        var openGroup = Array.prototype.find.call(
+          groupSelect.options, function (o) { return o.dataset.hasSupport !== "1"; }
+        );
+        if (openGroup) groupSelect.value = openGroup.value;
+      }
+
+      charSelect.addEventListener("change", function () { syncRole(); syncGroup(); });
+      roleSelect.addEventListener("change", syncGroup);
+      syncRole();
+      syncGroup();
+    })();
+  </script>
   {% else %}
   <div class="party-no-qualifying">
     <p>참여 가능한 캐릭터가 없습니다.</p>
-    {% if eligibility.gold_done %}<p>🏆 이번 주 골드 완료: {{ eligibility.gold_done | join(', ') }}</p>{% endif %}
-    {% if eligibility.in_other_party %}<p>⚔️ 다른 공대 참여 중: {{ eligibility.in_other_party | join(', ') }}</p>{% endif %}
+    {% if eligibility.gold_done %}<p>이번 주 골드 완료: {{ eligibility.gold_done | join(', ') }}</p>{% endif %}
+    {% if eligibility.in_other_party %}<p>다른 공대 참여 중: {{ eligibility.in_other_party | join(', ') }}</p>{% endif %}
     {% if eligibility.level_too_low %}
-    <p>📉 레벨 미달 (최소 {{ eligibility.min_level }}):
+    <p>레벨 미달 (최소 {{ eligibility.min_level }}):
       {% for c in eligibility.level_too_low %}{{ c.name }} ({{ c.level }}){% if not loop.last %}, {% endif %}{% endfor %}
     </p>
     {% endif %}
-    {% if eligibility.no_cache %}<p>❓ 레벨 미확인: {{ eligibility.no_cache | join(', ') }} — 디스코드 <code>/원정대</code>에서 동기화해주세요.</p>{% endif %}
+    {% if eligibility.no_cache %}<p>레벨 미확인: {{ eligibility.no_cache | join(', ') }} — 디스코드 <code>/원정대</code>에서 동기화해주세요.</p>{% endif %}
   </div>
   {% endif %}
 {% elif eligibility %}
@@ -117,21 +150,21 @@
 
 {% if is_leader and party.status != "disbanded" %}
 <div class="leader-panel">
-  <h2 class="leader-panel-title">👑 파티장 관리</h2>
+  <h2 class="leader-panel-title">파티장 관리</h2>
 
   <div class="leader-actions-row">
     {% if party.status == "closed" %}
     <form method="post" action="/parties/{{ party.message_id }}/reopen">
-      <button type="submit" class="leader-btn">🔓 모집 재개</button>
+      <button type="submit" class="leader-btn">모집 재개</button>
     </form>
     {% else %}
     <form method="post" action="/parties/{{ party.message_id }}/close">
-      <button type="submit" class="leader-btn">🔒 모집 마감</button>
+      <button type="submit" class="leader-btn">모집 마감</button>
     </form>
     {% endif %}
 
     <form method="post" action="/parties/{{ party.message_id }}/clear">
-      <button type="submit" class="leader-btn leader-btn-success">🏆 클리어</button>
+      <button type="submit" class="leader-btn leader-btn-success">클리어</button>
     </form>
   </div>
 
@@ -142,7 +175,7 @@
       <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
       {% endfor %}
     </select>
-    <button type="submit" class="leader-btn leader-btn-danger">🚫 강제 퇴장</button>
+    <button type="submit" class="leader-btn leader-btn-danger">강제 퇴장</button>
   </form>
 
   <form method="post" action="/parties/{{ party.message_id }}/transfer-leader" class="leader-form">
@@ -151,19 +184,19 @@
       <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
       {% endfor %}
     </select>
-    <button type="submit" class="leader-btn">👑 파티장 위임</button>
+    <button type="submit" class="leader-btn">파티장 위임</button>
   </form>
   {% endif %}
 
   <form method="post" action="/parties/{{ party.message_id }}/reschedule" class="leader-form">
     <input type="text" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" required>
     <input type="text" name="memo" maxlength="150" placeholder="공지/메모 (비우면 삭제)" value="{{ party.memo or '' }}">
-    <button type="submit" class="leader-btn">📅 일정 변경</button>
+    <button type="submit" class="leader-btn">일정 변경</button>
   </form>
 
   <form method="post" action="/parties/{{ party.message_id }}/cancel" class="leader-form">
     <input type="text" name="reason" maxlength="200" placeholder="취소 사유 (선택)">
-    <button type="submit" class="leader-btn leader-btn-danger">❌ 파티 취소</button>
+    <button type="submit" class="leader-btn leader-btn-danger">파티 취소</button>
   </form>
 </div>
 <script src="/static/flatpickr.min.js"></script>

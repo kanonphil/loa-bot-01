@@ -3,7 +3,7 @@
   <div class="raid-card-header">
     <div class="raid-card-header-top">
       <span class="raid-card-name">{{ card.character_name }}</span>
-      <a class="raid-card-select-link" href="/raid-check/select/{{ card.character_name }}">⚙️ 레이드 선택</a>
+      <a class="raid-card-select-link" href="/raid-check/select/{{ card.character_name }}">레이드 선택</a>
     </div>
     <span class="raid-card-meta">{{ card.character_class }} &middot; {{ card.item_level }}</span>
   </div>
@@ -22,7 +22,6 @@
       {% for r in group.raids %}
       <div class="raid-card-row">
         <div class="raid-card-row-top">
-          <span class="raid-card-icon">{{ r.icon }}</span>
           <span class="raid-card-raid-name">{{ r.short_name }}</span>
         </div>
         <div class="raid-card-diffs">

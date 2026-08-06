@@ -47,7 +47,7 @@
   {% for e in entries %}
   <a class="rank-row rank-medal-{{ e.rank if e.rank <= 3 else 0 }}" role="row"
      href="/characters/{{ e.character_name | urlencode }}?discord_id={{ e.discord_id }}">
-    <span class="rank-col-rank">{% if e.rank == 1 %}🥇{% elif e.rank == 2 %}🥈{% elif e.rank == 3 %}🥉{% else %}{{ e.rank }}{% endif %}</span>
+    <span class="rank-col-rank">{{ e.rank }}</span>
     <span class="rank-col-name">{{ e.character_name }}</span>
     <span class="rank-col-class">{{ e.character_class or "—" }}</span>
     <span class="rank-col-value">

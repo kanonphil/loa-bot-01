@@ -12,7 +12,7 @@
       {% for r in group.raids %}
       <label class="raid-select-row">
         <input type="checkbox" name="raid_names" value="{{ r.raid_name }}" {% if r.raid_name in selected_raids %}checked{% endif %}>
-        <span class="raid-card-icon">{{ r.icon }}</span>
+        <span class="ui-checkbox" aria-hidden="true"></span>
         <span>{{ r.short_name }}</span>
       </label>
       {% endfor %}

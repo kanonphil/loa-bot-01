@@ -869,10 +869,41 @@ def test_bracelet_tier_percent_options_use_game_disclosed_rolls():
 
 
 def test_bracelet_tier_returns_none_for_unsupported_options():
-    """정확한 수치표가 없는 옵션(체력/무기공격력)과 특수효과 문장은 색을 넣지 않는다."""
+    """정확한 수치표가 없는 옵션(체력/무기공격력)과, %가 아니라 고정 수치로만 오는
+    특수효과 문장(등급표를 알 수 없음)은 색을 넣지 않는다."""
     assert parser.bracelet_tier("체력 +15000") is None
     assert parser.bracelet_tier("무기 공격력 +195") is None
     assert parser.bracelet_tier("[쇄빙] 방어력 감소 461 증가한다.") is None
+
+
+def test_bracelet_tier_sentence_style_special_effect_without_plus_sign():
+    """팔찌 특수 효과는 "+" 없이 "...N% 증가/감소한다." 문장으로 오는데, 표에 있는
+    이름이 걸리면 % 옵션과 동일하게 등급을 매길 수 있어야 한다."""
+    assert parser.bracelet_tier("[정밀] 치명타 적중률이 4.20% 증가한다.") == "중"
+    assert parser.bracelet_tier("몬스터에게 공격 적중 시 8초 동안 대상의 치명타 피해 저항을 4.2% 감소시킨다.") is None  # 표에 없는 이름
+    assert parser.bracelet_tier("아군 공격력 강화 효과가 2% 증가한다.") == "중"
+    assert parser.bracelet_tier("아군 공격력 강화 효과가 2.5% 증가한다.") == "상"
+
+
+def test_group_bracelet_option_lines_merges_multi_sentence_special_effect():
+    """조건문 + 부가설명 + "아군 OOO 강화 효과" 보너스로 이어지는 여러 줄은 한 옵션으로
+    묶이고, 마지막 보너스 문장의 등급이 묶음 전체에 적용된다. 스탯 줄(+숫자)은 그대로 한 줄=한 옵션."""
+    lines = [
+        "신속 +100",
+        "파티 효과로 보호 효과(보호막, 생명력 회복, 받는 피해 감소)가 적용된 대상이 5초 동안 적에게 주는 피해가 0.9% 증가한다.",
+        "해당 효과는 한 파티 당 하나만 적용되며, 지속 시간이 없는 보호 효과에는 적용되지 않는다.",
+        "아군 공격력 강화 효과가 2% 증가한다.",
+        "체력 +15000",
+    ]
+    options = parser._group_bracelet_option_lines(lines)
+    assert options[0] == {"text": "신속 +100", "tier": "상"}
+    assert options[1]["tier"] == "중"
+    assert options[1]["text"] == (
+        "파티 효과로 보호 효과(보호막, 생명력 회복, 받는 피해 감소)가 적용된 대상이 5초 동안 적에게 주는 피해가 0.9% 증가한다.\n"
+        "해당 효과는 한 파티 당 하나만 적용되며, 지속 시간이 없는 보호 효과에는 적용되지 않는다.\n"
+        "아군 공격력 강화 효과가 2% 증가한다."
+    )
+    assert options[2] == {"text": "체력 +15000", "tier": None}
 
 
 def test_parse_extra_equipment_bracelet_lines_carry_tier():

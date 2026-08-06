@@ -304,23 +304,34 @@ _BRACELET_RECOVERY_RE = re.compile(r"전투 중 생명력 회복량\s*\+(\d+)")
 
 # (4) 부여 % 옵션 — 게임 공식 확률표의 하/중/상 고정 롤(고대 팔찌).
 # 정확히 일치할 때만 색을 입히므로, 표가 실제와 어긋나면 오분류 대신 색 미표시로 안전하게 빠진다.
+# "아군 공격력 강화 효과" 값은 2026-08 사용자 실측 보고(중=2.00%, 상=2.50%)로 재보정 —
+# 이전 값(3.00/4.00/5.00)은 어느 쪽으로도 안 맞아서 이 줄이 항상 등급 미표시로 빠지고 있었다.
+# 하=1.60%는 게임 내 공개된 간격(0.4%p 등폭)을 그대로 이어서 추정한 값이라 오차가 있을 수 있다.
 _BRACELET_PCT_TIERS = {
     "추가 피해": (2.00, 2.60, 3.00),
     "치명타 적중률": (3.40, 4.20, 5.00),
     "치명타 피해": (5.00, 7.50, 10.00),
     "게이지 획득량": (3.60, 4.80, 6.00),  # 세레나데/신앙/조화
     "낙인력": (4.80, 6.40, 8.00),
-    "아군 공격력 강화 효과": (3.00, 4.00, 5.00),
+    "아군 공격력 강화 효과": (1.60, 2.00, 2.50),
     "아군 피해량 강화 효과": (4.50, 6.00, 7.50),
     "파티원 회복 효과": (2.10, 2.80, 3.50),
     "파티원 보호막 효과": (2.10, 2.80, 3.50),
     "상태이상 공격 지속시간": (0.50, 0.75, 1.00),
 }
 
+# 팔찌 "특수 효과"는 "[조건] ... 을/를 N% 증가/감소시킨다." 같은 서술형 문장으로 오고,
+# 부여 %옵션(예: "치명타 적중률 +4.20%")과 달리 "+" 기호가 없다. 등급을 가르는 숫자는
+# 보통 마지막의 "아군 공격력/피해량 강화 효과가 N% 증가한다." 문장에 있다.
+_BRACELET_SENTENCE_PCT_RE = re.compile(r"([\d.,]+)\s*%\s*(?:만큼\s*)?(?:증가|감소)")
+
 
 def _bracelet_pct_tier(line: str) -> str | None:
     match = _GRIND_VALUE_RE.search(line)
-    if not match or not match.group(2):  # % 옵션만
+    has_plus = bool(match and match.group(2))
+    if not has_plus:
+        match = _BRACELET_SENTENCE_PCT_RE.search(line)
+    if not match:
         return None
     value = float(match.group(1).replace(",", ""))
     for name in sorted(_BRACELET_PCT_TIERS, key=len, reverse=True):
@@ -354,6 +365,33 @@ def bracelet_tier(line: str) -> str | None:
     return _bracelet_pct_tier(line)  # 부여 % 옵션
 
 
+def _group_bracelet_option_lines(lines: list[str]) -> list[dict]:
+    """팔찌 문장형 특수 효과("[조건] ... N% 증가한다." 같은)는 조건/부가설명/보너스가
+    여러 줄에 걸쳐 나오는 하나의 옵션이다 — 지금까지는 줄마다 따로 떼어 보여줘서
+    한 옵션인지 구분이 안 됐다. "...다."로 끝나는 줄을 한 묶음으로 모으고, 등급을
+    가르는 문장(보통 "아군 OOO 강화 효과가 N% 증가한다.")이 나오면 그 등급을 묶음
+    전체에 적용한다. "이름 +숫자" 같은 짧은 스탯 줄은 지금처럼 한 줄 = 한 옵션."""
+    options = []
+    pending: list[str] = []
+
+    def flush(tier=None):
+        if pending:
+            options.append({"text": "\n".join(pending), "tier": tier})
+            pending.clear()
+
+    for line in lines:
+        if line.rstrip().endswith("다."):
+            pending.append(line)
+            tier = _bracelet_pct_tier(line)
+            if tier is not None:
+                flush(tier)
+        else:
+            flush()
+            options.append({"text": line, "tier": bracelet_tier(line)})
+    flush()
+    return options
+
+
 def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
     """무기/방어구/장신구 외 장착 아이템 중 팔찌/어빌리티 스톤/보주만 정리한다.
     아이템 종류마다 Tooltip 구조가 달라서, ItemPartBox 섹션 중 제목에 효과/각인/보너스가
@@ -377,16 +415,11 @@ def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
             if not any(keyword in header for keyword in _EXTRA_SECTION_KEYWORDS):
                 continue
             lines = [line for line in body.split("\n") if line.strip()]
-            sections.append(
-                {
-                    "header": header,
-                    "lines": lines,
-                    "options": [
-                        {"text": line, "tier": bracelet_tier(line) if item_type == "팔찌" else None}
-                        for line in lines
-                    ],
-                }
-            )
+            if item_type == "팔찌":
+                options = _group_bracelet_option_lines(lines)
+            else:
+                options = [{"text": line, "tier": None} for line in lines]
+            sections.append({"header": header, "lines": lines, "options": options})
         quality = find_quality(tooltip)
         result.append(
             {

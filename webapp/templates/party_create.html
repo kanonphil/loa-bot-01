@@ -32,7 +32,7 @@
       <div id="raid-groups">
         {% for g in groups %}
         <section class="raid-group" data-group="{{ loop.index0 }}">
-          <h2 class="raid-group-label">{% if g.pinned %}📌 {% endif %}{{ g.label }}</h2>
+          <h2 class="raid-group-label">{{ g.label }}</h2>
           <div class="raid-cards">
             {% for r in g.raids %}
             <div class="raid-pick{% if not r.enterable %} is-locked{% endif %}"
@@ -40,9 +40,8 @@
                  data-search="{{ (r.raid_name ~ ' ' ~ r.short_name) | lower }}"
                  data-enterable="{{ 1 if r.enterable else 0 }}">
               <div class="raid-pick-top">
-                <span aria-hidden="true">{{ r.icon }}</span>
                 <span class="raid-pick-name">{{ r.short_name }}</span>
-                {% if r.is_pinned %}<span class="raid-pick-pin" title="상단 고정">📌</span>{% endif %}
+                {% if r.is_pinned %}<span class="raid-pick-pin" title="상단 고정">고정</span>{% endif %}
               </div>
               <div class="raid-pick-sub">{{ r.raid_name }}{% if r.min_level %} · 최소 {{ r.min_level }}{% endif %}</div>
               <div class="raid-pick-diffs">
