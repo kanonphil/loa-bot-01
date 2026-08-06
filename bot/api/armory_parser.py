@@ -303,26 +303,6 @@ def bracelet_line_tier(raw_line: str) -> str | None:
     return _tier_from_color(raw_line)
 
 
-# 팔찌 전투특성(치명/특화/제압/신속/인내/숙련)은 고정 효과라 API 색이 등급별로
-# 갈리지 않는다(항상 같은 초록). 2026-08 사용자가 게임 클라이언트의 "부여 가능한
-# 효과" 참고표(범위 +61~+120)와 실제 경계값을 알려줘서 수치로 등급을 매긴다 —
-# 힘/민첩/지능/체력(기본 효과)은 경계가 애매해 등급을 매기지 않기로 함(사용자 확인).
-_COMBAT_STAT_NAMES = {"치명", "특화", "제압", "신속", "인내", "숙련"}
-_COMBAT_STAT_VALUE_RE = re.compile(r"^(치명|특화|제압|신속|인내|숙련)\s*\+(\d+)$")
-
-
-def _combat_stat_tier(text: str) -> str | None:
-    match = _COMBAT_STAT_VALUE_RE.match(text)
-    if not match:
-        return None
-    value = int(match.group(2))
-    if value >= 120:
-        return "상"
-    if value >= 85:
-        return "중"
-    return "하"
-
-
 def _group_bracelet_option_lines(raw_lines: list[str]) -> list[dict]:
     """팔찌 문장형 특수 효과("[조건] ... N% 증가한다." 같은)는 조건/부가설명/보너스가
     여러 줄에 걸쳐 나오는 하나의 옵션이다 — 줄마다 따로 떼어 보여주면 한 옵션인지
@@ -351,10 +331,7 @@ def _group_bracelet_option_lines(raw_lines: list[str]) -> list[dict]:
                 pending_tier = tier
         else:
             flush()
-            tier = bracelet_line_tier(raw)
-            if tier is None:
-                tier = _combat_stat_tier(text)
-            options.append({"text": text, "tier": tier})
+            options.append({"text": text, "tier": bracelet_line_tier(raw)})
     flush()
     return options
 
