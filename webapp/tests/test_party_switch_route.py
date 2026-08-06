@@ -7,6 +7,7 @@ from webapp.tests.conftest import log_in
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
+SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 SWITCH_ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/switch-eligibility"
 SWITCH_URL = "http://bot-server.internal/api/internal/parties/p1/switch-character"
 
@@ -60,6 +61,7 @@ def test_party_detail_shows_switch_button_when_joined(client):
         log_in(client, discord_id="222")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200

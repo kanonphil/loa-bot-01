@@ -6,6 +6,7 @@ from webapp.tests.conftest import log_in
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
+SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
 CLOSE_URL = "http://bot-server.internal/api/internal/parties/p1/close"
 CLEAR_URL = "http://bot-server.internal/api/internal/parties/p1/clear"
@@ -43,6 +44,7 @@ def test_leader_sees_management_panel(client):
         log_in(client, discord_id="111")  # 리더
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
@@ -96,6 +98,7 @@ def test_kick_action_shows_error_reason(client):
         )
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
 
         resp = client.post("/parties/p1/kick", data={"target_discord_id": "222"})
 
@@ -105,6 +108,7 @@ def test_kick_action_shows_error_reason(client):
     with respx.mock:
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         resp2 = client.get(resp.headers["location"])
     assert "파티원을 찾을 수 없습니다" in resp2.text
 

@@ -164,6 +164,24 @@ async def _switch_character_core(
     return {"success": True, "reason": None, "left_other_party": left_other_party}
 
 
+async def _switch_role_core(
+    bot: discord.Client, message_id: str, discord_id: str, new_role: str
+) -> dict:
+    """참여 중인 슬롯의 역할(딜러/서포터)만 전환 — 캐릭터는 그대로 두고 파티를
+    나갔다 재참여할 필요 없이 바꾼다. 디스코드 UI와 웹 API가 공유.
+
+    반환: {"success": bool, "reason": str|None}"""
+    success, message = await db.switch_party_role(message_id, discord_id, new_role)
+    if not success:
+        return {"success": False, "reason": message}
+
+    party = await db.get_party(message_id)
+    if bot and party:
+        await _refresh_party_embed_with_reserved(bot, party)
+
+    return {"success": True, "reason": None}
+
+
 async def _refresh_party_embed_with_reserved(client: discord.Client, party: dict) -> None:
     from bot.ui.embeds import party_embed as _party_embed
     try:

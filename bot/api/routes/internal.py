@@ -401,6 +401,22 @@ async def switch_character(message_id: str, body: SwitchCharacterBody):
   )
 
 
+class SwitchRoleBody(BaseModel):
+  discord_id: str
+  new_role: str
+
+
+@router.post("/parties/{message_id}/switch-role")
+async def switch_role(message_id: str, body: SwitchRoleBody):
+  """참여 캐릭터는 그대로 두고 역할(딜러/서포터)만 전환 — 나갔다 재참여할 필요 없음."""
+  from bot.api import bot_ref
+  from bot.ui.views import _switch_role_core
+
+  return await _switch_role_core(
+    bot_ref.get_bot(), message_id, body.discord_id, body.new_role
+  )
+
+
 # ── 파티장 관리 (마감/재개/클리어/취소/강제퇴장/일정변경/위임) ─────
 # 디스코드 ⚙️관리 패널(ManageView)과 동일한 로직 — 웹에서도 파티장만 사용 가능.
 

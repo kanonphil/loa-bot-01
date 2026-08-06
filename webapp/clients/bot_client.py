@@ -326,6 +326,17 @@ async def switch_character(message_id: str, discord_id: str, character_name: str
         return resp.json()
 
 
+async def switch_role(message_id: str, discord_id: str, new_role: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-role",
+            json={"discord_id": discord_id, "new_role": new_role},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_proficiency_options() -> list[dict]:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(

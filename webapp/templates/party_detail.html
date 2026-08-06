@@ -72,6 +72,17 @@
 <div class="party-member-actions">
   {% if party.status != "disbanded" %}
   <a href="/parties/{{ party.message_id }}/switch" class="party-switch-btn">캐릭터 변경</a>
+  {% if my_slot and my_slot.role == "support" %}
+  <form method="post" action="/parties/{{ party.message_id }}/switch-role">
+    <input type="hidden" name="new_role" value="dps">
+    <button type="submit" class="party-switch-btn">딜러로 변경</button>
+  </form>
+  {% elif can_switch_to_support %}
+  <form method="post" action="/parties/{{ party.message_id }}/switch-role">
+    <input type="hidden" name="new_role" value="support">
+    <button type="submit" class="party-switch-btn">서포터로 변경</button>
+  </form>
+  {% endif %}
   {% endif %}
   <form method="post" action="/parties/{{ party.message_id }}/leave">
     <button type="submit" class="party-leave-btn">나가기</button>

@@ -171,6 +171,7 @@ def test_party_detail_shows_leave_when_already_joined(client):
         log_in(client, discord_id="222")  # PARTY의 기존 슬롯 주인
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
@@ -191,6 +192,7 @@ def test_party_detail_shows_guest_badge_for_guest_slot(client):
         log_in(client, discord_id="222")  # PARTY 슬롯 주인(리더) — eligibility 호출 없음
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=party_with_guest))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200

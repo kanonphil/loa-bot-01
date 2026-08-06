@@ -162,6 +162,11 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
     joined = any(s["discord_id"] == discord_id for s in party["slots"])
     is_leader = party["leader_id"] == discord_id
     other_members = [s for s in party["slots"] if s["discord_id"] != discord_id]
+    my_slot = next((s for s in party["slots"] if s["discord_id"] == discord_id), None)
+    can_switch_to_support = False
+    if joined and my_slot and my_slot["role"] != "support":
+        support_classes = set(await bot_client.get_support_classes())
+        can_switch_to_support = my_slot["character_class"] in support_classes
     eligibility = None
     character_is_support_json = "{}"
     if not joined and party["status"] != "disbanded":
@@ -223,6 +228,8 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
         "joined": joined,
         "is_leader": is_leader,
         "other_members": other_members,
+        "my_slot": my_slot,
+        "can_switch_to_support": can_switch_to_support,
         "eligibility": eligibility,
         "character_is_support_json": character_is_support_json,
         "sub_parties": sub_parties,
@@ -313,6 +320,17 @@ async def switch_character_submit(
 ):
     result = await bot_client.switch_character(message_id, user["discord_id"], character_name)
     return _redirect_with_result(message_id, result, "캐릭터를 변경하지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/switch-role")
+async def switch_role_submit(
+    request: Request,
+    message_id: str,
+    new_role: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.switch_role(message_id, user["discord_id"], new_role)
+    return _redirect_with_result(message_id, result, "역할을 변경하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/close")

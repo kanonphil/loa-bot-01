@@ -1405,6 +1405,69 @@ async def switch_party_character(
         await db.commit()
 
 
+async def switch_party_role(message_id: str, discord_id: str, new_role: str) -> tuple[bool, str]:
+    """참여 중인 슬롯의 역할(딜러/서포터)만 바꾼다 — 캐릭터·슬롯 번호는 그대로 유지.
+    파티를 나갔다 재참여할 필요 없이 딜러↔서포터를 전환할 수 있게 하는 기능
+    (기존엔 이 방법뿐이라 사용자가 불편함을 지적함).
+
+    서포터로 전환은 (1) 캐릭터 직업이 서포터 직업이어야 하고 (2) 같은 파티
+    (분할 파티면 같은 소파티) 안에 이미 서포터가 없어야 가능 — join과 동일한 제약.
+    딜러로 전환은 제약 없이 항상 가능."""
+    from bot.data.raids import RAIDS, SUPPORT_CLASSES
+
+    if new_role not in ("dps", "support"):
+        return False, "잘못된 역할입니다."
+
+    party = await get_party(message_id)
+    if not party or party["status"] == "disbanded":
+        return False, "유효하지 않은 파티입니다."
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM party_slots WHERE party_message_id=? AND discord_id=?",
+            (message_id, discord_id),
+        )
+        current = await cur.fetchone()
+        if not current:
+            return False, "이 파티에 참여하고 있지 않습니다."
+        current = dict(current)
+
+        if current["role"] == new_role:
+            return False, "이미 이 역할로 참여 중입니다."
+
+        if new_role == "support":
+            if current["character_class"] not in SUPPORT_CLASSES:
+                return False, f"{current['character_class']}은(는) 서포터 역할을 맡을 수 없습니다."
+
+            party_split = (RAIDS.get(party["raid_name"], {}).get("difficulties") or {}).get(
+                party["difficulty"], {}
+            ).get("party_split")
+
+            start, end = 1, party["total_slots"] + 1
+            if party_split and party["total_slots"] > party_split:
+                sub_idx = (current["slot_number"] - 1) // party_split
+                start = sub_idx * party_split + 1
+                end = start + party_split
+
+            cur = await db.execute(
+                "SELECT COUNT(*) FROM party_slots WHERE party_message_id=? AND slot_number>=? "
+                "AND slot_number<? AND role='support' AND discord_id!=?",
+                (message_id, start, end, discord_id),
+            )
+            support_count = (await cur.fetchone())[0]
+            if support_count >= 1:
+                return False, "이미 서포터가 있는 파티입니다."
+
+        await db.execute(
+            "UPDATE party_slots SET role=? WHERE party_message_id=? AND discord_id=?",
+            (new_role, message_id, discord_id),
+        )
+        await db.commit()
+
+    return True, "역할이 변경되었습니다."
+
+
 async def leave_slot(message_id: str, discord_id: str) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
