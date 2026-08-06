@@ -113,19 +113,16 @@ def test_parse_accessories_extracts_quality_honing_and_ark_passive_bonus():
     assert acc["detail_text"] == "낙인력 +8.00%\n최대 마나 +6\n깨달음 +13"
 
 
-def test_grind_tier_classifies_low_mid_high_rolls():
-    """연마 효과 수치가 하/중/상 어느 단계 롤인지 — 게임 수치표 기반."""
-    assert parser.grind_tier("낙인력 +8.00%") == "상"
-    assert parser.grind_tier("아군 피해량 강화 효과 +4.50%") == "중"
-    assert parser.grind_tier("상태이상 공격 지속시간 +0.20%") == "하"
-    assert parser.grind_tier("무기 공격력 +3.00%") == "상"  # "공격력"보다 긴 이름이 먼저 매칭
-    assert parser.grind_tier("공격력 +195") == "중"  # 고정 수치 표
-    assert parser.grind_tier("최대 생명력 +1300") == "하"
+def test_grind_tier_reads_font_color_from_raw_line():
+    """연마 효과 등급은 수치를 확률표와 대조하는 대신, API가 이미 입혀준
+    <FONT COLOR>를 그대로 읽는다(bracelet_line_tier와 동일한 색 체계 공유)."""
+    assert parser.grind_tier("낙인력 <FONT COLOR='FE9600'>+8.00%</FONT>") == "상"
+    assert parser.grind_tier("최대 마나 <FONT COLOR='00B5FF'>+6</FONT>") == "하"
+    assert parser.grind_tier("힘 <FONT COLOR='CE43FC'>+15168</FONT>") == "중"
 
 
-def test_grind_tier_returns_none_for_unknown_options_or_values():
-    assert parser.grind_tier("알 수 없는 옵션 +1.00%") is None
-    assert parser.grind_tier("낙인력 +5.55%") is None  # 표에 없는 값(밸런스 패치 등)
+def test_grind_tier_returns_none_for_unknown_color_or_missing_color():
+    assert parser.grind_tier("알 수 없는 옵션 <FONT COLOR='#FFFFFF'>+1.00%</FONT>") is None
     assert parser.grind_tier("수치 없는 줄") is None
 
 
@@ -875,7 +872,7 @@ def test_group_bracelet_option_lines_merges_multi_sentence_special_effect():
     """조건문 + 부가설명 + "아군 OOO 강화 효과" 보너스로 이어지는 여러 줄(원본 HTML)은
     한 옵션으로 묶이고, 그 안에 있는 색이 묶음 전체의 등급이 된다. "이름 <색>+숫자</색>"
     같은 짧은 스탯 줄은 그대로 한 줄 = 한 옵션."""
-    raw_lines = parser._split_bracelet_raw_lines(BRACELET_EFFECT_RAW)
+    raw_lines = parser._split_raw_html_lines(BRACELET_EFFECT_RAW)
     options = parser._group_bracelet_option_lines(raw_lines)
 
     assert options[0] == {"text": "체력 +4620", "tier": None}

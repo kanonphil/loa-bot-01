@@ -43,16 +43,19 @@ def parse_tooltip_json(raw: str | None) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def find_item_part(tooltip: dict, header_contains: str) -> str | None:
+def find_item_part(tooltip: dict, header_contains: str, raw: bool = False) -> str | None:
     """ItemPartBox 타입 엘리먼트 중 제목(Element_000)에 header_contains가 포함된
-    항목을 찾아 본문(Element_001)을 평문으로 돌려준다. 못 찾으면 None."""
+    항목을 찾아 본문(Element_001)을 돌려준다. 못 찾으면 None.
+    raw=True면 HTML 태그를 지우지 않은 원본을 돌려준다 — 연마/부여 효과처럼 등급색이
+    태그 안에 있어서 나중에 grind_tier()/bracelet_line_tier()로 읽어야 하는 경우용."""
     for element in tooltip.values():
         if not isinstance(element, dict) or element.get("type") != "ItemPartBox":
             continue
         value = element.get("value") or {}
         header = value.get("Element_000", "")
         if header_contains in header:
-            return strip_html(value.get("Element_001", ""))
+            body = value.get("Element_001", "")
+            return body if raw else strip_html(body)
     return None
 
 
@@ -156,49 +159,38 @@ def parse_ark_passive(ark_passive: dict | None) -> dict:
     }
 
 
-# T4 장신구 연마 효과의 옵션별 (하/중/상) 수치표 — 값이 어느 단계 롤인지로 색을 입힌다.
-# 이름이 겹치는 항목("아군 공격력 강화 효과" ⊃ "공격력")이 있어 긴 이름부터 매칭한다.
-_GRIND_PCT_TIERS = {
-    "추가 피해": (0.70, 1.60, 2.60),
-    "적에게 주는 피해": (0.55, 1.20, 2.00),
-    "낙인력": (2.15, 4.80, 8.00),
-    "게이지 획득량": (1.60, 3.60, 6.00),  # 세레나데, 신앙, 조화 게이지 획득량
-    "치명타 적중률": (0.40, 0.95, 1.55),
-    "치명타 피해": (1.10, 2.40, 4.00),
-    "무기 공격력": (0.90, 1.80, 3.00),
-    "공격력": (0.40, 0.95, 1.55),
-    "파티원 회복 효과": (0.95, 2.10, 3.50),
-    "파티원 보호막 효과": (0.95, 2.10, 3.50),
-    "아군 공격력 강화 효과": (1.35, 3.00, 5.00),
-    "아군 피해량 강화 효과": (2.00, 4.50, 7.50),
-    "상태이상 공격 지속시간": (0.20, 0.50, 1.00),
+# T4 장신구 연마 효과·팔찌 특수 효과 등급(하/중/상) — 2026-08 사용자가 API 원본
+# (scripts/inspect_armory.py)을 직접 떠서 확인: 값을 확률표와 대조해 추정할 필요 없이,
+# 로스트아크 API가 이미 수치에 <FONT COLOR='...'>를 입혀서 내려준다. 그 색을 그대로 읽는다
+# — 이름 모르는 효과도 다 맞고, 밸런스 패치로 표가 틀어질 일도 없다.
+_FONT_COLOR_RE = re.compile(r"<font[^>]*\bcolor=['\"]?#?([0-9a-fA-F]{6})", re.IGNORECASE)
+_ROLL_COLOR_TIER = {
+    "FE9600": "상",  # 금/주황
+    "CE43FC": "중",  # 보라
+    "00B5FF": "하",  # 파랑
 }
-_GRIND_FLAT_TIERS = {
-    "무기 공격력": (195, 480, 960),
-    "공격력": (80, 195, 390),
-    "최대 생명력": (1300, 3250, 6500),
-    "최대 마나": (6, 15, 30),
-    "전투 중 생명력 회복량": (10, 25, 50),
-}
-_GRIND_TIER_NAMES = ("하", "중", "상")
-_GRIND_VALUE_RE = re.compile(r"\+([\d.,]+)\s*(%?)")
 
 
-def grind_tier(line: str) -> str | None:
-    """연마 효과 한 줄("낙인력 +8.00%")이 하/중/상 어느 단계 롤인지 판별.
-    수치표에 없는 옵션이거나 값이 표와 안 맞으면(밸런스 패치 등) None — 색 없이 보여준다."""
-    match = _GRIND_VALUE_RE.search(line)
-    if not match:
-        return None
-    value = float(match.group(1).replace(",", ""))
-    table = _GRIND_PCT_TIERS if match.group(2) else _GRIND_FLAT_TIERS
-    for name in sorted(table, key=len, reverse=True):
-        if name in line:
-            for tier_name, tier_value in zip(_GRIND_TIER_NAMES, table[name]):
-                if abs(value - tier_value) < 0.011:
-                    return tier_name
-            return None
+def _tier_from_color(raw_line: str) -> str | None:
+    """줄 원본(HTML 포함) 안의 <FONT COLOR=...> 색으로 상/중/하를 가른다. 3등급 색이
+    아니거나(예: 팔찌 고정 스탯의 연두색) 색 자체가 없으면 None — 색 없이 보여준다."""
+    for match in _FONT_COLOR_RE.finditer(raw_line):
+        tier = _ROLL_COLOR_TIER.get(match.group(1).upper())
+        if tier:
+            return tier
     return None
+
+
+def grind_tier(raw_line: str) -> str | None:
+    """장신구 연마 효과 한 줄(원본 HTML, 예: "낙인력 <FONT COLOR='FE9600'>+8.00%</FONT>")이
+    하/중/상 어느 단계 롤인지 — API가 입힌 색 그대로."""
+    return _tier_from_color(raw_line)
+
+
+def _split_raw_html_lines(raw_body: str) -> list[str]:
+    """<br>/<BR> 기준으로 원본 HTML을 줄 단위로 쪼갠다 — strip_html보다 먼저 해야
+    태그 안의 색 정보가 살아있다."""
+    return [line for line in re.split(r"<br\s*/?>", raw_body, flags=re.IGNORECASE) if strip_html(line).strip()]
 
 
 def parse_accessories(equipment: list[dict]) -> list[dict]:
@@ -211,10 +203,12 @@ def parse_accessories(equipment: list[dict]) -> list[dict]:
         tooltip = parse_tooltip_json(item.get("Tooltip"))
         quality = find_quality(tooltip)
         base_stats = find_item_part(tooltip, "기본 효과")
-        honing = find_item_part(tooltip, "연마 효과")
+        # 연마 효과는 등급색이 태그 안에 있어서(grind_tier), strip_html 전 원본이 필요하다.
+        honing_raw = find_item_part(tooltip, "연마 효과", raw=True) or ""
+        honing_raw_lines = _split_raw_html_lines(honing_raw)
         ark_passive_bonus = find_item_part(tooltip, "아크 패시브 포인트 효과")
         base_stat_lines = [line for line in (base_stats or "").split("\n") if line.strip()]
-        honing_effects = [line for line in (honing or "").split("\n") if line.strip()]
+        honing_effects = [strip_html(line).strip() for line in honing_raw_lines]
 
         detail_lines = list(honing_effects)
         if ark_passive_bonus:
@@ -230,7 +224,9 @@ def parse_accessories(equipment: list[dict]) -> list[dict]:
                 "quality_tier": quality_tier(quality) if quality is not None else None,
                 "base_stat_lines": base_stat_lines,
                 "honing_effects": honing_effects,
-                "honing_options": [{"text": line, "tier": grind_tier(line)} for line in honing_effects],
+                "honing_options": [
+                    {"text": strip_html(line).strip(), "tier": grind_tier(line)} for line in honing_raw_lines
+                ],
                 "ark_passive_bonus": ark_passive_bonus,
                 "detail_text": "\n".join(detail_lines),
             }
@@ -300,28 +296,11 @@ _EXTRA_SECTION_KEYWORDS = ("효과", "각인", "보너스")
 # 아예 안 붙었고(사용자가 지적한 문제), 심지어 표에 있는 값도 실측과 어긋났다
 # (예: "힘 +15168"이 색은 #CE43FC(중)인데 예전 코드는 값만 보고 "상"으로 잘못 판정).
 # → 수치 추정을 버리고 색을 그대로 읽는 것으로 교체.
-_FONT_COLOR_RE = re.compile(r"<font[^>]*\bcolor=['\"]?#?([0-9a-fA-F]{6})", re.IGNORECASE)
-_BRACELET_COLOR_TIER = {
-    "FE9600": "상",  # 금/주황 — 기존 표에서 확인된 상급값(예: 낙인력 8.00%)과 실측이 일치
-    "CE43FC": "중",  # 보라
-    "00B5FF": "하",  # 파랑
-}
-
-
 def bracelet_line_tier(raw_line: str) -> str | None:
-    """줄(HTML 태그 포함 원본) 안의 <FONT COLOR=...> 색으로 상/중/하를 가른다.
-    체력/전투특성 기본값처럼 등급 없는 고정 수치(다른 색이거나 색이 없음)는 None."""
-    for match in _FONT_COLOR_RE.finditer(raw_line):
-        tier = _BRACELET_COLOR_TIER.get(match.group(1).upper())
-        if tier:
-            return tier
-    return None
-
-
-def _split_bracelet_raw_lines(raw_body: str) -> list[str]:
-    """<br>/<BR> 기준으로 원본 HTML을 줄 단위로 쪼갠다 — strip_html보다 먼저 해야
-    태그 안의 색 정보가 살아있다."""
-    return [line for line in re.split(r"<br\s*/?>", raw_body, flags=re.IGNORECASE) if strip_html(line).strip()]
+    """팔찌 특수 효과 한 줄(HTML 태그 포함 원본)이 하/중/상 어느 단계인지 — API가
+    입힌 색 그대로(_tier_from_color). 체력/전투특성 기본값처럼 등급 없는 고정 수치
+    (다른 색이거나 색이 없음)는 None."""
+    return _tier_from_color(raw_line)
 
 
 def _group_bracelet_option_lines(raw_lines: list[str]) -> list[dict]:
@@ -382,7 +361,7 @@ def parse_extra_equipment(equipment: list[dict] | None) -> list[dict]:
                 continue
             if item_type == "팔찌":
                 # 색 정보가 태그 안에 있어서, strip_html로 지우기 전의 원본을 줄 단위로 다뤄야 한다.
-                raw_lines = _split_bracelet_raw_lines(raw_body)
+                raw_lines = _split_raw_html_lines(raw_body)
                 lines = [strip_html(r).strip() for r in raw_lines]
                 options = _group_bracelet_option_lines(raw_lines)
             else:
