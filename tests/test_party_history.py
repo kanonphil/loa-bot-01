@@ -93,6 +93,34 @@ def test_get_calendar_parties_includes_purged_history_across_month_boundary(db_p
     asyncio.run(run())
 
 
+def test_get_user_party_history_includes_purged_history(db_path):
+    """웹 '공대 이력' 기능이 쓰는 get_user_party_history도 같은 문제를 겪고 있었다 —
+    parties 테이블만 봐서 이미 purge된 클리어/취소 이력이 통째로 안 보였다."""
+    async def run():
+        await _make_party("history-live")
+        await db.auto_assign_slot("history-live", LEADER_ID, "워로드캐릭", "워로드", "dps", 8)
+
+        await _make_party("history-archived")
+        await db.auto_assign_slot("history-archived", LEADER_ID, "홀나캐릭", "홀리나이트", "support", 8)
+        await db.disband_party("history-archived")
+        await db.purge_party("history-archived")  # 지난주에 클리어되고 이미 purge된 파티
+
+        await _make_party("history-other-user")
+        await db.auto_assign_slot("history-other-user", "999", "다른유저캐릭", "버서커", "dps", 8)
+
+        result = await db.get_user_party_history(LEADER_ID)
+        by_id = {r["message_id"]: r for r in result}
+
+        assert "history-live" in by_id
+        assert by_id["history-live"]["character_name"] == "워로드캐릭"
+        assert "history-archived" in by_id  # purge됐어도 이력엔 남아야 함
+        assert by_id["history-archived"]["character_name"] == "홀나캐릭"
+        assert by_id["history-archived"]["role"] == "support"
+        assert "history-other-user" not in by_id  # 내가 참여 안 한 파티는 제외
+
+    asyncio.run(run())
+
+
 def test_get_disbanded_parties_includes_purged_history(db_path):
     """관리자 앱의 '완료 이력' 조회(get_disbanded_parties)도 같은 문제를 겪고 있었다 —
     이제는 parties와 party_history를 합쳐서 봐야 한다."""

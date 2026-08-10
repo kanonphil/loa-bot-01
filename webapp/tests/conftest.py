@@ -28,6 +28,18 @@ VERIFY_URL = "http://bot-server.internal/api/internal/verify-user"
 USER_CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters"
 
 
+@pytest.fixture(autouse=True)
+def _reset_bot_client_cache():
+    """bot_client.get_raids/get_raid_categories/get_support_classes에 붙은 TTL 캐시가
+    테스트 간에 새어나가면, 어떤 테스트가 먼저 캐시를 채우느냐에 따라 respx 목킹값이
+    무시되고 다른 테스트의 값이 튀어나올 수 있다 — 매 테스트 전후로 비운다."""
+    from webapp.clients import bot_client
+
+    bot_client._cache.clear()
+    yield
+    bot_client._cache.clear()
+
+
 @pytest.fixture()
 def notification_db(tmp_path, monkeypatch):
     """앱의 lifespan(startup)에 기대지 않고, 테스트가 직접 알림 DB를 준비한다."""

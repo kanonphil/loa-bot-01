@@ -2029,18 +2029,29 @@ async def get_notification_logs(limit: int = 100) -> list[dict]:
 
 
 async def get_user_party_history(discord_id: str) -> list[dict]:
-  """유저의 파티 참여 이력 (최근 20개)."""
+  """유저의 파티 참여 이력 (최근 20개) — 아직 살아있는 파티(parties)와, 클리어/취소로
+  이미 purge_party()가 지워버린 지난 이력(party_history, slots_json에 슬롯 스냅샷 보관)을
+  합쳐서 반환한다. parties 테이블만 봤다면 실제 참여 기록 대부분(클리어된 공대는 곧 purge됨)이
+  누락돼 "이력"이라는 이름이 무색해진다."""
   async with aiosqlite.connect(DB_PATH) as db:
     db.row_factory = aiosqlite.Row
     cur = await db.execute(
-      "SELECT DISTINCT p.raid_name, p.difficulty, p.proficiency, "
-      "p.scheduled_time, p.status, p.guild_id, p.channel_id, "
-      "ps.character_name, ps.role "
-      "FROM parties p "
-      "JOIN party_slots ps ON p.message_id = ps.party_message_id "
-      "WHERE ps.discord_id = ? "
-      "ORDER BY p.created_at DESC LIMIT 20",
-      (discord_id,),
+      "SELECT DISTINCT message_id, raid_name, difficulty, proficiency, "
+      "scheduled_time, status, character_name, role, created_at FROM ("
+      "  SELECT p.message_id, p.raid_name, p.difficulty, p.proficiency, "
+      "         p.scheduled_time, p.status, ps.character_name, ps.role, p.created_at "
+      "  FROM parties p JOIN party_slots ps ON p.message_id = ps.party_message_id "
+      "  WHERE ps.discord_id = ? "
+      "  UNION ALL "
+      "  SELECT h.message_id, h.raid_name, h.difficulty, h.proficiency, "
+      "         h.scheduled_time, h.status, "
+      "         json_extract(je.value, '$.character_name'), "
+      "         json_extract(je.value, '$.role'), h.created_at "
+      "  FROM party_history h, json_each(h.slots_json) je "
+      "  WHERE json_extract(je.value, '$.discord_id') = ? "
+      ") combined "
+      "ORDER BY created_at DESC LIMIT 20",
+      (discord_id, discord_id),
     )
     rows = await cur.fetchall()
   return [dict(r) for r in rows]

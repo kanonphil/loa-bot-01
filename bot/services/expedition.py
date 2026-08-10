@@ -169,7 +169,10 @@ async def sync_characters_for_discord_id(discord_id: str) -> tuple[int, int]:
 
     반환: (updated_count, total_count)
     """
-    char_rows = await db.get_cached_characters(discord_id, max_age_hours=99999)
+    # get_cached_characters_with_account가 캐릭터별 api_key_id를 조인 쿼리 한 번으로
+    # 같이 내려주므로, 캐릭터마다 get_character_api_key_id를 따로 호출해 커넥션을
+    # 여닫을 필요가 없다(예전엔 캐릭터 수만큼 N+1 쿼리였다).
+    char_rows = await db.get_cached_characters_with_account(discord_id, max_age_hours=99999)
     char_names = [c["character_name"] for c in char_rows]
     if not char_names:
         return 0, 0
@@ -181,11 +184,9 @@ async def sync_characters_for_discord_id(discord_id: str) -> tuple[int, int]:
     # 캐릭터를 api_key_id별로 그룹핑. api_key_id가 없으면(레거시 데이터) 첫 계정으로 fallback.
     default_key_id = accounts[0]["id"]
     chars_by_key: dict[int, list[str]] = {}
-    for name in char_names:
-        key_id = await db.get_character_api_key_id(discord_id, name)
-        if key_id is None:
-            key_id = default_key_id
-        chars_by_key.setdefault(key_id, []).append(name)
+    for row in char_rows:
+        key_id = row["api_key_id"] if row["api_key_id"] is not None else default_key_id
+        chars_by_key.setdefault(key_id, []).append(row["character_name"])
 
     updated = 0
     for key_id, names in chars_by_key.items():

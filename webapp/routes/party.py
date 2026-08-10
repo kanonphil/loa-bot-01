@@ -28,6 +28,20 @@ def _max_item_level(characters: list[dict]) -> float:
     return max((c.get("item_level") or 0) for c in characters) if characters else 0
 
 
+_HISTORY_STATUS = {
+    "recruiting": ("모집중", "accent"),
+    "full": ("파티완성", "ok"),
+    "closed": ("마감", ""),
+    "disbanded": ("클리어", "ok"),
+    "cancelled": ("취소", "danger"),
+}
+
+
+def _history_view(entry: dict) -> dict:
+    label, tone = _HISTORY_STATUS.get(entry["status"], (entry["status"], ""))
+    return {**entry, "status_label": label, "status_tone": tone}
+
+
 def filter_parties(parties: list[dict], key: str, discord_id: str, max_level: float) -> list[dict]:
     """목록 필터. '입장 가능'은 내 캐릭터 중 가장 높은 레벨 기준으로,
     아직 자리가 남아 있고 이미 참여하지 않은 공대만 남긴다."""
@@ -82,6 +96,17 @@ async def party_list(
             "counts": counts,
             "has_any": bool(parties),
         },
+    )
+
+
+@router.get("/parties/history")
+async def party_history(request: Request, user: dict = Depends(get_current_user)):
+    entries = await bot_client.get_user_party_history(user["discord_id"])
+    visible = [_history_view(e) for e in entries]  # 이미 최근순(created_at DESC)으로 옴
+    return templates.TemplateResponse(
+        request,
+        "party_history.html",
+        {"user": user, "active": "parties", "entries": visible},
     )
 
 

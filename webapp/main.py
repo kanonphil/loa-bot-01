@@ -9,6 +9,7 @@ from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
 from webapp import config, guild_info, notification_store, party_events
+from webapp.clients import bot_client
 from webapp.auth.dependencies import NotAuthenticated
 from webapp.routes import (
     auth_routes,
@@ -60,6 +61,7 @@ async def lifespan(app: FastAPI):
     finally:
         cleanup_task.cancel()
         party_poll_task.cancel()
+        await bot_client.aclose()
 
 
 app = FastAPI(title="로아봇 웹", lifespan=lifespan)

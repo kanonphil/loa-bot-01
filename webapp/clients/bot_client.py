@@ -1,4 +1,6 @@
 """봇 서버(다른 머신)의 /api/internal 호출용 얇은 클라이언트."""
+import time
+
 import httpx
 
 from webapp import config
@@ -8,269 +10,310 @@ def _headers() -> dict:
     return {"X-Webapp-Key": config.BOT_API_WEBAPP_KEY}
 
 
+# 봇 서버는 다른 머신이라, 함수마다 새 httpx.AsyncClient()를 열면 내부 API 호출마다
+# 매번 새 TCP 연결을 맺어야 했다 — 프로세스 생애주기 동안 하나만 만들어 재사용
+# (keep-alive)한다. webapp/main.py의 lifespan이 종료 시 aclose()로 정리한다.
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient()
+    return _client
+
+
+async def aclose() -> None:
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
+# 레이드/카테고리/서포터직업은 관리자가 봇 명령으로 수정할 때만 바뀌는 정적에 가까운
+# 데이터인데, 페이지 조회는 물론 레이드체크 토글처럼 자주 눌리는 액션에서도 매번
+# 봇 서버를 왕복하고 있었다 — 짧은 TTL 캐시로 왕복 횟수를 크게 줄인다.
+# (테스트는 webapp/tests/conftest.py의 autouse 픽스처가 매 테스트 전에 이 캐시를 비운다.)
+_CACHE_TTL_SECONDS = 60
+_cache: dict[str, tuple[float, object]] = {}
+
+
+async def _cached_get(cache_key: str, url: str) -> object:
+    now = time.monotonic()
+    cached = _cache.get(cache_key)
+    if cached is not None and now - cached[0] < _CACHE_TTL_SECONDS:
+        return cached[1]
+    resp = await _get_client().get(url, headers=_headers(), timeout=10)
+    resp.raise_for_status()
+    value = resp.json()
+    _cache[cache_key] = (now, value)
+    return value
+
+
 async def is_registered(discord_id: str) -> bool:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/verify-user",
-            params={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()["registered"]
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/verify-user",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()["registered"]
 
 
 async def get_guild_info(guild_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/guild-info",
-            params={"guild_id": guild_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/guild-info",
+        params={"guild_id": guild_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_user_characters(discord_id: str) -> list[dict]:
     """대시보드/공대/레이드체크/원정대가 공유하는 캐릭터 정보. 실패해도 앱이 죽으면 안 되니 호출 측에서 감싸서 씀."""
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/user-characters",
-            params={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/user-characters",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_user_characters_grouped(discord_id: str) -> list[dict]:
     """원정대 관리 페이지용 — 캐릭터 목록 + 소속 계정 라벨(account_label)."""
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/user-characters-grouped",
-            params={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/user-characters-grouped",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_raids() -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/raids", headers=_headers()
-        )
-        resp.raise_for_status()
-        return resp.json()
+    return await _cached_get("raids", f"{config.BOT_API_BASE_URL}/api/internal/raids")
 
 
 async def get_raid_categories() -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/raid-categories", headers=_headers()
-        )
-        resp.raise_for_status()
-        return resp.json()
+    return await _cached_get(
+        "raid_categories", f"{config.BOT_API_BASE_URL}/api/internal/raid-categories"
+    )
+
+
+async def get_user_party_history(discord_id: str) -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/user-party-history",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_raid_progress(discord_id: str) -> dict:
     """원정대 전체의 이번 주 진행률 — 봇이 한 번에 계산해서 준다.
     예전엔 캐릭터마다 completions/raid-selection을 따로 불러 왕복이 N배였다."""
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/raid-progress",
-            params={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/raid-progress",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_support_classes() -> list[str]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/support-classes", headers=_headers()
-        )
-        resp.raise_for_status()
-        return resp.json()
+    return await _cached_get(
+        "support_classes", f"{config.BOT_API_BASE_URL}/api/internal/support-classes"
+    )
 
 
 async def get_completions(discord_id: str, character_name: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/completions",
-            params={"discord_id": discord_id, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/completions",
+        params={"discord_id": discord_id, "character_name": character_name},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_armory_detail(discord_id: str, character_name: str) -> dict:
     """캐시된 캐릭터 상세를 그대로 받아온다 — 로스트아크 API를 호출하지 않는다.
     최신 정보가 필요하면 sync_armory_detail(동기화 버튼)을 따로 호출해야 한다."""
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/armory-detail",
-            params={"discord_id": discord_id, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/armory-detail",
+        params={"discord_id": discord_id, "character_name": character_name},
+        headers=_headers(),
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def sync_armory_detail(discord_id: str, character_name: str) -> dict:
     """"동기화" 버튼 전용 — 실제로 로스트아크 API를 호출해 최신 정보로 갱신한다."""
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/armory-detail/sync",
-            params={"discord_id": discord_id, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/armory-detail/sync",
+        params={"discord_id": discord_id, "character_name": character_name},
+        headers=_headers(),
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_ranking(metric: str, limit: int = 100, role: str | None = None) -> dict:
     params = {"metric": metric, "limit": limit}
     if role:
         params["role"] = role
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/ranking",
-            params=params,
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/ranking",
+        params=params,
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_raid_selection(discord_id: str, character_name: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/raid-selection",
-            params={"discord_id": discord_id, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/raid-selection",
+        params={"discord_id": discord_id, "character_name": character_name},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def set_raid_selection(discord_id: str, character_name: str, raid_names: list[str]) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/raid-selection",
-            json={"discord_id": discord_id, "character_name": character_name, "raid_names": raid_names},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/raid-selection",
+        json={"discord_id": discord_id, "character_name": character_name, "raid_names": raid_names},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def add_character(discord_id: str, character_name: str) -> dict:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/characters/add",
-            json={"discord_id": discord_id, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/characters/add",
+        json={"discord_id": discord_id, "character_name": character_name},
+        headers=_headers(),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def remove_character(discord_id: str, character_name: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/characters/remove",
-            json={"discord_id": discord_id, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/characters/remove",
+        json={"discord_id": discord_id, "character_name": character_name},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def sync_characters(discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/characters/sync",
-            json={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/characters/sync",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def add_account(discord_id: str, api_key: str, character_name: str) -> dict:
     """부계정(로스트아크 API 키) 추가 — 검증(+길드 확인) 후 원정대 캐릭터 전체를 등록한다."""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/accounts/add",
-            json={"discord_id": discord_id, "api_key": api_key, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/accounts/add",
+        json={"discord_id": discord_id, "api_key": api_key, "character_name": character_name},
+        headers=_headers(),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def toggle_completion(
     discord_id: str, character_name: str, raid_name: str, difficulty: str
 ) -> bool:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/completions/toggle",
-            json={
-                "discord_id": discord_id,
-                "character_name": character_name,
-                "raid_name": raid_name,
-                "difficulty": difficulty,
-            },
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()["completed"]
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/completions/toggle",
+        json={
+            "discord_id": discord_id,
+            "character_name": character_name,
+            "raid_name": raid_name,
+            "difficulty": difficulty,
+        },
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()["completed"]
 
 
 # ── 공대 모집 ─────────────────────────────────────────────
 
 async def list_parties(guild_id: str) -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties",
-            params={"guild_id": guild_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties",
+        params={"guild_id": guild_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_calendar_parties(guild_id: str, start: str, end: str) -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/calendar",
-            params={"guild_id": guild_id, "start": start, "end": end},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/calendar",
+        params={"guild_id": guild_id, "start": start, "end": end},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_party(message_id: str) -> dict | None:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}", headers=_headers()
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}",
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_party_eligibility(message_id: str, discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/eligibility",
-            params={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/eligibility",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def join_party(
@@ -283,68 +326,68 @@ async def join_party(
     payload = {"discord_id": discord_id, "character_name": character_name, "role": role}
     if party_group is not None:
         payload["party_group"] = party_group
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/join",
-            json=payload,
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/join",
+        json=payload,
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def leave_party(message_id: str, discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/leave",
-            json={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/leave",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",
-            params={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def switch_character(message_id: str, discord_id: str, character_name: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-character",
-            json={"discord_id": discord_id, "character_name": character_name},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-character",
+        json={"discord_id": discord_id, "character_name": character_name},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def switch_role(message_id: str, discord_id: str, new_role: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-role",
-            json={"discord_id": discord_id, "new_role": new_role},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-role",
+        json={"discord_id": discord_id, "new_role": new_role},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_proficiency_options() -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/proficiency-options",
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/proficiency-options",
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def create_party(
@@ -356,100 +399,100 @@ async def create_party(
     scheduled_datetime: str,
     memo: str | None,
 ) -> dict:
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/create",
-            json={
-                "discord_id": discord_id,
-                "guild_id": guild_id,
-                "raid_name": raid_name,
-                "difficulty": difficulty,
-                "proficiency": proficiency,
-                "scheduled_datetime": scheduled_datetime,
-                "memo": memo,
-            },
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/create",
+        json={
+            "discord_id": discord_id,
+            "guild_id": guild_id,
+            "raid_name": raid_name,
+            "difficulty": difficulty,
+            "proficiency": proficiency,
+            "scheduled_datetime": scheduled_datetime,
+            "memo": memo,
+        },
+        headers=_headers(),
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 # ── 파티장 관리 ───────────────────────────────────────────
 
 async def close_party(message_id: str, discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/close",
-            json={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/close",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def reopen_party(message_id: str, discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reopen",
-            json={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reopen",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def clear_party(message_id: str, discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/clear",
-            json={"discord_id": discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/clear",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def cancel_party(message_id: str, discord_id: str, reason: str | None) -> dict:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/cancel",
-            json={"discord_id": discord_id, "reason": reason},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/cancel",
+        json={"discord_id": discord_id, "reason": reason},
+        headers=_headers(),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def kick_member(message_id: str, discord_id: str, target_discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/kick",
-            json={"discord_id": discord_id, "target_discord_id": target_discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/kick",
+        json={"discord_id": discord_id, "target_discord_id": target_discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def reschedule_party(
     message_id: str, discord_id: str, scheduled_datetime: str, memo: str | None
 ) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reschedule",
-            json={"discord_id": discord_id, "scheduled_datetime": scheduled_datetime, "memo": memo},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reschedule",
+        json={"discord_id": discord_id, "scheduled_datetime": scheduled_datetime, "memo": memo},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def transfer_leader(message_id: str, discord_id: str, new_leader_discord_id: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/transfer-leader",
-            json={"discord_id": discord_id, "new_leader_discord_id": new_leader_discord_id},
-            headers=_headers(),
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/transfer-leader",
+        json={"discord_id": discord_id, "new_leader_discord_id": new_leader_discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()

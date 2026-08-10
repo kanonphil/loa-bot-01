@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<a href="/parties" class="party-back-link">&larr; 목록으로</a>
+<div class="party-list-header">
+  <h1>내 공대 이력</h1>
+</div>
+
+{% if not entries %}
+{{ ui.empty(
+    "참여 이력이 없습니다",
+    "공대에 참여하면 여기에 최근 20개까지 남습니다.",
+    "공대 목록 보기", "/parties", "🗂️") }}
+{% else %}
+<div class="ui-list">
+  {% for e in entries %}
+  {% call ui.card(stripe=e.status_tone) %}
+    <div class="ui-row">
+      <span class="ui-card-title">{{ e.raid_name }} {{ e.difficulty }}</span>
+      {{ ui.chip(e.proficiency) }}
+      <span class="ui-spacer"></span>
+      {{ ui.chip(e.status_label, e.status_tone) }}
+    </div>
+    <div class="ui-row">
+      <span class="ui-card-meta">{{ e.character_name }} &middot; {{ "서포터" if e.role == "support" else "딜러" }}</span>
+      <span class="ui-spacer"></span>
+      <span class="ui-card-meta">{{ e.scheduled_time or "일정 미정" }}</span>
+    </div>
+  {% endcall %}
+  {% endfor %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

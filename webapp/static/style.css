@@ -907,6 +907,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   margin: 0;
 }
 
+.party-list-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .party-create-link {
   padding: 8px 16px;
   border-radius: 8px;
