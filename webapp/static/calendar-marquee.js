@@ -32,4 +32,8 @@
   } else {
     applyMarquee();
   }
+
+  // party-live.js가 SSE로 .page-content를 부분 갱신한 뒤 새로 생긴
+  // .calendar-party-name 요소에도 마퀴를 다시 걸 수 있도록 전역에 노출.
+  window.applyMarquee = applyMarquee;
 })();
