@@ -556,6 +556,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   border: none;
   background: var(--accent);
   color: #fff;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: filter 0.15s ease;
@@ -802,9 +803,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .party-leave-btn {
   padding: 8px 18px;
   border-radius: 8px;
-  border: none;
+  border: 1px solid transparent;
   background: var(--accent);
   color: #fff;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: filter 0.15s ease;
@@ -841,6 +843,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   border: 1px solid var(--border);
   background: none;
   color: var(--text);
+  font-size: 14px;
   font-weight: 500;
   text-decoration: none;
   transition: background 0.15s ease;

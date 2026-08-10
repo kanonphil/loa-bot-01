@@ -61,7 +61,7 @@
       {{ ui.gauge(progress_pct, "ok" if progress.total and progress.done >= progress.total else "") }}
       {% if remaining_characters %}
       <div class="ui-row">
-        <span class="ui-card-meta">남은 곳</span>
+        <span class="ui-card-meta">남은 캐릭터</span>
         {% for c in remaining_characters[:6] %}
         {{ ui.chip(c.character_name ~ " · " ~ c.remaining, "", c.character_class ~ " · " ~ (c.item_level or "?")) }}
         {% endfor %}
