@@ -27,6 +27,7 @@ Thumbs.db
 *.log
 
 *.key
+*.pem
 
 # 게시판 업로드 이미지 (유저 콘텐츠, git으로 추적 안 함)
 webapp/static/uploads/
