@@ -4198,6 +4198,8 @@ a.rank-row:hover {
   transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
+.ui-card[hidden] { display: none; }
+
 a.ui-card:hover {
   border-color: var(--accent);
   transform: translateY(-1px);

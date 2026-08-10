@@ -60,6 +60,17 @@ def test_party_list_renders_cards(client):
     body = resp.text
     assert "아르모체(4막)" in body
     assert "1/8" in body
+    assert 'id="party-search"' in body  # 레이드명 검색창 — 공대가 있을 때만 노출
+
+
+def test_party_list_hides_search_box_when_empty(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=[]))
+        resp = client.get("/parties")
+
+    assert resp.status_code == 200
+    assert 'id="party-search"' not in resp.text
 
 
 # ── 목록 필터 ────────────────────────────────────────────

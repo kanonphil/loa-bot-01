@@ -14,6 +14,12 @@
   {% for key, label in filters %}
   {{ ui.filter_link(label, "/parties?filter=" ~ key, key == active_filter, counts[key]) }}
   {% endfor %}
+  {% if parties %}
+  <label class="raid-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input type="search" id="party-search" placeholder="레이드명으로 검색" aria-label="공대 검색" autocomplete="off">
+  </label>
+  {% endif %}
 {% endcall %}
 
 {% if not parties %}
@@ -39,7 +45,7 @@
       "전체 보기", "/parties", "🔍") }}
   {% endif %}
 {% else %}
-<div class="ui-list">
+<div class="ui-list" id="party-list">
   {% for p in parties %}
   {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.status_tone) %}
     <div class="ui-row">
@@ -60,6 +66,26 @@
   {% endcall %}
   {% endfor %}
 </div>
+<p class="raid-picker-noresult" id="party-search-noresult" hidden>검색 결과가 없습니다.</p>
+<script>
+  (function () {
+    var input = document.getElementById("party-search");
+    if (!input) return;
+    var cards = Array.prototype.slice.call(document.querySelectorAll("#party-list .ui-card"));
+    var noResult = document.getElementById("party-search-noresult");
+    input.addEventListener("input", function () {
+      var q = input.value.trim().toLowerCase();
+      var visible = 0;
+      cards.forEach(function (card) {
+        var title = card.querySelector(".ui-card-title").textContent.toLowerCase();
+        var show = !q || title.includes(q);
+        card.hidden = !show;
+        if (show) visible++;
+      });
+      noResult.hidden = visible > 0;
+    });
+  })();
+</script>
 {% endif %}
 </div>
 {% endblock %}
