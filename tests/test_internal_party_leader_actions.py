@@ -85,13 +85,13 @@ def test_close_then_reopen(client, fake_bot):
     resp = client.post(
         "/api/internal/parties/999/close", json={"discord_id": LEADER_ID}, headers=HEADERS
     )
-    assert resp.json() == {"success": True}
+    assert resp.json()["success"] is True
     assert (asyncio.run(db.get_party("999")))["status"] == "closed"
 
     resp2 = client.post(
         "/api/internal/parties/999/reopen", json={"discord_id": LEADER_ID}, headers=HEADERS
     )
-    assert resp2.json() == {"success": True}
+    assert resp2.json()["success"] is True
     assert (asyncio.run(db.get_party("999")))["status"] == "recruiting"
 
 
@@ -147,7 +147,7 @@ def test_cancel_purges_party_and_dms_members(client, fake_bot):
         json={"discord_id": LEADER_ID, "reason": "인원 부족"},
         headers=HEADERS,
     )
-    assert resp.json() == {"success": True}
+    assert resp.json()["success"] is True
     assert asyncio.run(db.get_party("999")) is None
     assert fake_channel.delete.called
     fake_user.send.assert_awaited()
@@ -161,7 +161,7 @@ def test_kick_removes_member(client, fake_bot):
         json={"discord_id": LEADER_ID, "target_discord_id": MEMBER_ID},
         headers=HEADERS,
     )
-    assert resp.json() == {"success": True}
+    assert resp.json()["success"] is True
     slots = asyncio.run(db.get_party_slots("999"))
     assert MEMBER_ID not in {s["discord_id"] for s in slots}
 
@@ -175,6 +175,49 @@ def test_leader_cannot_kick_self(client, fake_bot):
     body = resp.json()
     assert body["success"] is False
     assert "본인" in body["reason"]
+
+
+def test_kick_rejected_when_party_disbanded(client, fake_bot):
+    """디스코드 쪽엔 이미 있던 체크인데 웹엔 없었다 — 통합하면서 같이 맞춤."""
+    asyncio.run(db.disband_party("999"))
+    resp = client.post(
+        "/api/internal/parties/999/kick",
+        json={"discord_id": LEADER_ID, "target_discord_id": MEMBER_ID},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "종료된 파티" in body["reason"]
+
+
+def test_kick_notifies_waitlist_when_party_was_full(client, fake_bot):
+    """통합 전엔 웹에서 강제 퇴장시키면(_refresh_party_embed_with_reserved만 씀) 대기열
+    알림이 안 갔다 — 디스코드는 만석→모집중 전환 시 대기열에 알림을 보내고 있었음.
+    이제 leave와 동일한 _refresh_party_embed_and_announce를 써서 양쪽 다 알림이 간다."""
+    _, _, _, fake_user = fake_bot
+    asyncio.run(
+        db.create_party(
+            message_id="777", channel_id="700", guild_id="1", leader_id=LEADER_ID,
+            raid_name="아르모체(4막)", difficulty="노말", proficiency="숙련",
+            scheduled_time="05/22 20:00", scheduled_datetime="2026-05-22T20:00:00+09:00",
+            total_slots=2, min_level=1700,
+        )
+    )
+    asyncio.run(db.auto_assign_slot("777", LEADER_ID, "워로드캐릭", "워로드", "dps", 2))
+    asyncio.run(db.auto_assign_slot("777", MEMBER_ID, "발키리", "홀리나이트", "support", 2))
+    assert (asyncio.run(db.get_party("777")))["status"] == "full"
+    asyncio.run(db.add_waitlist("777", "999999"))
+
+    resp = client.post(
+        "/api/internal/parties/777/kick",
+        json={"discord_id": LEADER_ID, "target_discord_id": MEMBER_ID},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    assert (asyncio.run(db.get_party("777")))["status"] == "recruiting"
+    # 대기열 알림을 보내면서 큐를 비운다 — clear됐다는 건 _notify_waitlist가 실제로 실행됐다는 뜻
+    assert asyncio.run(db.get_waitlist("777")) == []
+    assert fake_user.send.await_count >= 2  # 강제퇴장 DM + 대기열 DM
 
 
 # ── 일정 변경 ───────────────────────────────────────────────
@@ -211,7 +254,7 @@ def test_transfer_leader_to_member(client, fake_bot):
         json={"discord_id": LEADER_ID, "new_leader_discord_id": MEMBER_ID},
         headers=HEADERS,
     )
-    assert resp.json() == {"success": True}
+    assert resp.json()["success"] is True
     party = asyncio.run(db.get_party("999"))
     assert party["leader_id"] == MEMBER_ID
 
