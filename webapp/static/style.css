@@ -4178,6 +4178,89 @@ a.rank-row:hover {
   border-color: var(--ok);
 }
 
+/* ── 관리자 (레이드/카테고리/난이도/직업 CRUD) ─────────────── */
+
+.admin-card { max-width: 760px; }
+
+.admin-error {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.admin-group-title {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.admin-group-title:first-of-type { margin-top: 4px; }
+
+.admin-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  font-size: 13px;
+}
+
+.admin-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-row-sub {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-row-actions form { display: contents; }
+
+.admin-toggle-link,
+.admin-danger-link {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.6;
+}
+.admin-toggle-link:hover { color: var(--text); border-color: var(--accent-dim); }
+.admin-danger-link:hover { color: var(--danger); border-color: var(--danger); }
+
+.admin-num-input { width: 108px; }
+.admin-icon-input { width: 56px; }
+
 /* ── 공용 프리미티브 (_ui.html 매크로 대응) ────────────────
    페이지 전용 카드/빈 상태/배지를 대체한다. 값은 전부 토큰만 쓴다 —
    여기에 px 리터럴을 다시 넣기 시작하면 개편 전으로 돌아간다.

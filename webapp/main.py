@@ -12,6 +12,7 @@ from webapp import config, guild_info, notification_store, party_events
 from webapp.clients import bot_client
 from webapp.auth.dependencies import NotAuthenticated
 from webapp.routes import (
+    admin,
     auth_routes,
     calendar,
     character,
@@ -93,6 +94,7 @@ app.include_router(calendar.router)
 app.include_router(tools.router)
 app.include_router(events.router)
 app.include_router(notifications.router)
+app.include_router(admin.router)
 
 
 @app.exception_handler(NotAuthenticated)

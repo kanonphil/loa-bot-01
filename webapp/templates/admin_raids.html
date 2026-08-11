@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<h1>레이드 관리</h1>
+<p class="settings-desc">
+  디스코드 <code>/관리</code> 명령어와 같은 내용을 다룹니다. 여기서 바꾼 내용은 레이드체크·공대개설
+  등 사이트 전체와 디스코드 봇에 곧바로 반영됩니다.
+</p>
+
+{% if error %}
+<p class="admin-error">{{ error }}</p>
+{% endif %}
+
+<div class="settings-card admin-card">
+  <h2 class="leader-panel-title">카테고리</h2>
+  {% if categories %}
+  <ul class="admin-list">
+    {% for c in categories %}
+    <li class="admin-row">
+      <span class="admin-row-name">{{ c.name }}<span class="admin-row-sub">순서 {{ c.sort_order }}</span></span>
+      <span class="admin-row-actions">
+        <form method="post" action="/admin/raids/categories/extreme">
+          <input type="hidden" name="name" value="{{ c.name }}">
+          <input type="hidden" name="is_extreme" value="{{ 'false' if c.is_extreme else 'true' }}">
+          {{ ui.chip("익스트림" if c.is_extreme else "일반 카테고리", "accent" if c.is_extreme else "") }}
+          <button type="submit" class="admin-toggle-link">전환</button>
+        </form>
+        <form method="post" action="/admin/raids/categories/delete" onsubmit="return confirm('{{ c.name }} 카테고리를 삭제할까요? 소속 레이드가 있으면 실패합니다.');">
+          <input type="hidden" name="name" value="{{ c.name }}">
+          <button type="submit" class="admin-danger-link">삭제</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="settings-desc">등록된 카테고리가 없습니다.</p>
+  {% endif %}
+  <form method="post" action="/admin/raids/categories/add" class="settings-filter-add">
+    <input type="text" name="name" placeholder="카테고리명" required class="settings-select">
+    <input type="number" name="sort_order" placeholder="순서" value="0" class="settings-select admin-num-input">
+    <button type="submit" class="settings-toggle-btn">추가</button>
+  </form>
+</div>
+
+<div class="settings-card admin-card">
+  <h2 class="leader-panel-title">레이드</h2>
+  {% for group in grouped %}
+  {% if group.raids %}
+  <h3 class="admin-group-title">{{ group.category.name }}</h3>
+  <ul class="admin-list">
+    {% for r in group.raids %}
+    <li class="admin-row">
+      <span class="admin-row-name">
+        {{ r.icon }} {{ r.name }} <span class="admin-row-sub">{{ r.short_name }}</span>
+        {% if not r.is_active %}{{ ui.chip("비활성", "danger") }}{% endif %}
+        {% if r.is_pinned %}{{ ui.chip("고정", "accent") }}{% endif %}
+      </span>
+      <span class="admin-row-actions">
+        <a class="admin-toggle-link" href="/admin/raids?raid={{ r.name | urlencode }}">난이도 관리</a>
+        <form method="post" action="/admin/raids/pin">
+          <input type="hidden" name="name" value="{{ r.name }}">
+          <input type="hidden" name="is_pinned" value="{{ 'false' if r.is_pinned else 'true' }}">
+          <button type="submit" class="admin-toggle-link">{{ "고정 해제" if r.is_pinned else "상단 고정" }}</button>
+        </form>
+        <form method="post" action="/admin/raids/active">
+          <input type="hidden" name="name" value="{{ r.name }}">
+          <input type="hidden" name="is_active" value="{{ 'false' if r.is_active else 'true' }}">
+          <button type="submit" class="admin-toggle-link">{{ "비활성화" if r.is_active else "활성화" }}</button>
+        </form>
+        <form method="post" action="/admin/raids/delete" onsubmit="return confirm('{{ r.name }}을(를) 삭제할까요? 난이도도 함께 삭제됩니다.');">
+          <input type="hidden" name="name" value="{{ r.name }}">
+          <button type="submit" class="admin-danger-link">삭제</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endfor %}
+  <form method="post" action="/admin/raids/add" class="settings-filter-add">
+    <input type="text" name="name" placeholder="레이드명" required class="settings-select">
+    <input type="text" name="short_name" placeholder="약칭" required class="settings-select admin-num-input">
+    <input type="text" name="icon" placeholder="⚔️" value="⚔️" class="settings-select admin-icon-input">
+    <select name="category" required class="settings-select">
+      {% for c in categories %}
+      <option value="{{ c.name }}">{{ c.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="settings-toggle-btn">추가</button>
+  </form>
+</div>
+
+<div class="settings-card admin-card">
+  <h2 class="leader-panel-title">난이도{% if selected_raid %} — {{ selected_raid }}{% endif %}</h2>
+  {% if not selected_raid %}
+  <p class="settings-desc">위 레이드 목록에서 "난이도 관리"를 눌러 편집할 레이드를 골라주세요.</p>
+  {% else %}
+  {% set diffs = raids[selected_raid].difficulties %}
+  {% if diffs %}
+  <ul class="admin-list">
+    {% for name, d in diffs.items() %}
+    <li class="admin-row">
+      <span class="admin-row-name">
+        {{ name }}
+        <span class="admin-row-sub">Lv.{{ d.min_level }} · {{ d.total_slots }}인{% if d.party_split %} · {{ d.party_split }}인씩 분할{% endif %} · {{ d.gates }}관문</span>
+      </span>
+      <span class="admin-row-actions">
+        <form method="post" action="/admin/raids/difficulties/delete" onsubmit="return confirm('{{ name }} 난이도를 삭제할까요?');">
+          <input type="hidden" name="raid_name" value="{{ selected_raid }}">
+          <input type="hidden" name="difficulty" value="{{ name }}">
+          <button type="submit" class="admin-danger-link">삭제</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="settings-desc">등록된 난이도가 없습니다.</p>
+  {% endif %}
+  <form method="post" action="/admin/raids/difficulties/add" class="settings-filter-add">
+    <input type="hidden" name="raid_name" value="{{ selected_raid }}">
+    <input type="text" name="difficulty" placeholder="난이도명 (예: 노말)" required class="settings-select admin-num-input">
+    <input type="number" name="min_level" placeholder="입장 레벨" required class="settings-select admin-num-input">
+    <input type="number" name="total_slots" placeholder="인원" required class="settings-select admin-num-input">
+    <input type="number" name="party_split" placeholder="분할 인원(선택)" class="settings-select admin-num-input">
+    <input type="number" name="gates" placeholder="관문 수" value="1" class="settings-select admin-num-input">
+    <button type="submit" class="settings-toggle-btn">추가</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="settings-card admin-card">
+  <h2 class="leader-panel-title">직업</h2>
+  {% if job_classes %}
+  <ul class="admin-list">
+    {% for jc in job_classes %}
+    <li class="admin-row">
+      <span class="admin-row-name">{{ jc.name }} {% if jc.is_support %}{{ ui.chip("서포터", "accent") }}{% endif %}</span>
+      <span class="admin-row-actions">
+        <form method="post" action="/admin/raids/classes/delete" onsubmit="return confirm('{{ jc.name }}을(를) 삭제할까요?');">
+          <input type="hidden" name="name" value="{{ jc.name }}">
+          <button type="submit" class="admin-danger-link">삭제</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="settings-desc">등록된 직업이 없습니다.</p>
+  {% endif %}
+  <form method="post" action="/admin/raids/classes/add" class="settings-filter-add">
+    <input type="text" name="name" placeholder="직업명" required class="settings-select">
+    <label class="settings-check"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
+    <button type="submit" class="settings-toggle-btn">추가</button>
+  </form>
+</div>
+</div>
+{% endblock %}

@@ -3,6 +3,7 @@ import secrets
 from fastapi import APIRouter, Request
 from starlette.responses import RedirectResponse
 
+from webapp import config
 from webapp.auth import discord_oauth
 from webapp.clients import bot_client
 from webapp.templating import templates
@@ -45,6 +46,7 @@ async def callback(request: Request, code: str, state: str):
     request.session["user"] = {
         "discord_id": discord_id,
         "username": discord_user.get("username"),
+        "is_admin": discord_id in config.ADMIN_DISCORD_IDS,
     }
     return RedirectResponse("/main")
 

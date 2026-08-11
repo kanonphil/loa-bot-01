@@ -50,6 +50,13 @@ async def _cached_get(cache_key: str, url: str) -> object:
     return value
 
 
+def _invalidate_raid_cache() -> None:
+    """관리자가 카테고리/레이드/난이도/직업을 바꾼 직후 호출 — 안 하면 최대 60초간
+    (레이드체크·공대개설 등 사이트 전체가) 바뀌기 전 데이터를 계속 보게 된다."""
+    for key in ("raids", "raid_categories", "support_classes"):
+        _cache.pop(key, None)
+
+
 async def is_registered(discord_id: str) -> bool:
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/verify-user",
@@ -496,3 +503,84 @@ async def transfer_leader(message_id: str, discord_id: str, new_leader_discord_i
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ── 관리자 (카테고리/레이드/난이도/직업 CRUD) ─────────────────
+# 실행 권한 검증은 discord_id를 실어 보내는 봇 서버 쪽에서 다시 한다(admin.py 내부의
+# _require_admin) — 여기는 그냥 요청을 전달하고, 성공한 쓰기 요청 뒤에는 반드시
+# _invalidate_raid_cache()로 60초 TTL 캐시를 비워 관리자 화면이 바로 최신 상태를 본다.
+
+async def get_job_classes() -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/job-classes",
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _admin_post(path: str, discord_id: str, **extra) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/{path}",
+        json={"discord_id": discord_id, **extra},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    result = resp.json()
+    if result.get("success"):
+        _invalidate_raid_cache()
+    return result
+
+
+async def admin_add_category(discord_id: str, name: str, sort_order: int) -> dict:
+    return await _admin_post("categories/add", discord_id, name=name, sort_order=sort_order)
+
+
+async def admin_delete_category(discord_id: str, name: str) -> dict:
+    return await _admin_post("categories/delete", discord_id, name=name)
+
+
+async def admin_set_category_extreme(discord_id: str, name: str, is_extreme: bool) -> dict:
+    return await _admin_post("categories/extreme", discord_id, name=name, is_extreme=is_extreme)
+
+
+async def admin_add_raid(discord_id: str, name: str, short_name: str, icon: str, category: str) -> dict:
+    return await _admin_post(
+        "raids/add", discord_id, name=name, short_name=short_name, icon=icon, category=category
+    )
+
+
+async def admin_delete_raid(discord_id: str, name: str) -> dict:
+    return await _admin_post("raids/delete", discord_id, name=name)
+
+
+async def admin_set_raid_active(discord_id: str, name: str, is_active: bool) -> dict:
+    return await _admin_post("raids/active", discord_id, name=name, is_active=is_active)
+
+
+async def admin_set_raid_pinned(discord_id: str, name: str, is_pinned: bool) -> dict:
+    return await _admin_post("raids/pin", discord_id, name=name, is_pinned=is_pinned)
+
+
+async def admin_add_difficulty(
+    discord_id: str, raid_name: str, difficulty: str, min_level: int,
+    total_slots: int, party_split: int | None, gates: int,
+) -> dict:
+    return await _admin_post(
+        "difficulties/add", discord_id, raid_name=raid_name, difficulty=difficulty,
+        min_level=min_level, total_slots=total_slots, party_split=party_split, gates=gates,
+    )
+
+
+async def admin_delete_difficulty(discord_id: str, raid_name: str, difficulty: str) -> dict:
+    return await _admin_post("difficulties/delete", discord_id, raid_name=raid_name, difficulty=difficulty)
+
+
+async def admin_add_class(discord_id: str, name: str, is_support: bool) -> dict:
+    return await _admin_post("classes/add", discord_id, name=name, is_support=is_support)
+
+
+async def admin_delete_class(discord_id: str, name: str) -> dict:
+    return await _admin_post("classes/delete", discord_id, name=name)

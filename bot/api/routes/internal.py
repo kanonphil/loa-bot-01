@@ -4,9 +4,11 @@ X-Webapp-Key로만 인증하며, 관리자 API(X-API-Key)와는 분리되어 있
 """
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+import config
 from bot.api.auth import verify_webapp_key
 import bot.api.lostark as loa
 import bot.database.manager as db
+from bot.data import raids as raids_module
 from bot.services.expedition import (
   register_character_auto_detect,
   sync_characters_for_discord_id,
@@ -14,6 +16,15 @@ from bot.services.expedition import (
 )
 
 router = APIRouter(dependencies=[Depends(verify_webapp_key)])
+
+
+def _require_admin(discord_id: str) -> str | None:
+  """discord_id가 ADMIN_DISCORD_IDS에 없으면 에러 사유 문자열, 문제없으면 None.
+  X-Webapp-Key는 웹앱 전체를 인증할 뿐 관리자 여부를 모르므로, 관리자 전용 액션은
+  매 요청마다 여기서 다시 검증한다(웹앱 세션 쪽 검사만 믿지 않는다)."""
+  if discord_id not in config.ADMIN_DISCORD_IDS:
+    return "관리자 권한이 없습니다."
+  return None
 
 
 @router.get("/verify-user")
@@ -74,6 +85,13 @@ async def support_classes():
   """서포터로 분류된 직업명 목록 — 웹의 공대 개설 폼이 캐릭터별로 '서포터' 역할
   선택 가능 여부를 미리 판단하는 데 사용(딜러 전용 직업은 서포터를 고를 수 없음)."""
   return sorted(await db.get_support_classes_set())
+
+
+@router.get("/job-classes")
+async def job_classes():
+  """전체 직업 목록(서포터 여부 포함) — 관리자 화면의 직업 관리용.
+  /support-classes는 이름만 주지만 여기는 편집 대상 전체를 그대로 준다."""
+  return await db.get_all_job_classes()
 
 
 @router.get("/completions")
@@ -596,3 +614,192 @@ async def add_account(body: AddAccountBody):
     if name and await db.add_character(body.discord_id, name, api_key_id=api_key_id):
       added += 1
   return {"success": True, "label": body.character_name, "added": added, "total": len(siblings or [])}
+
+
+# ── 관리자 (카테고리/레이드/난이도/직업 CRUD) ─────────────────
+# Discord의 /관리 명령어군(bot/cogs/admin.py)과 같은 db 함수를 그대로 호출한다.
+# 웹앱은 ADMIN_API_KEY를 갖지 않으므로(웹앱 서버 침해 시에도 관리자 권한이 새지 않도록
+# 의도적으로 분리돼 있다), 이 라우트들은 X-Webapp-Key로 들어오되 discord_id를
+# _require_admin으로 매번 재검증한다.
+
+class AdminCategoryBody(BaseModel):
+  discord_id: str
+  name: str
+  sort_order: int = 0
+
+
+@router.post("/admin/categories/add")
+async def admin_add_category(body: AdminCategoryBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  added = await db.add_category(body.name, body.sort_order)
+  await raids_module.reload()
+  return {"success": added}
+
+
+class AdminCategoryNameBody(BaseModel):
+  discord_id: str
+  name: str
+
+
+@router.post("/admin/categories/delete")
+async def admin_delete_category(body: AdminCategoryNameBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  removed = await db.remove_category(body.name)
+  await raids_module.reload()
+  return {"success": removed}
+
+
+class AdminCategoryExtremeBody(BaseModel):
+  discord_id: str
+  name: str
+  is_extreme: bool
+
+
+@router.post("/admin/categories/extreme")
+async def admin_set_category_extreme(body: AdminCategoryExtremeBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  updated = await db.update_category_extreme(body.name, body.is_extreme)
+  await raids_module.reload()
+  return {"success": updated}
+
+
+class AdminRaidBody(BaseModel):
+  discord_id: str
+  name: str
+  short_name: str
+  icon: str = "⚔️"
+  category: str
+
+
+@router.post("/admin/raids/add")
+async def admin_add_raid(body: AdminRaidBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  added = await db.add_raid(body.name, body.short_name, body.icon, body.category)
+  await raids_module.reload()
+  return {"success": added}
+
+
+class AdminRaidNameBody(BaseModel):
+  discord_id: str
+  name: str
+
+
+@router.post("/admin/raids/delete")
+async def admin_delete_raid(body: AdminRaidNameBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  removed = await db.remove_raid(body.name)
+  await raids_module.reload()
+  return {"success": removed}
+
+
+class AdminRaidActiveBody(BaseModel):
+  discord_id: str
+  name: str
+  is_active: bool
+
+
+@router.post("/admin/raids/active")
+async def admin_set_raid_active(body: AdminRaidActiveBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  updated = await db.set_raid_active(body.name, body.is_active)
+  await raids_module.reload()
+  return {"success": updated}
+
+
+class AdminRaidPinBody(BaseModel):
+  discord_id: str
+  name: str
+  is_pinned: bool
+
+
+@router.post("/admin/raids/pin")
+async def admin_set_raid_pinned(body: AdminRaidPinBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  updated = await db.set_raid_pinned(body.name, body.is_pinned)
+  await raids_module.reload()
+  return {"success": updated}
+
+
+class AdminDifficultyBody(BaseModel):
+  discord_id: str
+  raid_name: str
+  difficulty: str
+  min_level: int
+  total_slots: int
+  party_split: int | None = None
+  gates: int = 1
+
+
+@router.post("/admin/difficulties/add")
+async def admin_add_difficulty(body: AdminDifficultyBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  next_sort = await db.get_next_difficulty_sort_order(body.raid_name)
+  added = await db.add_difficulty(
+    body.raid_name, body.difficulty, body.min_level,
+    body.total_slots, body.party_split, body.gates, next_sort,
+  )
+  await raids_module.reload()
+  return {"success": added}
+
+
+class AdminDifficultyDeleteBody(BaseModel):
+  discord_id: str
+  raid_name: str
+  difficulty: str
+
+
+@router.post("/admin/difficulties/delete")
+async def admin_delete_difficulty(body: AdminDifficultyDeleteBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  removed = await db.remove_difficulty(body.raid_name, body.difficulty)
+  await raids_module.reload()
+  return {"success": removed}
+
+
+class AdminJobClassBody(BaseModel):
+  discord_id: str
+  name: str
+  is_support: bool = False
+
+
+@router.post("/admin/classes/add")
+async def admin_add_class(body: AdminJobClassBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  added = await db.add_job_class(body.name, body.is_support)
+  await raids_module.reload()
+  return {"success": added}
+
+
+class AdminJobClassNameBody(BaseModel):
+  discord_id: str
+  name: str
+
+
+@router.post("/admin/classes/delete")
+async def admin_delete_class(body: AdminJobClassNameBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  removed = await db.remove_job_class(body.name)
+  await raids_module.reload()
+  return {"success": removed}

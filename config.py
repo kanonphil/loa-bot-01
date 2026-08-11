@@ -13,6 +13,13 @@ WEBAPP_API_KEY: str = os.environ.get("WEBAPP_API_KEY", "changeme-webapp")
 # 빈 문자열이면 길드 확인을 건너뜀 (다른 서버에서 재사용할 때 대비).
 REQUIRED_GUILD_NAME: str = os.environ.get("REQUIRED_GUILD_NAME", "동물롱장")
 
+# 웹 관리자 탭(카테고리/레이드/난이도/직업 관리) 접근을 허용할 디스코드 ID 목록(콤마 구분).
+# 웹앱은 ADMIN_API_KEY를 갖지 않으므로, 이 목록에 대한 재검증을 여기(봇 서버)에서 직접 한다 —
+# 웹앱 서버가 뚫려도 이 목록에 없는 계정으로는 관리자 액션이 실행되지 않는다.
+ADMIN_DISCORD_IDS: set[str] = {
+    x.strip() for x in os.environ.get("ADMIN_DISCORD_IDS", "").split(",") if x.strip()
+}
+
 # 게스트(API 키 미등록자) 초대 시 캐릭터 정보(직업/전투력/아이템레벨) 조회에 쓸 API 키의 소유자.
 # 로스트아크 오픈API 캐릭터 조회는 조회 대상 소유 키가 아니어도 되는 공개 조회라, 이 discord_id가
 # /api등록으로 등록해둔 키를 그대로 재사용한다. 비어있으면 게스트 초대 시 조회를 건너뛴다.

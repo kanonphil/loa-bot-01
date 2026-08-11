@@ -20,6 +20,14 @@ DISCORD_GUILD_ID: str = os.environ["DISCORD_GUILD_ID"]
 # 봇 서버가 응답 안 해도 이름만큼은 항상 정확히 뜨도록 고정값으로 둔다.
 GUILD_NAME: str = os.environ.get("GUILD_NAME", "동물롱장")
 
+# ── 관리자 ────────────────────────────────────────────────
+# 관리자 탭(카테고리/레이드/난이도/직업 관리) 노출 여부만 판단하는 데 쓴다 — 실제
+# 실행 권한은 봇 서버가 같은 값(ADMIN_DISCORD_IDS)으로 다시 검증하므로, 여기 목록은
+# UI를 숨기는 용도일 뿐 이 값만으로 관리자 액션이 실행되지는 않는다.
+ADMIN_DISCORD_IDS: set[str] = {
+    x.strip() for x in os.environ.get("ADMIN_DISCORD_IDS", "").split(",") if x.strip()
+}
+
 # ── 세션 ──────────────────────────────────────────────────
 SESSION_SECRET: str = os.environ.get("SESSION_SECRET", "dev-secret-change-me")
 # 로컬 개발(http)에서는 false, Cloudflare 뒤 실서비스(https)에서는 반드시 true
