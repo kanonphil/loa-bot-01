@@ -4261,6 +4261,9 @@ a.rank-row:hover {
 .admin-num-input { width: 108px; }
 .admin-icon-input { width: 56px; }
 
+.admin-raid-picker { margin-bottom: 14px; }
+.admin-raid-select { min-width: 220px; }
+
 /* ── 공용 프리미티브 (_ui.html 매크로 대응) ────────────────
    페이지 전용 카드/빈 상태/배지를 대체한다. 값은 전부 토큰만 쓴다 —
    여기에 px 리터럴을 다시 넣기 시작하면 개편 전으로 돌아간다.

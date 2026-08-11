@@ -12,8 +12,15 @@
 <p class="admin-error">{{ error }}</p>
 {% endif %}
 
+{% call ui.toolbar() %}
+  {% for key, label in tabs %}
+  {% set count = {"categories": categories | length, "raids": raids | length, "difficulties": (raids[selected_raid].difficulties | length) if selected_raid else none, "classes": job_classes | length}[key] %}
+  {{ ui.filter_link(label, "/admin/raids?tab=" ~ key, key == tab, count) }}
+  {% endfor %}
+{% endcall %}
+
+{% if tab == "categories" %}
 <div class="settings-card admin-card">
-  <h2 class="leader-panel-title">카테고리</h2>
   {% if categories %}
   <ul class="admin-list">
     {% for c in categories %}
@@ -44,8 +51,8 @@
   </form>
 </div>
 
+{% elif tab == "raids" %}
 <div class="settings-card admin-card">
-  <h2 class="leader-panel-title">레이드</h2>
   {% for group in grouped %}
   {% if group.raids %}
   <h3 class="admin-group-title">{{ group.category.name }}</h3>
@@ -58,7 +65,7 @@
         {% if r.is_pinned %}{{ ui.chip("고정", "accent") }}{% endif %}
       </span>
       <span class="admin-row-actions">
-        <a class="admin-toggle-link" href="/admin/raids?raid={{ r.name | urlencode }}">난이도 관리</a>
+        <a class="admin-toggle-link" href="/admin/raids?tab=difficulties&amp;raid={{ r.name | urlencode }}">난이도 관리</a>
         <form method="post" action="/admin/raids/pin">
           <input type="hidden" name="name" value="{{ r.name }}">
           <input type="hidden" name="is_pinned" value="{{ 'false' if r.is_pinned else 'true' }}">
@@ -79,6 +86,9 @@
   </ul>
   {% endif %}
   {% endfor %}
+  {% if not raids %}
+  <p class="settings-desc">등록된 레이드가 없습니다.</p>
+  {% endif %}
   <form method="post" action="/admin/raids/add" class="settings-filter-add">
     <input type="text" name="name" placeholder="레이드명" required class="settings-select">
     <input type="text" name="short_name" placeholder="약칭" required class="settings-select admin-num-input">
@@ -92,10 +102,20 @@
   </form>
 </div>
 
+{% elif tab == "difficulties" %}
 <div class="settings-card admin-card">
-  <h2 class="leader-panel-title">난이도{% if selected_raid %} — {{ selected_raid }}{% endif %}</h2>
+  <form method="get" action="/admin/raids" class="admin-raid-picker">
+    <input type="hidden" name="tab" value="difficulties">
+    <select name="raid" class="settings-select admin-raid-select" onchange="this.form.submit()">
+      <option value="">레이드 선택…</option>
+      {% for name in raid_names %}
+      <option value="{{ name }}" {% if name == selected_raid %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+
   {% if not selected_raid %}
-  <p class="settings-desc">위 레이드 목록에서 "난이도 관리"를 눌러 편집할 레이드를 골라주세요.</p>
+  <p class="settings-desc">위에서 편집할 레이드를 선택해주세요.</p>
   {% else %}
   {% set diffs = raids[selected_raid].difficulties %}
   {% if diffs %}
@@ -131,8 +151,8 @@
   {% endif %}
 </div>
 
+{% elif tab == "classes" %}
 <div class="settings-card admin-card">
-  <h2 class="leader-panel-title">직업</h2>
   {% if job_classes %}
   <ul class="admin-list">
     {% for jc in job_classes %}
@@ -156,5 +176,6 @@
     <button type="submit" class="settings-toggle-btn">추가</button>
   </form>
 </div>
+{% endif %}
 </div>
 {% endblock %}

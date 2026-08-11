@@ -60,8 +60,26 @@ def test_admin_sees_nav_and_page(client, monkeypatch):
 
     assert "레이드 관리" in nav_resp.text
     assert page_resp.status_code == 200
-    assert "아르모체(4막)" in page_resp.text
-    assert "홀리나이트" in page_resp.text
+    assert "아르모체(4막)" in page_resp.text  # 기본 탭(레이드)
+
+
+def test_classes_tab_shows_job_classes(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    with respx.mock:
+        log_in(client, discord_id="111")
+        _mock_reads()
+        resp = client.get("/admin/raids?tab=classes")
+    assert "홀리나이트" in resp.text
+    assert "아르모체(4막)" not in resp.text  # 다른 탭 내용은 안 보임
+
+
+def test_raid_row_links_to_difficulties_tab(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    with respx.mock:
+        log_in(client, discord_id="111")
+        _mock_reads()
+        resp = client.get("/admin/raids?tab=raids")
+    assert "tab=difficulties&amp;raid=" in resp.text
 
 
 def test_add_category_forwards_discord_id_and_redirects(client, monkeypatch):
@@ -76,7 +94,7 @@ def test_add_category_forwards_discord_id_and_redirects(client, monkeypatch):
             data={"name": "새카테고리", "sort_order": "1"},
         )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/admin/raids"
+    assert resp.headers["location"] == "/admin/raids?tab=categories"
     import json as _json
 
     body = _json.loads(route.calls[0].request.content)
