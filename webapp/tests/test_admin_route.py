@@ -62,14 +62,16 @@ def test_admin_sees_nav_and_page(client, monkeypatch):
     assert "아르모체(4막)" in page_resp.text  # 기본 탭(레이드)
 
 
-def test_raids_page_links_to_classes_page_not_a_tab(client, monkeypatch):
+def test_raids_page_has_no_classes_tab_or_cross_link(client, monkeypatch):
+    """직업 관리는 사이드바 메뉴로 충분 — 페이지 본문 안에 탭이나 중복 링크를 두지 않는다.
+    사이드바 자체의 /admin/classes 링크(모든 페이지에 상시 노출)는 예외로 딱 1번만 허용."""
     monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
     with respx.mock:
         log_in(client, discord_id="111")
         _mock_reads()
         resp = client.get("/admin/raids")
-    assert 'href="/admin/classes"' in resp.text
-    assert "tab=classes" not in resp.text  # 직업은 더 이상 이 페이지의 탭이 아님
+    assert "tab=classes" not in resp.text
+    assert resp.text.count('href="/admin/classes"') == 1  # 사이드바 메뉴 1개뿐
 
 
 def test_raid_row_links_to_difficulties_tab(client, monkeypatch):

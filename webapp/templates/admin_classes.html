@@ -2,16 +2,11 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
-<div class="admin-page-header">
-  <div>
-    <h1>직업 관리</h1>
-    <p class="settings-desc">
-      캐릭터가 딜러인지 서포터인지 판단하는 기준입니다. 공대 참여 시 역할 선택,
-      레이드체크 등 사이트 전체에 곧바로 반영됩니다.
-    </p>
-  </div>
-  <a href="/admin/raids" class="admin-toggle-link">&larr; 레이드 관리</a>
-</div>
+<h1>직업 관리</h1>
+<p class="settings-desc">
+  캐릭터가 딜러인지 서포터인지 판단하는 기준입니다. 공대 참여 시 역할 선택,
+  레이드체크 등 사이트 전체에 곧바로 반영됩니다.
+</p>
 
 {% if error %}
 <p class="admin-error">{{ error }}</p>
@@ -54,10 +49,17 @@
   {% else %}
   <p class="settings-desc">등록된 직업이 없습니다.</p>
   {% endif %}
-  <form method="post" action="/admin/classes/add" class="settings-filter-add">
-    <input type="text" name="name" placeholder="직업명" required class="settings-select">
-    <label class="settings-check"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
-    <button type="submit" class="settings-toggle-btn">추가</button>
+  <form method="post" action="/admin/classes/add" class="admin-form">
+    <div class="admin-form-grid">
+      <label class="admin-field">
+        <span class="admin-field-label">직업명</span>
+        <input type="text" name="name" placeholder="예: 발키리" required class="settings-select">
+      </label>
+    </div>
+    <div class="admin-form-actions">
+      <label class="settings-check"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
+      <button type="submit" class="settings-toggle-btn">추가</button>
+    </div>
   </form>
 </div>
 </div>
