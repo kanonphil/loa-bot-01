@@ -99,14 +99,29 @@ async def party_list(
     )
 
 
+_HISTORY_PAGE_SIZE = 20
+
+
 @router.get("/parties/history")
-async def party_history(request: Request, user: dict = Depends(get_current_user)):
-    entries = await bot_client.get_user_party_history(user["discord_id"])
-    visible = [_history_view(e) for e in entries]  # 이미 최근순(created_at DESC)으로 옴
+async def party_history(
+    request: Request, page: int = 1, user: dict = Depends(get_current_user),
+):
+    page = max(page, 1)
+    offset = (page - 1) * _HISTORY_PAGE_SIZE
+    result = await bot_client.get_user_party_history(
+        user["discord_id"], limit=_HISTORY_PAGE_SIZE, offset=offset,
+    )
+    visible = [_history_view(e) for e in result["entries"]]  # 이미 최근순(created_at DESC)으로 옴
     return templates.TemplateResponse(
         request,
         "party_history.html",
-        {"user": user, "active": "parties", "entries": visible},
+        {
+            "user": user,
+            "active": "parties",
+            "entries": visible,
+            "page": page,
+            "has_more": result["has_more"],
+        },
     )
 
 

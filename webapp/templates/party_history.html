@@ -8,10 +8,17 @@
 </div>
 
 {% if not entries %}
+{% if page > 1 %}
+{{ ui.empty(
+    "더 이상 이력이 없습니다",
+    "이전 페이지로 돌아가세요.",
+    "이전 페이지", "/parties/history?page=" ~ (page - 1), "🗂️") }}
+{% else %}
 {{ ui.empty(
     "참여 이력이 없습니다",
-    "공대에 참여하면 여기에 최근 20개까지 남습니다.",
+    "공대에 참여하면 여기에 남습니다.",
     "공대 목록 보기", "/parties", "🗂️") }}
+{% endif %}
 {% else %}
 <div class="ui-list">
   {% for e in entries %}
@@ -30,6 +37,21 @@
   {% endcall %}
   {% endfor %}
 </div>
+{% if page > 1 or has_more %}
+<div class="pager">
+  {% if page > 1 %}
+  <a class="ui-btn is-ghost" href="/parties/history?page={{ page - 1 }}">&larr; 이전</a>
+  {% else %}
+  <span></span>
+  {% endif %}
+  <span class="pager-page">{{ page }}페이지</span>
+  {% if has_more %}
+  <a class="ui-btn is-ghost" href="/parties/history?page={{ page + 1 }}">다음 &rarr;</a>
+  {% else %}
+  <span></span>
+  {% endif %}
+</div>
+{% endif %}
 {% endif %}
 </div>
 {% endblock %}

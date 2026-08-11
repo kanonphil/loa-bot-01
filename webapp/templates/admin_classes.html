@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<div class="admin-page-header">
+  <div>
+    <h1>직업 관리</h1>
+    <p class="settings-desc">
+      캐릭터가 딜러인지 서포터인지 판단하는 기준입니다. 공대 참여 시 역할 선택,
+      레이드체크 등 사이트 전체에 곧바로 반영됩니다.
+    </p>
+  </div>
+  <a href="/admin/raids" class="admin-toggle-link">&larr; 레이드 관리</a>
+</div>
+
+{% if error %}
+<p class="admin-error">{{ error }}</p>
+{% endif %}
+
+<div class="settings-card admin-card admin-card-wide">
+  {% if job_classes %}
+  <label class="raid-search admin-class-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input type="search" id="class-search" placeholder="직업명으로 검색" aria-label="직업 검색" autocomplete="off">
+  </label>
+  <div class="admin-chip-grid" id="class-chip-grid">
+    {% for jc in job_classes %}
+    <form method="post" action="/admin/classes/delete" class="admin-chip-item{% if jc.is_support %} is-support{% endif %}" onsubmit="return confirm('{{ jc.name }}을(를) 삭제할까요?');">
+      <input type="hidden" name="name" value="{{ jc.name }}">
+      <span class="admin-chip-label">{{ jc.name }}{% if jc.is_support %} <em>서포터</em>{% endif %}</span>
+      <button type="submit" class="admin-chip-delete" title="삭제" aria-label="{{ jc.name }} 삭제">&times;</button>
+    </form>
+    {% endfor %}
+  </div>
+  <p class="raid-picker-noresult" id="class-search-noresult" hidden>검색 결과가 없습니다.</p>
+  <script>
+    (function () {
+      var input = document.getElementById("class-search");
+      var items = Array.prototype.slice.call(document.querySelectorAll("#class-chip-grid .admin-chip-item"));
+      var noResult = document.getElementById("class-search-noresult");
+      input.addEventListener("input", function () {
+        var q = input.value.trim().toLowerCase();
+        var visible = 0;
+        items.forEach(function (item) {
+          var label = item.querySelector(".admin-chip-label").textContent.toLowerCase();
+          var show = !q || label.includes(q);
+          item.hidden = !show;
+          if (show) visible++;
+        });
+        noResult.hidden = visible > 0;
+      });
+    })();
+  </script>
+  {% else %}
+  <p class="settings-desc">등록된 직업이 없습니다.</p>
+  {% endif %}
+  <form method="post" action="/admin/classes/add" class="settings-filter-add">
+    <input type="text" name="name" placeholder="직업명" required class="settings-select">
+    <label class="settings-check"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
+    <button type="submit" class="settings-toggle-btn">추가</button>
+  </form>
+</div>
+</div>
+{% endblock %}

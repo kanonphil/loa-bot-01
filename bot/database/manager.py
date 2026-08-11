@@ -2028,11 +2028,18 @@ async def get_notification_logs(limit: int = 100) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-async def get_user_party_history(discord_id: str) -> list[dict]:
-  """유저의 파티 참여 이력 (최근 20개) — 아직 살아있는 파티(parties)와, 클리어/취소로
-  이미 purge_party()가 지워버린 지난 이력(party_history, slots_json에 슬롯 스냅샷 보관)을
+async def get_user_party_history(
+  discord_id: str, limit: int = 20, offset: int = 0,
+) -> tuple[list[dict], bool]:
+  """유저의 파티 참여 이력 — 아직 살아있는 파티(parties)와, 클리어/취소로 이미
+  purge_party()가 지워버린 지난 이력(party_history, slots_json에 슬롯 스냅샷 보관)을
   합쳐서 반환한다. parties 테이블만 봤다면 실제 참여 기록 대부분(클리어된 공대는 곧 purge됨)이
-  누락돼 "이력"이라는 이름이 무색해진다."""
+  누락돼 "이력"이라는 이름이 무색해진다.
+
+  과거엔 LIMIT 20을 고정해서 21번째 이후 기록은 화면에서 영영 안 보였다(운영 DB에서
+  실제로 43건 가진 유저가 있었다 — 데이터는 멀쩡한데 그냥 잘려서 안 보인 것).
+  이제 limit+1개를 가져와 "다음 페이지가 더 있는지"를 별도 COUNT 쿼리 없이 판단하고,
+  실제로는 limit개만 잘라 돌려준다."""
   async with aiosqlite.connect(DB_PATH) as db:
     db.row_factory = aiosqlite.Row
     cur = await db.execute(
@@ -2050,11 +2057,13 @@ async def get_user_party_history(discord_id: str) -> list[dict]:
       "  FROM party_history h, json_each(h.slots_json) je "
       "  WHERE json_extract(je.value, '$.discord_id') = ? "
       ") combined "
-      "ORDER BY created_at DESC LIMIT 20",
-      (discord_id, discord_id),
+      "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+      (discord_id, discord_id, limit + 1, offset),
     )
     rows = await cur.fetchall()
-  return [dict(r) for r in rows]
+  entries = [dict(r) for r in rows]
+  has_more = len(entries) > limit
+  return entries[:limit], has_more
 
 
 async def get_all_active_party_ids() -> list[tuple[str, str]]:

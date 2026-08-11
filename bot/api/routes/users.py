@@ -78,7 +78,8 @@ async def get_stale_users(days: int = 28):
 
 @router.get("/{discord_id}/history")
 async def get_party_history(discord_id: str):
-  return await db.get_user_party_history(discord_id)
+  entries, _has_more = await db.get_user_party_history(discord_id)
+  return entries
 
 
 # ── 유저 삭제 ─────────────────────────────────────────────

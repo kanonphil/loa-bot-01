@@ -113,10 +113,10 @@ async def get_raid_categories() -> list[dict]:
     )
 
 
-async def get_user_party_history(discord_id: str) -> list[dict]:
+async def get_user_party_history(discord_id: str, limit: int = 20, offset: int = 0) -> dict:
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/user-party-history",
-        params={"discord_id": discord_id},
+        params={"discord_id": discord_id, "limit": limit, "offset": offset},
         headers=_headers(),
         timeout=10,
     )

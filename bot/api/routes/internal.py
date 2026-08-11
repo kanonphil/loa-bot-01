@@ -61,10 +61,11 @@ async def user_characters_grouped(discord_id: str):
 
 
 @router.get("/user-party-history")
-async def user_party_history(discord_id: str):
+async def user_party_history(discord_id: str, limit: int = 20, offset: int = 0):
   """웹 '공대 이력' 페이지용 — 관리자 전용 /api/users/{id}/history와 별도 엔드포인트로
   둔다(그쪽은 ADMIN_API_KEY 인증이라 웹앱에는 그 권한을 주지 않는다)."""
-  return await db.get_user_party_history(discord_id)
+  entries, has_more = await db.get_user_party_history(discord_id, limit, offset)
+  return {"entries": entries, "has_more": has_more}
 
 
 # ── 레이드 체크 (길드원 셀프서비스) ──────────────────────────

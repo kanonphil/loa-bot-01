@@ -4178,9 +4178,80 @@ a.rank-row:hover {
   border-color: var(--ok);
 }
 
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+.pager-page {
+  color: var(--text-muted);
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── 관리자 (레이드/카테고리/난이도/직업 CRUD) ─────────────── */
 
 .admin-card { max-width: 760px; }
+.admin-card-wide { max-width: 900px; }
+
+.admin-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.admin-class-search {
+  max-width: 320px;
+  margin-bottom: 14px;
+}
+
+.admin-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.admin-chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  font-size: 13px;
+}
+.admin-chip-item.is-support { border-color: var(--accent-dim); }
+.admin-chip-item[hidden] { display: none; }
+
+.admin-chip-label em {
+  font-style: normal;
+  color: var(--accent);
+  font-size: 11px;
+  margin-left: 2px;
+}
+
+.admin-chip-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+}
+.admin-chip-delete:hover { color: var(--danger); background: var(--danger-soft); }
 
 .admin-error {
   margin: 12px 0;

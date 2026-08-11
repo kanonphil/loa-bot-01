@@ -2,11 +2,16 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
-<h1>레이드 관리</h1>
-<p class="settings-desc">
-  디스코드 <code>/관리</code> 명령어와 같은 내용을 다룹니다. 여기서 바꾼 내용은 레이드체크·공대개설
-  등 사이트 전체와 디스코드 봇에 곧바로 반영됩니다.
-</p>
+<div class="admin-page-header">
+  <div>
+    <h1>레이드 관리</h1>
+    <p class="settings-desc">
+      디스코드 <code>/관리</code> 명령어와 같은 내용을 다룹니다. 여기서 바꾼 내용은 레이드체크·공대개설
+      등 사이트 전체와 디스코드 봇에 곧바로 반영됩니다.
+    </p>
+  </div>
+  <a href="/admin/classes" class="admin-toggle-link">직업 관리 &rarr;</a>
+</div>
 
 {% if error %}
 <p class="admin-error">{{ error }}</p>
@@ -14,7 +19,7 @@
 
 {% call ui.toolbar() %}
   {% for key, label in tabs %}
-  {% set count = {"categories": categories | length, "raids": raids | length, "difficulties": (raids[selected_raid].difficulties | length) if selected_raid else none, "classes": job_classes | length}[key] %}
+  {% set count = {"categories": categories | length, "raids": raids | length, "difficulties": (raids[selected_raid].difficulties | length) if selected_raid else none}[key] %}
   {{ ui.filter_link(label, "/admin/raids?tab=" ~ key, key == tab, count) }}
   {% endfor %}
 {% endcall %}
@@ -149,32 +154,6 @@
     <button type="submit" class="settings-toggle-btn">추가</button>
   </form>
   {% endif %}
-</div>
-
-{% elif tab == "classes" %}
-<div class="settings-card admin-card">
-  {% if job_classes %}
-  <ul class="admin-list">
-    {% for jc in job_classes %}
-    <li class="admin-row">
-      <span class="admin-row-name">{{ jc.name }} {% if jc.is_support %}{{ ui.chip("서포터", "accent") }}{% endif %}</span>
-      <span class="admin-row-actions">
-        <form method="post" action="/admin/raids/classes/delete" onsubmit="return confirm('{{ jc.name }}을(를) 삭제할까요?');">
-          <input type="hidden" name="name" value="{{ jc.name }}">
-          <button type="submit" class="admin-danger-link">삭제</button>
-        </form>
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="settings-desc">등록된 직업이 없습니다.</p>
-  {% endif %}
-  <form method="post" action="/admin/raids/classes/add" class="settings-filter-add">
-    <input type="text" name="name" placeholder="직업명" required class="settings-select">
-    <label class="settings-check"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
-    <button type="submit" class="settings-toggle-btn">추가</button>
-  </form>
 </div>
 {% endif %}
 </div>
