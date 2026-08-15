@@ -229,13 +229,13 @@
   {% endif %}
 </div>
 <script src="/static/flatpickr.min.js"></script>
-<script src="/static/party-datetime.js"></script>
+<script src="/static/party-datetime.js?v={{ static_version }}"></script>
 <script>
   initPartyDatetimePicker("#reschedule-datetime-input");
 </script>
 {% endif %}
 <div class="party-member-popover" id="party-member-popover"></div>
-<script src="/static/party-member-card.js"></script>
+<script src="/static/party-member-card.js?v={{ static_version }}"></script>
 </div>
 {% endif %}
 {% endblock %}

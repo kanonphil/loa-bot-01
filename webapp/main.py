@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -69,6 +70,10 @@ app = FastAPI(title="로아봇 웹", lifespan=lifespan)
 
 templates.env.globals["get_guild_name"] = guild_info.get_name
 templates.env.globals["get_guild_icon_url"] = guild_info.get_icon_url
+# 정적 파일(CSS/JS) 캐시 무효화용 — 프로세스 시작 시각을 쿼리스트링에 붙인다.
+# 이게 없으면 CSS를 고쳐서 재배포해도 브라우저/Cloudflare가 예전 파일을 계속
+# 캐시해서, 실제로는 반영됐는데 사용자 눈에는 안 바뀐 것처럼 보이는 문제가 있었다.
+templates.env.globals["static_version"] = str(int(time.time()))
 
 app.add_middleware(
     SessionMiddleware,
