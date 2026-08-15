@@ -135,6 +135,16 @@ def test_admin_can_reopen_after_close(client, fake_bot):
     assert (asyncio.run(db.get_party("999")))["status"] == "recruiting"
 
 
+def test_admin_can_clear_party_they_do_not_lead(client, fake_bot):
+    resp = client.post(
+        "/api/internal/parties/999/clear", json={"discord_id": ADMIN_ID}, headers=HEADERS
+    )
+    body = resp.json()
+    assert body["success"] is True
+    assert body["cleared_count"] == 2
+    assert (asyncio.run(db.get_party("999")))["status"] == "disbanded"
+
+
 # ── 클리어 되돌리기 (관리자 전용) ────────────────────────────────
 
 def test_revert_clear_restores_status_and_completions(client, fake_bot):

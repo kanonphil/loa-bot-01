@@ -253,9 +253,10 @@ async def _reopen_party_core(bot: discord.Client, message_id: str, discord_id: s
 
 async def _clear_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
     """클리어 처리(레이드 체크 자동완료 + 파티 종료) — 디스코드 관리 패널과 웹 API가 공유.
+    관리자는 파티장이 아니어도 가능(파티장이 자리를 비웠거나 놓친 경우 대응).
     반환: {"success", "reason", "cleared_count"}"""
     party = await db.get_party(message_id)
-    err = _require_leader(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
     if party["status"] == "disbanded":

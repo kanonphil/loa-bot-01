@@ -51,8 +51,26 @@ def test_admin_sees_leader_panel_on_party_they_do_not_lead(client, monkeypatch):
     assert resp.status_code == 200
     assert "파티장 관리" in resp.text
     assert "관리자 권한으로 보는 중" in resp.text
-    assert ">클리어<" not in resp.text  # 클리어/취소는 관리자 대행 시 숨김
-    assert "파티 취소" not in resp.text
+    assert ">클리어<" in resp.text  # 클리어는 관리자도 씀(파티장이 놓친 경우 대응)
+    assert "파티 취소" not in resp.text  # 취소는 아직 관리자 범위 밖 — 의도적으로 숨김
+
+
+def test_admin_can_clear_party_via_leader_panel_route(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
+    with respx.mock:
+        log_in(client, discord_id="999")
+        clear_route = respx.post("http://bot-server.internal/api/internal/parties/p1/clear").mock(
+            return_value=httpx.Response(200, json={"success": True, "cleared_count": 1})
+        )
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=DISBANDED_PARTY))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+
+        resp = client.post("/parties/p1/clear")
+
+    assert resp.status_code == 303
+    assert clear_route.called
+    import json as _json
+    assert _json.loads(clear_route.calls[0].request.content)["discord_id"] == "999"
 
 
 def test_non_admin_outsider_does_not_see_leader_panel(client, monkeypatch):

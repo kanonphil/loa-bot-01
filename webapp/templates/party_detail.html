@@ -190,11 +190,9 @@
     </form>
     {% endif %}
 
-    {% if not viewing_as_admin %}
     <form method="post" action="/parties/{{ party.message_id }}/clear">
       <button type="submit" class="leader-btn leader-btn-success">클리어</button>
     </form>
-    {% endif %}
   </div>
 
   {% if other_members %}

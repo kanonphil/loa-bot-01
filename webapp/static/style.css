@@ -4324,7 +4324,12 @@ select.settings-select {
   z-index: 30;
   top: calc(100% + 4px);
   left: 0;
-  right: 0;
+  /* 트리거는 선택된 값 하나 기준으로 좁게 잡히는데, 목록엔 그보다 긴 다른 옵션이
+     있을 수 있다 — 목록은 트리거 폭 이상, 내용이 필요로 하면 그보다 넓게(상한선까지)
+     펼쳐지게 해서 다른 옵션 텍스트가 잘리지 않게 한다. */
+  min-width: 100%;
+  width: max-content;
+  max-width: min(360px, 90vw);
   max-height: 280px;
   overflow-y: auto;
   margin: 0;
