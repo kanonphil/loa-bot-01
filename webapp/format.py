@@ -118,7 +118,7 @@ def party_view(party: dict, now: datetime | None = None) -> dict:
     if status == "recruiting":
         tone, status_label = ("accent", "모집중")
     elif status == "full":
-        tone, status_label = ("ok", "파티완성")
+        tone, status_label = ("warn", "파티완성")  # 이력 화면의 "클리어"(ok, 초록)와 같은 상태 표기를 유지
     else:
         tone, status_label = ("", "마감")
     return {

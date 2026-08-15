@@ -45,7 +45,7 @@
     <div class="calendar-week calendar-week-single">
       {% for d in week_days %}
       <div class="calendar-cell{% if d.is_today %} today{% endif %}">
-        <span class="calendar-day-number">{{ d.month }}/{{ d.day }}</span>
+        <span class="calendar-day-number">{% if d.show_month %}{{ d.month }}/{{ d.day }}{% else %}{{ d.day }}{% endif %}</span>
         <div class="calendar-party-list">{{ render_parties(d.parties) }}</div>
       </div>
       {% endfor %}

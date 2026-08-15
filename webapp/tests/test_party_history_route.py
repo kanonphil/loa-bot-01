@@ -66,7 +66,7 @@ def test_history_page_shows_next_button_and_forwards_offset(client):
 
     assert 'href="/parties/history?page=2"' in resp.text
     assert route.calls[0].request.url.params["offset"] == "0"
-    assert route.calls[0].request.url.params["limit"] == "20"
+    assert route.calls[0].request.url.params["limit"] == "10"
 
 
 def test_history_page_2_forwards_offset_and_shows_prev(client):
@@ -78,4 +78,4 @@ def test_history_page_2_forwards_offset_and_shows_prev(client):
         resp = client.get("/parties/history?page=2")
 
     assert 'href="/parties/history?page=1"' in resp.text
-    assert route.calls[0].request.url.params["offset"] == "20"
+    assert route.calls[0].request.url.params["offset"] == "10"

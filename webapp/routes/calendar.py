@@ -123,6 +123,9 @@ async def calendar_view(
                     "date": key,
                     "day": d.day,
                     "month": d.month,
+                    # 헤더에 이미 월이 나와 있어(예: "8월 12일 – 8월 18일") 칸마다 "8/"을
+                    # 반복하면 불필요하게 길어진다 — 주 첫날과 월이 바뀌는 날에만 붙인다.
+                    "show_month": i == 0 or d.day == 1,
                     "is_today": key == today_key,
                     "parties": parties_by_date.get(key, []),
                 }

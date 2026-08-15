@@ -105,7 +105,7 @@ def test_party_view_full():
     view = party_view(_party(slots=slots, status="full"), now=NOW)
     assert view["is_full"] is True
     assert view["pct"] == 100
-    assert (view["status_label"], view["status_tone"]) == ("파티완성", "ok")
+    assert (view["status_label"], view["status_tone"]) == ("파티완성", "warn")
 
 
 def test_party_view_closed():

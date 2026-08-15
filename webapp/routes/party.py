@@ -30,7 +30,7 @@ def _max_item_level(characters: list[dict]) -> float:
 
 _HISTORY_STATUS = {
     "recruiting": ("모집중", "accent"),
-    "full": ("파티완성", "ok"),
+    "full": ("파티완성", "warn"),  # "클리어"(ok, 초록)와 구분되게 골드로 — 둘 다 초록이면 구분이 어려웠다
     "closed": ("마감", ""),
     "disbanded": ("클리어", "ok"),
     "cancelled": ("취소", "danger"),
@@ -99,7 +99,7 @@ async def party_list(
     )
 
 
-_HISTORY_PAGE_SIZE = 20
+_HISTORY_PAGE_SIZE = 10
 
 
 @router.get("/parties/history")
