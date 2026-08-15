@@ -14,8 +14,10 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse
 
+from webapp import config
 from webapp.auth.dependencies import require_admin
 from webapp.clients import bot_client
+from webapp.format import party_view
 from webapp.templating import templates
 
 router = APIRouter()
@@ -200,3 +202,40 @@ async def add_class(
 async def delete_class(name: str = Form(...), user: dict = Depends(require_admin)):
     result = await bot_client.admin_delete_class(user["discord_id"], name)
     return _redirect("직업을 삭제하지 못했습니다.", result, "/admin/classes")
+
+
+# ── 공대 관리 (진행 중 + 종료됨 전체 조회, 액션은 각 공대 상세 페이지에서) ──
+# 강제 마감/재개/강퇴/위임/일정변경 버튼은 여기 새로 안 만든다 — /parties/{id}
+# 상세 페이지의 "파티장 관리" 패널이 관리자에게도 그대로 열리므로(_detail_context의
+# is_leader가 관리자를 포함하도록 바뀜), 이 목록은 "찾아서 들어가는" 용도로 충분하다.
+# 클리어 되돌리기만 관리자 전용이라 상세 페이지에 별도 패널로 있다.
+
+def _closed_status_view(entry: dict) -> dict:
+    label, tone = ("클리어", "ok") if entry["status"] == "disbanded" else (entry["status"], "")
+    leader_slot = next((s for s in entry.get("slots") or [] if s["discord_id"] == entry["leader_id"]), None)
+    return {**entry, "status_label": label, "status_tone": tone, "leader_character_name": leader_slot["character_name"] if leader_slot else None}
+
+
+@router.get("/admin/parties")
+async def admin_parties_page(
+    request: Request, tab: str = "open", user: dict = Depends(require_admin),
+):
+    if tab not in ("open", "closed"):
+        tab = "open"
+    result = await bot_client.admin_list_parties(config.DISCORD_GUILD_ID)
+    open_parties = [party_view(p) for p in result["open"]]
+    closed_parties = [_closed_status_view(p) for p in result["closed"]]
+    open_parties.sort(key=lambda p: (p.get("scheduled_datetime") is None, p.get("scheduled_datetime") or ""))
+    closed_parties.sort(key=lambda p: p.get("created_at") or "", reverse=True)
+
+    return templates.TemplateResponse(
+        request,
+        "admin_parties.html",
+        {
+            "user": user,
+            "active": "admin_parties",
+            "tab": tab,
+            "open_parties": open_parties,
+            "closed_parties": closed_parties,
+        },
+    )

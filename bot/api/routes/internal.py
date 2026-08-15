@@ -804,3 +804,49 @@ async def admin_delete_class(body: AdminJobClassNameBody):
   removed = await db.remove_job_class(body.name)
   await raids_module.reload()
   return {"success": removed}
+
+
+# ── 관리자 공대 관리 ─────────────────────────────────────────
+# 강제 마감/재개/강퇴/파티장위임/일정변경은 새 라우트를 안 만든다 — bot/ui/views.py의
+# _require_leader_or_admin이 기존 리더 전용 라우트(/parties/{id}/close 등)에서
+# discord_id가 ADMIN_DISCORD_IDS면 리더 검증을 통과시키므로, 웹앱이 관리자의
+# discord_id로 그 라우트들을 그대로 호출하면 된다. 여기는 그 방식으로 못 하는
+# 두 가지만 추가한다: 전체 목록 조회(리더 전용 라우트엔 없음)와 클리어 되돌리기
+# (파티장에게는 의도적으로 안 주는 관리자 전용 액션).
+
+@router.get("/admin/parties")
+async def admin_list_parties(guild_id: str):
+  """진행 중(모집중/파티완성/마감) + 종료됨(클리어) 파티 전체 — 관리자 목록 화면용.
+  종료됨 쪽은 아직 살아있는(이번 주) 파티와 주간 리셋으로 이미 purge된 이력을
+  합쳐서 주되, purge된 쪽은 channel_id가 없어(party_history엔 저장 안 함)
+  is_live=False로 구분해 화면에서 "되돌리기" 버튼을 숨길 수 있게 한다."""
+  open_parties = await db.get_guild_parties(guild_id)
+  open_out = []
+  for p in open_parties:
+    slots = await db.get_party_slots(p["message_id"])
+    open_out.append({**p, "slots": slots})
+
+  closed_parties = await db.get_disbanded_parties(guild_id, limit=100)
+  closed_out = []
+  for p in closed_parties:
+    is_live = p.get("channel_id") is not None
+    # purge된 이력은 party_slots가 이미 지워져 있어(슬롯을 조회해도 항상 빈 배열) —
+    # 아직 살아있는 것만 조회한다.
+    slots = await db.get_party_slots(p["message_id"]) if is_live else []
+    closed_out.append({**p, "slots": slots, "is_live": is_live})
+
+  return {"open": open_out, "closed": closed_out}
+
+
+class AdminPartyActionBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/admin/parties/{message_id}/revert-clear")
+async def admin_revert_clear(message_id: str, body: AdminPartyActionBody):
+  """클리어를 되돌린다 — 파티장도 못 쓰는 관리자 전용(bot/ui/views.py의
+  _admin_revert_clear_core 문서 참고)."""
+  from bot.api import bot_ref
+  from bot.ui.views import _admin_revert_clear_core
+
+  return await _admin_revert_clear_core(bot_ref.get_bot(), message_id, body.discord_id)

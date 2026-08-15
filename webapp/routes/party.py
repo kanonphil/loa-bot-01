@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse
 
 from webapp import config
-from webapp.auth.dependencies import get_current_user
+from webapp.auth.dependencies import get_current_user, require_admin
 from webapp.clients import bot_client
 from webapp.format import party_view
 from webapp.raids import picker_groups
@@ -194,13 +194,18 @@ async def create_party_submit(
     return RedirectResponse(f"/parties/{message_id}", status_code=303)
 
 
-async def _detail_context(message_id: str, discord_id: str) -> dict:
+async def _detail_context(message_id: str, discord_id: str, is_admin: bool = False) -> dict:
     party = await bot_client.get_party(message_id)
     if not party:
         return {"party": None}
 
     joined = any(s["discord_id"] == discord_id for s in party["slots"])
-    is_leader = party["leader_id"] == discord_id
+    is_actual_leader = party["leader_id"] == discord_id
+    # 관리자는 파티장이 아니어도 관리 패널을 쓸 수 있어야 한다(bot 쪽
+    # _require_leader_or_admin과 짝) — is_leader를 느슨하게 확장하되, 템플릿에서
+    # "당신이 파티장" 대신 "관리자 권한으로 보는 중"이라고 구분해서 보여준다.
+    is_leader = is_actual_leader or is_admin
+    viewing_as_admin = is_admin and not is_actual_leader
     other_members = [s for s in party["slots"] if s["discord_id"] != discord_id]
     my_slot = next((s for s in party["slots"] if s["discord_id"] == discord_id), None)
     can_switch_to_support = False
@@ -267,6 +272,7 @@ async def _detail_context(message_id: str, discord_id: str) -> dict:
         "party": party,
         "joined": joined,
         "is_leader": is_leader,
+        "viewing_as_admin": viewing_as_admin,
         "other_members": other_members,
         "my_slot": my_slot,
         "can_switch_to_support": can_switch_to_support,
@@ -286,7 +292,7 @@ async def party_detail(
     cancelled: bool = False,
     user: dict = Depends(get_current_user),
 ):
-    ctx = await _detail_context(message_id, user["discord_id"])
+    ctx = await _detail_context(message_id, user["discord_id"], is_admin=user.get("is_admin", False))
     if join_error:
         action_result = {"success": False, "reason": join_error}
     elif cancelled:
@@ -449,3 +455,13 @@ async def transfer_leader(
         message_id, user["discord_id"], new_leader_discord_id
     )
     return _redirect_with_result(message_id, result, "파티장을 위임하지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/admin-revert-clear")
+async def admin_revert_clear(
+    request: Request, message_id: str, user: dict = Depends(require_admin),
+):
+    """클리어 취소(되돌리기) — 파티장도 못 쓰는 관리자 전용 액션이라 require_admin으로
+    이 경로만 따로 막는다(다른 파티 액션들은 관리자·파티장 겸용이라 get_current_user)."""
+    result = await bot_client.admin_revert_clear(message_id, user["discord_id"])
+    return _redirect_with_result(message_id, result, "되돌리지 못했습니다.")

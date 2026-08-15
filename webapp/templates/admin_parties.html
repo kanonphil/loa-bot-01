@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<h1>공대 관리</h1>
+<p class="settings-desc">
+  길드 전체 공대를 파티장 없이도 관리할 수 있습니다. 목록에서 공대를 눌러 상세 페이지로
+  들어가면 마감/재개/강제퇴장/파티장위임/일정변경을 그대로 쓸 수 있고, 종료된(클리어)
+  공대는 실수로 처리했을 때 되돌리는 기능도 거기 있습니다.
+</p>
+
+{% call ui.toolbar() %}
+  {{ ui.filter_link("진행 중", "/admin/parties?tab=open", tab == "open", open_parties | length) }}
+  {{ ui.filter_link("종료됨", "/admin/parties?tab=closed", tab == "closed", closed_parties | length) }}
+{% endcall %}
+
+{% if tab == "open" %}
+  {% if not open_parties %}
+  {{ ui.empty("진행 중인 공대가 없습니다", icon="⚔️") }}
+  {% else %}
+  <div class="ui-list">
+    {% for p in open_parties %}
+    {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.status_tone) %}
+      <div class="ui-row">
+        <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
+        {{ ui.chip(p.proficiency) }}
+        <span class="ui-spacer"></span>
+        {{ ui.chip(p.status_label, p.status_tone) }}
+      </div>
+      <div class="ui-row">
+        <span class="ui-card-meta">{{ p.schedule.when }}</span>
+        <span class="ui-spacer"></span>
+        <span class="ui-card-meta">최소 {{ p.min_level }}</span>
+      </div>
+      {{ ui.slotbar(p.slots, p.total_slots, p.pct) }}
+    {% endcall %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+{% else %}
+  {% if not closed_parties %}
+  {{ ui.empty("종료된 공대 이력이 없습니다", icon="🗂️") }}
+  {% else %}
+  <ul class="admin-list">
+    {% for p in closed_parties %}
+    <li class="admin-row">
+      <span class="admin-row-name">
+        {% if p.is_live %}<a href="/parties/{{ p.message_id }}">{{ p.raid_name }} {{ p.difficulty }}</a>{% else %}{{ p.raid_name }} {{ p.difficulty }}{% endif %}
+        <span class="admin-row-sub">
+          {{ p.leader_character_name or "파티장 정보 없음" }} · {{ p.scheduled_time or "일정 미정" }}
+        </span>
+      </span>
+      <span class="admin-row-actions">
+        {{ ui.chip(p.status_label, p.status_tone) }}
+        {% if p.is_live %}{{ ui.chip("되돌리기 가능", "accent") }}{% else %}{{ ui.chip("기록만 남음", "") }}{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endif %}
+</div>
+{% endblock %}

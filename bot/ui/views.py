@@ -192,10 +192,36 @@ def _require_leader(party: dict | None, discord_id: str) -> str | None:
     return None
 
 
+def _require_admin(discord_id: str) -> str | None:
+    """discord_id가 ADMIN_DISCORD_IDS에 없으면 에러 사유 문자열, 문제없으면 None.
+    bot/api/routes/internal.py의 동명 함수와 같은 검증 — 관리자 전용 액션(클리어
+    되돌리기)에 쓴다."""
+    import config
+    if discord_id not in config.ADMIN_DISCORD_IDS:
+        return "관리자 권한이 없습니다."
+    return None
+
+
+def _require_leader_or_admin(party: dict | None, discord_id: str) -> str | None:
+    """파티장이거나 관리자(ADMIN_DISCORD_IDS)면 통과 — 관리자가 파티장 없이도
+    강제 마감/재개/강퇴/위임/일정변경을 대신할 수 있어야 해서 _require_leader를
+    느슨하게 확장한 버전. 클리어/취소/클리어되돌리기처럼 더 신중해야 하는
+    액션에는 안 쓴다(각각 리더 전용 또는 관리자 전용으로 따로 둔다)."""
+    if not party:
+        return "파티를 찾을 수 없습니다."
+    if party["leader_id"] == discord_id:
+        return None
+    import config
+    if discord_id in config.ADMIN_DISCORD_IDS:
+        return None
+    return "파티장만 사용할 수 있습니다."
+
+
 async def _close_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
-    """모집 마감 — 디스코드 관리 패널과 웹 API가 공유."""
+    """모집 마감 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도
+    가능(파티장 없이 개입해야 하는 경우 대응)."""
     party = await db.get_party(message_id)
-    err = _require_leader(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
     if party["status"] in ("closed", "disbanded"):
@@ -209,9 +235,9 @@ async def _close_party_core(bot: discord.Client, message_id: str, discord_id: st
 
 
 async def _reopen_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
-    """모집 재개 — 디스코드 관리 패널과 웹 API가 공유."""
+    """모집 재개 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
-    err = _require_leader(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
     if party["status"] != "closed":
@@ -262,6 +288,54 @@ async def _clear_party_core(bot: discord.Client, message_id: str, discord_id: st
     return {"success": True, "reason": None, "cleared_count": count}
 
 
+async def _admin_revert_clear_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+    """클리어 취소(되돌리기) — 관리자 전용. 실수로 클리어를 눌렀을 때 상태를 파티완성/
+    모집중으로 되돌리고, 같이 기록된 파티원 전체의 레이드 완료 체크도 취소한다
+    (상태만 되돌리면 "모집중"인데 이번 주 완료로 체크된 모순 상태가 남는다).
+
+    의도적으로 파티장은 못 쓰게 막고 관리자 전용으로 뒀다(_require_admin, 파티장도
+    되는 _require_leader_or_admin이 아님) — 이미 끝난 클리어를 당사자가 스스로
+    되돌리게 하면 남용 소지가 있다는 요청에 따른 것.
+
+    주간 리셋으로 이미 party_history로 purge된 파티는(원본 채널 정보까지 없어져)
+    되돌릴 수 없다 — get_party가 None을 반환하므로 여기서 걸러진다."""
+    err = _require_admin(discord_id)
+    if err:
+        return {"success": False, "reason": err}
+
+    party = await db.get_party(message_id)
+    if not party:
+        return {"success": False, "reason": "이미 정리된 파티라 되돌릴 수 없습니다."}
+    if party["status"] != "disbanded":
+        return {"success": False, "reason": "클리어 상태가 아닙니다."}
+
+    slots = await db.get_party_slots(message_id)
+    new_status = await db.revert_disbanded_party(message_id)
+    if not new_status:
+        return {"success": False, "reason": "되돌리지 못했습니다."}
+
+    week = (
+        db.get_week_key_for_dt(party["scheduled_datetime"])
+        if party.get("scheduled_datetime") else db.get_week_key()
+    )
+    for s in slots:
+        await db.remove_completion(
+            s["discord_id"], s["character_name"], party["raid_name"], party["difficulty"], week
+        )
+
+    updated = await db.get_party(message_id)
+    if bot and updated:
+        await _refresh_party_embed_with_reserved(bot, updated)
+        try:
+            channel = bot.get_channel(int(updated["channel_id"])) or await bot.fetch_channel(int(updated["channel_id"]))
+            await channel.edit(archived=False, locked=False)
+            await channel.send("↩️ 관리자가 클리어 처리를 취소했습니다. 파티가 다시 진행됩니다.")
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+    return {"success": True, "reason": None, "new_status": new_status}
+
+
 async def _cancel_party_core(
     bot: discord.Client, message_id: str, discord_id: str, reason: str | None
 ) -> dict:
@@ -309,9 +383,10 @@ async def _kick_member_core(
     만석이었다가 빈자리가 생겨도 대기열에 알림이 안 가는 차이가 있었다(디스코드는
     _refresh_party 안에서 처리하고 있었음) — leave와 동일하게
     _refresh_party_embed_and_announce로 통일해서 양쪽 다 알림이 가게 고쳤다.
-    이미 종료된 파티에서 강제 퇴장을 막는 것도 디스코드에만 있던 체크라 같이 맞췄다."""
+    이미 종료된 파티에서 강제 퇴장을 막는 것도 디스코드에만 있던 체크라 같이 맞췄다.
+    관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
-    err = _require_leader(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
     if party["status"] == "disbanded":
@@ -345,9 +420,10 @@ async def _reschedule_party_core(
     변환된 값을 넘겨받는다.
 
     통합 전엔 디스코드만 파티원(리더 제외)에게 일정 변경 DM을 보내고 웹은 안 보냈다 —
-    양쪽 다 DM이 가도록 맞췄다."""
+    양쪽 다 DM이 가도록 맞췄다. 관리자는 파티장이 아니어도 가능(파티장이 일정 변경을
+    안 챙기는 경우 관리자가 대신 조정할 수 있어야 한다는 요청으로 추가)."""
     party = await db.get_party(message_id)
-    err = _require_leader(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
     if party["status"] == "disbanded":
@@ -391,9 +467,9 @@ async def _reschedule_party_core(
 async def _transfer_leader_core(
     bot: discord.Client, message_id: str, discord_id: str, new_leader_discord_id: str
 ) -> dict:
-    """파티장 위임 — 디스코드 관리 패널과 웹 API가 공유."""
+    """파티장 위임 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
-    err = _require_leader(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
 

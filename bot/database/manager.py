@@ -1630,6 +1630,24 @@ async def reopen_party(message_id: str) -> None:
         await db.commit()
 
 
+async def revert_disbanded_party(message_id: str) -> str | None:
+    """클리어(disbanded) 취소 — 관리자 전용 "되돌리기"에서만 쓴다. reopen_party는
+    closed에서만 동작하므로(리더의 정상 재개용) 별도 함수로 둔다 — reopen_party의
+    가드를 풀어 disbanded도 받아주면, 리더가 실수로 그 경로를 타서 완료 체크
+    취소 같은 부수효과 없이 상태만 되돌리는 불일치가 생길 수 있다."""
+    party = await get_party(message_id)
+    if not party or party["status"] != "disbanded":
+        return None
+    slots = await get_party_slots(message_id)
+    new_status = "full" if len(slots) >= party["total_slots"] else "recruiting"
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE parties SET status=? WHERE message_id=?", (new_status, message_id)
+        )
+        await db.commit()
+    return new_status
+
+
 async def get_user_parties(discord_id: str) -> list[dict]:
     """특정 유저가 참여 중인 활성 파티 목록."""
     async with aiosqlite.connect(DB_PATH) as db:

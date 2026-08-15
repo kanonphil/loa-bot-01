@@ -164,9 +164,20 @@
 <p class="party-cannot-join">{{ eligibility.reason }}</p>
 {% endif %}
 
-{% if is_leader and party.status != "disbanded" %}
+{% if party.status == "disbanded" %}
+  {% if user.is_admin %}
+  <div class="leader-panel">
+    <h2 class="leader-panel-title">관리자</h2>
+    <p class="settings-desc">클리어 처리를 실수로 눌렀다면 되돌릴 수 있습니다. 파티원 전체의 이번 주 완료 체크도 함께 취소됩니다.</p>
+    <form method="post" action="/parties/{{ party.message_id }}/admin-revert-clear" onsubmit="return confirm('클리어를 취소하고 파티를 되돌릴까요? 파티원들의 이번 주 완료 체크도 함께 취소됩니다.');">
+      <button type="submit" class="leader-btn">클리어 되돌리기</button>
+    </form>
+  </div>
+  {% endif %}
+{% elif is_leader %}
 <div class="leader-panel">
   <h2 class="leader-panel-title">파티장 관리</h2>
+  {% if viewing_as_admin %}<p class="settings-desc">관리자 권한으로 보는 중입니다.</p>{% endif %}
 
   <div class="leader-actions-row">
     {% if party.status == "closed" %}
@@ -179,9 +190,11 @@
     </form>
     {% endif %}
 
+    {% if not viewing_as_admin %}
     <form method="post" action="/parties/{{ party.message_id }}/clear">
       <button type="submit" class="leader-btn leader-btn-success">클리어</button>
     </form>
+    {% endif %}
   </div>
 
   {% if other_members %}
@@ -210,10 +223,12 @@
     <button type="submit" class="leader-btn">일정 변경</button>
   </form>
 
+  {% if not viewing_as_admin %}
   <form method="post" action="/parties/{{ party.message_id }}/cancel" class="leader-form">
     <input type="text" name="reason" maxlength="200" placeholder="취소 사유 (선택)">
     <button type="submit" class="leader-btn leader-btn-danger">파티 취소</button>
   </form>
+  {% endif %}
 </div>
 <script src="/static/flatpickr.min.js"></script>
 <script src="/static/party-datetime.js"></script>

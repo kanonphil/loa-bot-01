@@ -584,3 +584,31 @@ async def admin_add_class(discord_id: str, name: str, is_support: bool) -> dict:
 
 async def admin_delete_class(discord_id: str, name: str) -> dict:
     return await _admin_post("classes/delete", discord_id, name=name)
+
+
+# ── 관리자 공대 관리 ─────────────────────────────────────────
+# 강제 마감/재개/강퇴/파티장위임/일정변경은 새 함수를 안 만든다 — 위쪽의 기존
+# close_party/reopen_party/kick_member/transfer_leader/reschedule_party가
+# discord_id만 관리자 것으로 바꿔 보내면 봇 서버가 그대로 받아준다
+# (bot/ui/views.py의 _require_leader_or_admin).
+
+async def admin_list_parties(guild_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/parties",
+        params={"guild_id": guild_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_revert_clear(message_id: str, discord_id: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/parties/{message_id}/revert-clear",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
