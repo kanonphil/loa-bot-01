@@ -58,6 +58,10 @@ def test_create_form_shows_only_active_raids_and_own_characters(client):
 
     assert resp.status_code == 200
     assert "4막" in resp.text
+    assert "/static/themed-select.js" in resp.text
+    assert resp.text.count('class="js-themed-select"') == 3  # 숙련도/캐릭터/역할 select 전부
+    assert 'id="character-name-select" class="js-themed-select"' in resp.text
+    assert 'id="role-select" class="js-themed-select"' in resp.text
     assert "💤 비활성" not in resp.text
     assert "숙련" in resp.text
     assert "트라이" in resp.text

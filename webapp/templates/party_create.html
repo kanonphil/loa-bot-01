@@ -79,7 +79,7 @@
 
       <label>
         숙련도
-        <select name="proficiency" required>
+        <select name="proficiency" required class="js-themed-select">
           {% for p in proficiency_options %}
           <option value="{{ p.value }}" title="{{ p.description }}">{{ p.label }}</option>
           {% endfor %}
@@ -98,7 +98,7 @@
 
       <label>
         참여할 캐릭터 (선택 — 나중에 직접 참여해도 됩니다)
-        <select name="character_name" id="character-name-select">
+        <select name="character_name" id="character-name-select" class="js-themed-select">
           <option value="">선택 안 함</option>
           {% for c in characters %}
           <option value="{{ c.character_name }}">{{ c.character_name }} ({{ c.character_class }} · {{ c.item_level }})</option>
@@ -108,7 +108,7 @@
 
       <label>
         역할
-        <select name="role" id="role-select">
+        <select name="role" id="role-select" class="js-themed-select">
           <option value="dps">딜러</option>
           <option value="support">서포터</option>
         </select>
@@ -201,6 +201,9 @@
     } else if (isSupport) {
       roleSelect.value = "support";
     }
+    // .value를 스크립트로 바꾸는 것만으로는 네이티브 change 이벤트가 안 붙는다 —
+    // themed-select.js가 이 이벤트로 트리거 라벨을 다시 그리므로 직접 쏴준다.
+    roleSelect.dispatchEvent(new Event("change"));
   }
   characterSelect.addEventListener("change", updateRoleOptions);
   updateRoleOptions();
@@ -214,6 +217,7 @@
 
   applyFilters();
 </script>
+<script src="/static/themed-select.js"></script>
 <script src="/static/flatpickr.min.js"></script>
 <script src="/static/party-datetime.js"></script>
 <script>
