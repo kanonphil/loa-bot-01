@@ -115,7 +115,7 @@
       </label>
       <label class="admin-field">
         <span class="admin-field-label">카테고리</span>
-        <select name="category" required class="settings-select">
+        <select name="category" required class="settings-select js-themed-select">
           {% for c in categories %}
           <option value="{{ c.name }}">{{ c.name }}</option>
           {% endfor %}
@@ -133,7 +133,7 @@
   <form method="get" action="/admin/raids" class="admin-field admin-raid-picker">
     <input type="hidden" name="tab" value="difficulties">
     <span class="admin-field-label">레이드 선택</span>
-    <select name="raid" class="settings-select" onchange="this.form.submit()">
+    <select name="raid" class="settings-select js-themed-select" onchange="this.form.submit()">
       <option value="">레이드 선택…</option>
       {% for name in raid_names %}
       <option value="{{ name }}" {% if name == selected_raid %}selected{% endif %}>{{ name }}</option>

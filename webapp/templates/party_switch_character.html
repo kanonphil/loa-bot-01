@@ -11,7 +11,7 @@
 
 {% if eligibility.candidates %}
 <form method="post" action="/parties/{{ party.message_id }}/switch" id="switch-form" class="party-switch-form">
-  <select name="character_name" id="switch-character-select" required>
+  <select name="character_name" id="switch-character-select" required class="js-themed-select">
     <option value="" disabled selected>변경할 캐릭터 선택</option>
     {% for c in eligibility.candidates %}
     <option value="{{ c.name }}">

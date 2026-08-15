@@ -91,17 +91,17 @@
 {% elif eligibility and eligibility.can_join %}
   {% if eligibility.qualifying %}
   <form method="post" action="/parties/{{ party.message_id }}/join" class="party-join-form">
-    <select name="character_name" id="join-character-select">
+    <select name="character_name" id="join-character-select" class="js-themed-select">
       {% for q in eligibility.qualifying %}
       <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
       {% endfor %}
     </select>
-    <select name="role" id="join-role-select">
+    <select name="role" id="join-role-select" class="js-themed-select">
       <option value="dps">딜러</option>
       <option value="support">서포터</option>
     </select>
     {% if party_groups %}
-    <select name="party_group" id="join-group-select">
+    <select name="party_group" id="join-group-select" class="js-themed-select">
       {% for g in party_groups %}
       <option value="{{ g.group_number }}" data-has-support="{{ 1 if g.has_support else 0 }}">{{ g.group_number }}파티</option>
       {% endfor %}
@@ -122,6 +122,8 @@
         supportOption.disabled = !isSupport;
         if (isSupport) roleSelect.value = "support";
         else if (roleSelect.value === "support") roleSelect.value = "dps";
+        // .value 대입만으로는 change 이벤트가 안 떠서 themed-select 라벨이 안 바뀐다.
+        roleSelect.dispatchEvent(new Event("change"));
       }
 
       // 서포터로 참여하면, 이미 서포터가 있는 파티를 피해 빈 파티를 먼저 골라준다
@@ -133,7 +135,10 @@
         var openGroup = Array.prototype.find.call(
           groupSelect.options, function (o) { return o.dataset.hasSupport !== "1"; }
         );
-        if (openGroup) groupSelect.value = openGroup.value;
+        if (openGroup) {
+          groupSelect.value = openGroup.value;
+          groupSelect.dispatchEvent(new Event("change"));
+        }
       }
 
       charSelect.addEventListener("change", function () { syncRole(); syncGroup(); });
@@ -181,7 +186,7 @@
 
   {% if other_members %}
   <form method="post" action="/parties/{{ party.message_id }}/kick" class="leader-form">
-    <select name="target_discord_id">
+    <select name="target_discord_id" class="js-themed-select">
       {% for m in other_members %}
       <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
       {% endfor %}
@@ -190,7 +195,7 @@
   </form>
 
   <form method="post" action="/parties/{{ party.message_id }}/transfer-leader" class="leader-form">
-    <select name="new_leader_discord_id">
+    <select name="new_leader_discord_id" class="js-themed-select">
       {% for m in other_members %}
       <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
       {% endfor %}

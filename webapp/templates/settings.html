@@ -53,13 +53,13 @@
   {% endif %}
   {% if raids %}
   <form method="post" action="/notifications/raid-filters/add" class="settings-filter-add">
-    <select name="raid_name" id="filter-raid-select" class="settings-select" required>
+    <select name="raid_name" id="filter-raid-select" class="settings-select js-themed-select" required>
       <option value="" disabled selected>레이드 선택</option>
       {% for name, info in raids.items() %}{% if info.get("is_active", True) %}
       <option value="{{ name }}" data-difficulties="{{ (info.get('difficulties') or {}).keys() | list | join(',') }}">{{ name }}</option>
       {% endif %}{% endfor %}
     </select>
-    <select name="difficulty" id="filter-diff-select" class="settings-select">
+    <select name="difficulty" id="filter-diff-select" class="settings-select js-themed-select">
       <option value="">모든 난이도</option>
     </select>
     <button type="submit" class="settings-toggle-btn">추가</button>
@@ -78,6 +78,7 @@
           o.textContent = d;
           diffSelect.appendChild(o);
         });
+        diffSelect.dispatchEvent(new Event("change"));
       });
     })();
   </script>

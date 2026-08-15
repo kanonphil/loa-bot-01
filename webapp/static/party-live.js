@@ -40,6 +40,7 @@
           oldScript.replaceWith(newScript);
         });
         if (window.applyMarquee) window.applyMarquee();
+        if (window.initThemedSelects) window.initThemedSelects();
       })
       .catch(function () {
         window.location.reload(); // 부분 갱신이 실패하면 기존 동작(전체 새로고침)으로 안전하게 폴백
