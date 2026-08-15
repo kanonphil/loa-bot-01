@@ -1792,9 +1792,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 a.calendar-party:hover {
   border-color: var(--accent);
-  background: var(--accent-dim);
+  background: rgba(53, 214, 196, 0.22);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-1);
+  /* background만으로 표시하면 "오늘" 칸(자체 배경이 --accent-dim)과 겹쳐 안 보이므로,
+     배경색과 무관하게 항상 도드라지는 accent 링을 그림자로 추가한다. */
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-1);
 }
 
 .calendar-party-time {
