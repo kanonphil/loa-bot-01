@@ -828,7 +828,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   outline: none;
 }
 
-.party-join-form button,
+.party-join-form button[type="submit"],
 .party-leave-btn {
   padding: 8px 18px;
   border-radius: 8px;
@@ -841,7 +841,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   transition: filter 0.15s ease;
 }
 
-.party-join-form button:hover,
+.party-join-form button[type="submit"]:hover,
 .party-leave-btn:hover {
   filter: brightness(1.1);
 }
@@ -4362,15 +4362,6 @@ select.settings-select {
 .themed-select-option.is-disabled {
   color: var(--text-muted);
   cursor: not-allowed;
-}
-
-/* 원래 select가 flex:1/width:100% 등으로 옆 버튼과 폭을 나눠 갖던 자리들 —
-   래퍼 div는 기본 flex item 크기 규칙을 안 물려받으므로 같은 폭 규칙을 그대로 옮긴다. */
-.leader-form .themed-select,
-.party-join-form .themed-select,
-.settings-filter-add .themed-select {
-  flex: 1;
-  min-width: 140px;
 }
 
 .party-switch-form .themed-select { max-width: 420px; }
