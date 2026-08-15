@@ -8,9 +8,9 @@
   <span class="calendar-party-badge">{{ p.status_label }}</span>
 {% endset %}
 {% if p.is_active %}
-<a class="calendar-party status-{{ p.status }}" href="/parties/{{ p.message_id }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</a>
+<a class="calendar-party status-{{ p.status }}" href="/parties/{{ p.message_id }}" data-tip="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</a>
 {% else %}
-<div class="calendar-party status-{{ p.status }}" title="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</div>
+<div class="calendar-party status-{{ p.status }}" data-tip="{{ p.raid_name }} {{ p.difficulty }} · {{ p.proficiency }} · {{ p.scheduled_time }}">{{ inner }}</div>
 {% endif %}
 {% endfor %}
 {% endmacro %}
