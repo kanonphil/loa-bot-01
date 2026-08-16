@@ -222,7 +222,7 @@ async def admin_parties_page(
 ):
     if tab not in ("open", "closed"):
         tab = "open"
-    result = await bot_client.admin_list_parties(config.DISCORD_GUILD_ID)
+    result = await bot_client.admin_list_parties(config.DISCORD_GUILD_ID, user["discord_id"])
     open_parties = [party_view(p) for p in result["open"]]
     closed_parties = [_closed_status_view(p) for p in result["closed"]]
     open_parties.sort(key=lambda p: (p.get("scheduled_datetime") is None, p.get("scheduled_datetime") or ""))

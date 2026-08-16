@@ -592,10 +592,10 @@ async def admin_delete_class(discord_id: str, name: str) -> dict:
 # discord_id만 관리자 것으로 바꿔 보내면 봇 서버가 그대로 받아준다
 # (bot/ui/views.py의 _require_leader_or_admin).
 
-async def admin_list_parties(guild_id: str) -> dict:
+async def admin_list_parties(guild_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/admin/parties",
-        params={"guild_id": guild_id},
+        params={"guild_id": guild_id, "discord_id": discord_id},
         headers=_headers(),
         timeout=10,
     )

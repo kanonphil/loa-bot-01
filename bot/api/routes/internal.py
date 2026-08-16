@@ -2,7 +2,7 @@
 웹앱(별도 서버)이 로그인 시 호출하는 내부 전용 API.
 X-Webapp-Key로만 인증하며, 관리자 API(X-API-Key)와는 분리되어 있다.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import config
 from bot.api.auth import verify_webapp_key
@@ -815,11 +815,19 @@ async def admin_delete_class(body: AdminJobClassNameBody):
 # (파티장에게는 의도적으로 안 주는 관리자 전용 액션).
 
 @router.get("/admin/parties")
-async def admin_list_parties(guild_id: str):
+async def admin_list_parties(guild_id: str, discord_id: str):
   """진행 중(모집중/파티완성/마감) + 종료됨(클리어) 파티 전체 — 관리자 목록 화면용.
   종료됨 쪽은 아직 살아있는(이번 주) 파티와 주간 리셋으로 이미 purge된 이력을
   합쳐서 주되, purge된 쪽은 channel_id가 없어(party_history엔 저장 안 함)
-  is_live=False로 구분해 화면에서 "되돌리기" 버튼을 숨길 수 있게 한다."""
+  is_live=False로 구분해 화면에서 "되돌리기" 버튼을 숨길 수 있게 한다.
+  이 섹션의 다른 라우트들과 동일하게, X-Webapp-Key만으로는 부족하고 discord_id가
+  실제 관리자인지도 다시 검증한다. 이 라우트는 (다른 관리자 라우트와 달리) 성공
+  응답 형태가 {"success": ...}가 아니라 {"open": ..., "closed": ...}라서, 거부 시엔
+  같은 형태로 애매하게 얼버무리지 않고 그냥 403으로 명확히 막는다."""
+  err = _require_admin(discord_id)
+  if err:
+    raise HTTPException(status_code=403, detail=err)
+
   open_parties = await db.get_guild_parties(guild_id)
   open_out = []
   for p in open_parties:

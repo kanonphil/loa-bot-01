@@ -224,7 +224,11 @@ def test_admin_list_parties_splits_open_and_closed(client, fake_bot):
     )
     client.post("/api/internal/parties/999/clear", json={"discord_id": LEADER_ID}, headers=HEADERS)
 
-    resp = client.get("/api/internal/admin/parties", params={"guild_id": "1"}, headers=HEADERS)
+    resp = client.get(
+        "/api/internal/admin/parties",
+        params={"guild_id": "1", "discord_id": ADMIN_ID},
+        headers=HEADERS,
+    )
     body = resp.json()
 
     open_ids = {p["message_id"] for p in body["open"]}
@@ -234,3 +238,14 @@ def test_admin_list_parties_splits_open_and_closed(client, fake_bot):
     assert "999" in closed_ids
     assert closed_ids["999"]["is_live"] is True  # 아직 purge 전 — 되돌리기 가능
     assert "slots" in body["open"][0]  # 오픈 쪽엔 슬롯까지 붙어옴(1001은 참여자가 없어 빈 배열)
+
+
+def test_admin_list_parties_rejected_for_non_admin(client, fake_bot):
+    """discord_id가 관리자가 아니면 목록 조회 자체를 거부한다 —
+    X-Webapp-Key만으로는 부족하고 관리자 여부를 서버에서 다시 검증해야 한다."""
+    resp = client.get(
+        "/api/internal/admin/parties",
+        params={"guild_id": "1", "discord_id": OUTSIDER_ID},
+        headers=HEADERS,
+    )
+    assert resp.status_code == 403
