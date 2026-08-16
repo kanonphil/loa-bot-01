@@ -16,6 +16,11 @@
   --text-muted: #82a09d;
   --accent: #35d6c4;
   --accent-dim: #1b4a48;
+  /* 배지/테두리/포커스링 등은 원색 accent를 그대로 쓰되, 꽉 채운 버튼 배경만
+     채도를 낮춘 이 톤을 쓴다 — 순색 청록을 넓은 면적에 채우면 눈이 아프다는
+     피드백으로 추가. 같은 계열(색상은 유지, 채도/명도만 낮춤)이라 버튼과
+     배지/텍스트가 서로 다른 색으로 보이지 않는다. */
+  --accent-btn: #3ea89b;
 
   /* 표면 — panel보다 가라앉은 것(입력칸·트랙 바닥) */
   --sunken: #060d0e;
@@ -400,8 +405,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 }
 
 .account-tab.active {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-btn);
+  border-color: var(--accent-btn);
   color: #fff;
   font-weight: 600;
 }
@@ -483,8 +488,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 }
 
 .raid-card-diff-toggle.done {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-btn);
+  border-color: var(--accent-btn);
   color: #fff;
   font-weight: 600;
 }
@@ -583,7 +588,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   padding: 10px 24px;
   border-radius: 8px;
   border: none;
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   font-size: 14px;
   font-weight: 500;
@@ -833,7 +838,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   padding: 8px 18px;
   border-radius: 8px;
   border: 1px solid transparent;
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   font-size: 14px;
   font-weight: 500;
@@ -945,7 +950,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .party-create-link {
   padding: 8px 16px;
   border-radius: 8px;
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   text-decoration: none;
   font-size: 14px;
@@ -1223,7 +1228,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   padding: 10px 18px;
   border-radius: 8px;
   border: none;
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   font-weight: 500;
   cursor: pointer;
@@ -1298,7 +1303,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   padding: 10px 18px;
   border-radius: 8px;
   border: none;
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   font-weight: 500;
   cursor: pointer;
@@ -1402,7 +1407,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   display: inline-block;
   padding: 10px 22px;
   border-radius: 8px;
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   text-decoration: none;
   font-weight: 500;
@@ -1427,7 +1432,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   display: inline-block;
   margin-top: 16px;
   padding: 12px 24px;
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   text-decoration: none;
   border-radius: 8px;
@@ -1658,7 +1663,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 .calendar-view-btn.is-active {
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
 }
 
@@ -3527,7 +3532,7 @@ a.calendar-party:hover {
 }
 
 .rank-role-btn.is-active {
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
 }
 
@@ -4233,8 +4238,8 @@ select.settings-select {
   height: var(--ctrl-h);
   padding: 0 var(--sp-4);
   border-radius: var(--r-md);
-  border: 1px solid var(--accent);
-  background: var(--accent);
+  border: 1px solid var(--accent-btn);
+  background: var(--accent-btn);
   color: #fff;
   font-size: var(--fs-body);
   font-weight: 650;
@@ -4712,9 +4717,9 @@ a.ui-card:hover {
 .ui-btn {
   display: inline-block;
   padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-btn);
   border-radius: var(--r-md);
-  background: var(--accent);
+  background: var(--accent-btn);
   color: #fff;
   font-family: inherit;
   font-size: var(--fs-body);
@@ -4896,8 +4901,8 @@ a.ui-card:hover {
 }
 .raid-diff:hover { border-color: var(--accent-dim); color: var(--text); }
 .raid-diff[aria-pressed="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-btn);
+  border-color: var(--accent-btn);
   color: #fff;
 }
 
