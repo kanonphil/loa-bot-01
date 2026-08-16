@@ -121,8 +121,8 @@
 </div>
 
 <script>
-  const characterLevels = {{ character_levels_json | safe }};
-  const characterIsSupport = {{ character_is_support_json | safe }};
+  const characterLevels = {{ character_levels | tojson }};
+  const characterIsSupport = {{ character_is_support | tojson }};
 
   const raidInput = document.getElementById("raid-name-input");
   const diffInput = document.getElementById("difficulty-input");

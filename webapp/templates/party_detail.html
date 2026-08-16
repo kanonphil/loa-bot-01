@@ -111,7 +111,7 @@
   </form>
   <script>
     (function () {
-      var isSupportMap = {{ character_is_support_json | safe }};
+      var isSupportMap = {{ character_is_support | tojson }};
       var charSelect = document.getElementById("join-character-select");
       var roleSelect = document.getElementById("join-role-select");
       var groupSelect = document.getElementById("join-group-select");

@@ -155,8 +155,8 @@ async def create_party_form(
             "groups_json": json.dumps(groups, ensure_ascii=False),
             "proficiency_options": proficiency_options,
             "characters": characters,
-            "character_levels_json": json.dumps(character_levels, ensure_ascii=False),
-            "character_is_support_json": json.dumps(character_is_support, ensure_ascii=False),
+            "character_levels": character_levels,
+            "character_is_support": character_is_support,
             "error": error,
         },
     )
@@ -213,15 +213,14 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
         support_classes = set(await bot_client.get_support_classes())
         can_switch_to_support = my_slot["character_class"] in support_classes
     eligibility = None
-    character_is_support_json = "{}"
+    character_is_support = {}
     if not joined and party["status"] != "disbanded":
         eligibility = await bot_client.get_party_eligibility(message_id, discord_id)
         if eligibility and eligibility.get("qualifying"):
             support_classes = set(await bot_client.get_support_classes())
-            character_is_support_json = json.dumps(
-                {q["name"]: q["class"] in support_classes for q in eligibility["qualifying"]},
-                ensure_ascii=False,
-            )
+            character_is_support = {
+                q["name"]: q["class"] in support_classes for q in eligibility["qualifying"]
+            }
 
     raids = await bot_client.get_raids()
     raid_info = raids.get(party["raid_name"], {})
@@ -277,7 +276,7 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
         "my_slot": my_slot,
         "can_switch_to_support": can_switch_to_support,
         "eligibility": eligibility,
-        "character_is_support_json": character_is_support_json,
+        "character_is_support": character_is_support,
         "sub_parties": sub_parties,
         "party_groups": party_groups,
         "all_slots": all_slots,

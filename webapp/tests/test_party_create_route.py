@@ -1,5 +1,6 @@
 """공대 개설(/parties/create) 웹 라우트 검증 — 봇 서버는 respx로 모킹."""
 import json
+import re
 
 import httpx
 import respx
@@ -69,8 +70,10 @@ def test_create_form_shows_only_active_raids_and_own_characters(client):
     assert "워로드둘째" in resp.text
     assert "선택 안 함" in resp.text
     # 홀리나이트(서포터)는 true, 워로드(딜러 전용)는 false로 JS에 전달돼야 한다
-    assert '"발키리": true' in resp.text
-    assert '"워로드둘째": false' in resp.text
+    # (tojson은 비ASCII를 \uXXXX로 이스케이프하므로 원문 그대로 매칭하지 않고 파싱해서 비교한다)
+    match = re.search(r"const characterIsSupport = (\{.*?\});", resp.text)
+    assert match is not None
+    assert json.loads(match.group(1)) == {"발키리": True, "워로드둘째": False}
 
 
 def _post_create(client, **overrides):
