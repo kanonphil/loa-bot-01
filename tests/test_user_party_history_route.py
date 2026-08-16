@@ -48,6 +48,7 @@ def test_user_party_history_returns_entries_for_member(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["has_more"] is False
+    assert body["total_count"] == 1
     assert len(body["entries"]) == 1
     assert body["entries"][0]["character_name"] == "워로드본캐"
 
@@ -76,6 +77,7 @@ def test_user_party_history_pagination_reports_has_more(client):
     body = resp.json()
     assert len(body["entries"]) == 20
     assert body["has_more"] is True
+    assert body["total_count"] == 26
 
     resp2 = client.get(
         "/api/internal/user-party-history",

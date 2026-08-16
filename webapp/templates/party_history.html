@@ -37,16 +37,28 @@
   {% endcall %}
   {% endfor %}
 </div>
-{% if page > 1 or has_more %}
+{% if total_pages > 1 %}
 <div class="pager">
   {% if page > 1 %}
-  <a class="ui-btn is-ghost" href="/parties/history?page={{ page - 1 }}">&larr; 이전</a>
+  <a class="ui-btn is-ghost pager-nav" href="/parties/history?page={{ page - 1 }}">&larr; 이전</a>
   {% else %}
   <span></span>
   {% endif %}
-  <span class="pager-page">{{ page }}페이지</span>
+  <div class="pager-numbers">
+    {% if page_numbers[0] > 1 %}
+    <a class="pager-num" href="/parties/history?page=1">1</a>
+    <span class="pager-ellipsis">&hellip;</span>
+    {% endif %}
+    {% for n in page_numbers %}
+    <a class="pager-num{% if n == page %} is-active{% endif %}" href="/parties/history?page={{ n }}">{{ n }}</a>
+    {% endfor %}
+    {% if page_numbers[-1] < total_pages %}
+    <span class="pager-ellipsis">&hellip;</span>
+    <a class="pager-num" href="/parties/history?page={{ total_pages }}">{{ total_pages }}</a>
+    {% endif %}
+  </div>
   {% if has_more %}
-  <a class="ui-btn is-ghost" href="/parties/history?page={{ page + 1 }}">다음 &rarr;</a>
+  <a class="ui-btn is-ghost pager-nav" href="/parties/history?page={{ page + 1 }}">다음 &rarr;</a>
   {% else %}
   <span></span>
   {% endif %}

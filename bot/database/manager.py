@@ -2075,7 +2075,7 @@ async def get_notification_logs(limit: int = 100) -> list[dict]:
 
 async def get_user_party_history(
   discord_id: str, limit: int = 20, offset: int = 0,
-) -> tuple[list[dict], bool]:
+) -> tuple[list[dict], bool, int]:
   """유저의 파티 참여 이력 — 아직 살아있는 파티(parties)와, 클리어/취소로 이미
   purge_party()가 지워버린 지난 이력(party_history, slots_json에 슬롯 스냅샷 보관)을
   합쳐서 반환한다. parties 테이블만 봤다면 실제 참여 기록 대부분(클리어된 공대는 곧 purge됨)이
@@ -2083,11 +2083,14 @@ async def get_user_party_history(
 
   과거엔 LIMIT 20을 고정해서 21번째 이후 기록은 화면에서 영영 안 보였다(운영 DB에서
   실제로 43건 가진 유저가 있었다 — 데이터는 멀쩡한데 그냥 잘려서 안 보인 것).
-  이제 limit+1개를 가져와 "다음 페이지가 더 있는지"를 별도 COUNT 쿼리 없이 판단하고,
-  실제로는 limit개만 잘라 돌려준다."""
+
+  번호가 매겨진 페이지 링크(1 2 3 4 5)를 보여주려면 전체 건수를 알아야 해서 COUNT를
+  같이 낸다 — 이 UNION ALL은 party_history 쪽이 인덱스 없는 JSON 필터라 ORDER BY로
+  정렬할 때 이미 전체를 훑어야 하므로(LIMIT/OFFSET으로 건너뛸 수 없음), COUNT를
+  추가해도 같은 데이터를 한 번 더 훑는 정도지 새로운 차수의 비용이 아니다."""
   async with aiosqlite.connect(DB_PATH) as db:
     db.row_factory = aiosqlite.Row
-    cur = await db.execute(
+    combined_sql = (
       "SELECT DISTINCT message_id, raid_name, difficulty, proficiency, "
       "scheduled_time, status, character_name, role, created_at FROM ("
       "  SELECT p.message_id, p.raid_name, p.difficulty, p.proficiency, "
@@ -2101,14 +2104,21 @@ async def get_user_party_history(
       "         json_extract(je.value, '$.role'), h.created_at "
       "  FROM party_history h, json_each(h.slots_json) je "
       "  WHERE json_extract(je.value, '$.discord_id') = ? "
-      ") combined "
-      "ORDER BY created_at DESC LIMIT ? OFFSET ?",
-      (discord_id, discord_id, limit + 1, offset),
+      ") combined"
+    )
+    count_cur = await db.execute(
+      f"SELECT COUNT(*) FROM ({combined_sql})", (discord_id, discord_id),
+    )
+    total_count = (await count_cur.fetchone())[0]
+
+    cur = await db.execute(
+      f"{combined_sql} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+      (discord_id, discord_id, limit, offset),
     )
     rows = await cur.fetchall()
   entries = [dict(r) for r in rows]
-  has_more = len(entries) > limit
-  return entries[:limit], has_more
+  has_more = offset + len(entries) < total_count
+  return entries, has_more, total_count
 
 
 async def get_all_active_party_ids() -> list[tuple[str, str]]:

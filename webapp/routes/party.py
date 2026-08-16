@@ -112,6 +112,12 @@ async def party_history(
         user["discord_id"], limit=_HISTORY_PAGE_SIZE, offset=offset,
     )
     visible = [_history_view(e) for e in result["entries"]]  # 이미 최근순(created_at DESC)으로 옴
+    total_pages = max(1, -(-result["total_count"] // _HISTORY_PAGE_SIZE))  # 올림 나눗셈
+    # 최대 5개 번호만 보여준다 — 현재 페이지를 가운데 두되, 양 끝에서는 창을 안쪽으로 민다.
+    window_start = max(1, min(page - 2, total_pages - 4))
+    window_end = min(total_pages, window_start + 4)
+    window_start = max(1, window_end - 4)
+    page_numbers = list(range(window_start, window_end + 1))
     return templates.TemplateResponse(
         request,
         "party_history.html",
@@ -121,6 +127,8 @@ async def party_history(
             "entries": visible,
             "page": page,
             "has_more": result["has_more"],
+            "total_pages": total_pages,
+            "page_numbers": page_numbers,
         },
     )
 

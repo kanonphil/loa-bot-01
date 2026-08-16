@@ -108,8 +108,9 @@ def test_get_user_party_history_includes_purged_history(db_path):
         await _make_party("history-other-user")
         await db.auto_assign_slot("history-other-user", "999", "다른유저캐릭", "버서커", "dps", 8)
 
-        result, has_more = await db.get_user_party_history(LEADER_ID)
+        result, has_more, total_count = await db.get_user_party_history(LEADER_ID)
         assert has_more is False
+        assert total_count == 2
         by_id = {r["message_id"]: r for r in result}
 
         assert "history-live" in by_id

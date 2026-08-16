@@ -4385,10 +4385,45 @@ select.settings-select {
   gap: var(--sp-3);
   margin-top: var(--sp-4);
 }
-.pager-page {
+.pager-nav {
+  flex-shrink: 0;
+}
+
+.pager-numbers {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.pager-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
   color: var(--text-muted);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-body);
   font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.pager-num:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+.pager-num.is-active {
+  background: var(--accent-btn);
+  color: #fff;
+}
+
+.pager-ellipsis {
+  color: var(--text-muted);
+  padding: 0 2px;
 }
 
 /* ── 관리자 (레이드/카테고리/난이도/직업 CRUD) ─────────────── */
