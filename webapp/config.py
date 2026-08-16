@@ -29,9 +29,16 @@ ADMIN_DISCORD_IDS: set[str] = {
 }
 
 # ── 세션 ──────────────────────────────────────────────────
-SESSION_SECRET: str = os.environ.get("SESSION_SECRET", "dev-secret-change-me")
-# 로컬 개발(http)에서는 false, Cloudflare 뒤 실서비스(https)에서는 반드시 true
-SESSION_HTTPS_ONLY: bool = os.environ.get("SESSION_HTTPS_ONLY", "false").lower() == "true"
+# 세션 쿠키 서명 키 — 다른 실제 비밀값들과 동일하게 값이 없으면 안전하지 않은
+# 기본값으로 조용히 넘어가는 대신 즉시 죽는다. 하드코딩된 기본값이 남아있으면
+# 배포 시 이 값을 빼먹었을 때 공개된 기본 시크릿으로 세션이 서명되어, 그 값을 아는
+# 사람이 관리자 세션(discord_id + is_admin=true)을 직접 위조할 수 있게 된다.
+SESSION_SECRET: str = os.environ["SESSION_SECRET"]
+# Cloudflare 뒤 실서비스(https)에서는 반드시 true — 배포 시 이 값을 빼먹어도 안전한
+# 쪽(true)으로 기본값을 두고, http로만 접속하는 로컬 개발에서만 명시적으로 false를
+# 켜도록 한다(기본값을 false로 두면 운영에서 빼먹었을 때 세션 쿠키가 평문 HTTP로도
+# 전송돼, 네트워크 중간자가 세션을 그대로 훔쳐볼 수 있다).
+SESSION_HTTPS_ONLY: bool = os.environ.get("SESSION_HTTPS_ONLY", "true").lower() == "true"
 # 로그인 유지 기간(일). 이 앱은 매번 재로그인시키기엔 번거로운 내부 도구라
 # 넉넉하게 30일로 설정 — 민감한 결제/개인정보가 아니라 길드 활동 도구라는 점을 감안.
 SESSION_MAX_AGE_DAYS: int = int(os.environ.get("SESSION_MAX_AGE_DAYS", "30"))
