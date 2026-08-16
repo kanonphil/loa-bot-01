@@ -33,8 +33,14 @@ class CharRegisterView(View):
         if str(interaction.user.id) != self.discord_id:
             await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
             return
-        await db.add_character(self.discord_id, self.verified_name, api_key_id=self.api_key_id)
+        added = await db.add_character(self.discord_id, self.verified_name, api_key_id=self.api_key_id)
         self.stop()
+        if not added:
+            await self._finish(
+                interaction,
+                f"⚠️ **{self.verified_name}** 캐릭터는 확인하는 사이 다른 계정에 등록되어 추가하지 못했습니다.",
+            )
+            return
         await self._finish(
             interaction,
             f"✅ **{self.verified_name}** 캐릭터가 원정대에 등록되었습니다.\n"
@@ -48,14 +54,20 @@ class CharRegisterView(View):
             await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
             return
         added = 0
+        skipped = 0
         for char in self.siblings:
             name = char.get("CharacterName")
-            if name and await db.add_character(self.discord_id, name, api_key_id=self.api_key_id):
+            if not name:
+                continue
+            if await db.add_character(self.discord_id, name, api_key_id=self.api_key_id):
                 added += 1
+            else:
+                skipped += 1
         self.stop()
+        skip_note = f" ({skipped}개는 다른 계정에 이미 등록돼 제외)" if skipped else ""
         await self._finish(
             interaction,
-            f"✅ 원정대 캐릭터 **{added}개** 전체가 등록되었습니다.\n\n"
+            f"✅ 원정대 캐릭터 **{added}개**가 등록되었습니다{skip_note}.\n\n"
             f"📖 아래 가이드를 따라 시작해보세요!",
         )
 

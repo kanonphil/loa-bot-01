@@ -177,3 +177,64 @@ def test_second_account_registration_adds_without_replacing_first(clean_db, monk
     # 첫 번째 계정(레거시 컬럼)은 그대로 유지되고 두 번째 계정도 개별 조회 가능
     assert asyncio.run(db.get_user_api_key("111")) == "key-a"
     assert asyncio.run(db.get_user_api_key_by_id(id2)) == "key-b"
+
+
+def test_registration_rejected_when_expedition_already_registered_by_other_account(clean_db, monkeypatch):
+    """한 원정대(같은 계정)가 이미 다른 디스코드 계정에 등록돼 있으면 새 등록을 거부한다 —
+    레이드 완료 체크·골드 분배 이력이 이중으로 잡히는 걸 막기 위함."""
+    monkeypatch.setattr(config, "REQUIRED_GUILD_NAME", "동물롱장")
+
+    async def fake_get_armory(api_key, name):
+        return {"ArmoryProfile": {"GuildName": "동물롱장"}}
+
+    monkeypatch.setattr("bot.services.expedition.loa.get_armory", fake_get_armory)
+
+    async def fake_get_siblings(api_key, name):
+        return SIBLINGS  # 발키리
+
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings)
+
+    # 계정 A(discord_id="111")가 먼저 이 원정대를 등록하고 캐릭터까지 실제로 추가한다.
+    success1, _, siblings1, _ = asyncio.run(
+        verify_and_register_api_key("111", "key-a", "발키리")
+    )
+    assert success1 is True
+    asyncio.run(db.add_character("111", "발키리"))
+
+    # 계정 B(discord_id="222")가 동일한 원정대(같은 API 키/캐릭터)를 다시 등록하려 하면 거부.
+    success2, message2, siblings2, api_key_id2 = asyncio.run(
+        verify_and_register_api_key("222", "key-a-copy", "발키리")
+    )
+
+    assert success2 is False
+    assert "이미 다른 디스코드 계정" in message2
+    assert siblings2 is None
+    assert api_key_id2 is None
+    # 거부된 시도로 인해 API 키가 저장되면 안 된다.
+    assert asyncio.run(db.list_user_api_keys("222")) == []
+
+
+def test_registration_allowed_when_same_account_reregisters(clean_db, monkeypatch):
+    """자기 자신이 이미 등록한 원정대를 다시(예: 새 API 키로) 등록하는 건 막히면 안 된다."""
+    monkeypatch.setattr(config, "REQUIRED_GUILD_NAME", "동물롱장")
+
+    async def fake_get_armory(api_key, name):
+        return {"ArmoryProfile": {"GuildName": "동물롱장"}}
+
+    async def fake_get_siblings(api_key, name):
+        return SIBLINGS  # 발키리
+
+    monkeypatch.setattr("bot.services.expedition.loa.get_armory", fake_get_armory)
+    monkeypatch.setattr("bot.services.expedition.loa.get_siblings", fake_get_siblings)
+
+    success1, _, _, _ = asyncio.run(verify_and_register_api_key("111", "key-a", "발키리"))
+    assert success1 is True
+    asyncio.run(db.add_character("111", "발키리"))
+
+    success2, _, siblings2, api_key_id2 = asyncio.run(
+        verify_and_register_api_key("111", "key-a-renewed", "발키리")
+    )
+
+    assert success2 is True
+    assert siblings2 == SIBLINGS
+    assert api_key_id2 is not None

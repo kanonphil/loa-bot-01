@@ -617,9 +617,36 @@ async def get_character_api_key_id(discord_id: str, character_name: str) -> Opti
 # 캐릭터 등록
 # ──────────────────────────────────────────────
 
+async def find_conflicting_owner(character_names: list[str], discord_id: str) -> tuple[str, str] | None:
+    """character_names 중 discord_id가 아닌 다른 계정이 이미 등록한 캐릭터가 있으면
+    (그 캐릭터명, 그 계정의 discord_id)를 반환. 없으면 None.
+    캐릭터명은 게임 내에서 유일하므로, 다른 discord_id가 이미 등록했다면 이 원정대는
+    이미 다른 디스코드 계정에 연결된 것 — 원정대 중복 등록 차단에 쓴다."""
+    if not character_names:
+        return None
+    placeholders = ",".join("?" for _ in character_names)
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            f"SELECT character_name, discord_id FROM user_characters "
+            f"WHERE character_name IN ({placeholders}) AND discord_id != ? LIMIT 1",
+            (*character_names, discord_id),
+        )
+        row = await cur.fetchone()
+    return (row[0], row[1]) if row else None
+
+
 async def add_character(discord_id: str, character_name: str, api_key_id: int | None = None) -> bool:
+    """캐릭터를 등록. 이미 다른 discord_id가 등록한 캐릭터라면 거부한다 —
+    verify_and_register_api_key에서 원정대 단위로 미리 막지만, 여기서도 한 번 더
+    막아 레이스(동시 등록) 상황에서도 중복 등록이 뚫리지 않게 한다."""
     try:
         async with aiosqlite.connect(DB_PATH) as db:
+            cur = await db.execute(
+                "SELECT 1 FROM user_characters WHERE character_name=? AND discord_id!=?",
+                (character_name, discord_id),
+            )
+            if await cur.fetchone():
+                return False
             await db.execute(
                 "INSERT INTO user_characters (discord_id, character_name, api_key_id) VALUES (?, ?, ?)",
                 (discord_id, character_name, api_key_id),

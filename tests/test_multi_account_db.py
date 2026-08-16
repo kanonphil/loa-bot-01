@@ -192,3 +192,34 @@ def test_delete_user_cleans_up_related_party_and_raid_data(clean_db):
     assert asyncio.run(db.get_user_subscriptions("111")) == []
     selected = asyncio.run(db.get_selected_raids("111", "발키리"))
     assert selected is None  # customized 상태 자체가 지워져야 한다
+
+
+def test_add_character_blocks_when_already_registered_by_other_discord_id(clean_db):
+    """같은 원정대를 다른 디스코드 계정으로 등록하는 걸 DB 레이어에서 최종 차단한다."""
+    assert asyncio.run(db.add_character("111", "발키리")) is True
+
+    assert asyncio.run(db.add_character("222", "발키리")) is False
+
+    # 원래 소유자(111)는 그대로 유지되고, 다른 계정(222)에는 등록되지 않는다.
+    assert asyncio.run(db.get_user_characters("111")) == ["발키리"]
+    assert asyncio.run(db.get_user_characters("222")) == []
+
+
+def test_add_character_allows_same_discord_id_to_readd_after_removal(clean_db):
+    """같은 유저가 자기 캐릭터를 다시 등록하는 정상 케이스는 막히면 안 된다."""
+    assert asyncio.run(db.add_character("111", "발키리")) is True
+    assert asyncio.run(db.remove_character("111", "발키리")) is True
+    assert asyncio.run(db.add_character("111", "발키리")) is True
+
+
+def test_find_conflicting_owner_returns_none_when_no_conflict(clean_db):
+    asyncio.run(db.add_character("111", "발키리"))
+    assert asyncio.run(db.find_conflicting_owner(["슬레이어", "워로드"], "111")) is None
+    # 본인이 등록한 캐릭터는 충돌로 치지 않는다
+    assert asyncio.run(db.find_conflicting_owner(["발키리"], "111")) is None
+
+
+def test_find_conflicting_owner_finds_other_account(clean_db):
+    asyncio.run(db.add_character("111", "발키리"))
+    conflict = asyncio.run(db.find_conflicting_owner(["슬레이어", "발키리"], "222"))
+    assert conflict == ("발키리", "111")

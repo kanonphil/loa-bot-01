@@ -36,6 +36,20 @@ async def verify_and_register_api_key(
             "API 키는 저장되지 않았습니다."
         ), None, None
 
+    # 원정대 중복 등록 차단 — 캐릭터명은 게임 내에서 유일하므로, 이 원정대의 캐릭터 중
+    # 하나라도 이미 다른 discord_id에 등록돼 있다면 이 원정대는 이미 다른 계정에 연결된 것이다.
+    # 레이드 완료 체크·골드 분배 이력이 이중으로 잡히는 걸 막기 위해 등록 자체를 거부한다.
+    sibling_names = [c.get("CharacterName") for c in siblings if c.get("CharacterName")]
+    conflict = await db.find_conflicting_owner(sibling_names, discord_id)
+    if conflict is not None:
+        conflict_name, _owner_id = conflict
+        return False, (
+            f"❌ 이 원정대는 이미 다른 디스코드 계정에 등록되어 있습니다.\n"
+            f"(원정대 캐릭터 **{conflict_name}** 기준)\n\n"
+            "본인이 등록한 게 맞다면 그때 사용한 디스코드 계정으로 다시 시도해주세요.\n"
+            "API 키는 저장되지 않았습니다."
+        ), None, None
+
     # 길드 확인 — 실제 "동물롱장" 소속만 등록 허용 (디스코드 서버엔 길드원 아닌 인원도 있음)
     # 부계정을 추가로 등록할 때도 매번 동일하게 확인한다.
     if config.REQUIRED_GUILD_NAME:
