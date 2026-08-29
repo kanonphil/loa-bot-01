@@ -404,6 +404,33 @@ async def leave_party(message_id: str, body: LeavePartyBody):
   return {"success": success, "reason": reason}
 
 
+@router.get("/parties/{message_id}/waitlist-status")
+async def waitlist_status(message_id: str, discord_id: str):
+  waitlist = await db.get_waitlist(message_id)
+  return {"on_waitlist": discord_id in waitlist}
+
+
+class WaitlistBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/parties/{message_id}/waitlist")
+async def toggle_waitlist(message_id: str, body: WaitlistBody):
+  """빈자리 알림 대기 토글 — Discord PartyView._handle_waitlist와 동일한 규칙
+  (참여 중이면 거부). 임베드 갱신 등 Discord 부수효과가 없는 순수 DB 토글이라
+  다른 파티 액션들과 달리 _core 함수 없이 라우트에서 바로 처리한다."""
+  slots = await db.get_party_slots(message_id)
+  if any(s["discord_id"] == body.discord_id for s in slots):
+    return {"success": False, "reason": "이미 파티에 참여 중입니다."}
+
+  waitlist = await db.get_waitlist(message_id)
+  if body.discord_id in waitlist:
+    await db.remove_waitlist(message_id, body.discord_id)
+    return {"success": True, "on_waitlist": False}
+  await db.add_waitlist(message_id, body.discord_id)
+  return {"success": True, "on_waitlist": True}
+
+
 @router.get("/parties/{message_id}/switch-eligibility")
 async def switch_eligibility(message_id: str, discord_id: str):
   """참여 캐릭터 변경 시 고를 수 있는 캐릭터 후보 — 같은 레이드의 다른 공대에 이미

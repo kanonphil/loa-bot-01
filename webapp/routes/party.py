@@ -222,6 +222,7 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
         can_switch_to_support = my_slot["character_class"] in support_classes
     eligibility = None
     character_is_support = {}
+    on_waitlist = False
     if not joined and party["status"] != "disbanded":
         eligibility = await bot_client.get_party_eligibility(message_id, discord_id)
         if eligibility and eligibility.get("qualifying"):
@@ -229,6 +230,10 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
             character_is_support = {
                 q["name"]: q["class"] in support_classes for q in eligibility["qualifying"]
             }
+        # Discord PartyView._handle_waitlist와 동일한 조건(참여 안 했고 파티가
+        # 종료되지 않음)일 때만 노출 — 웹에 없던 기능이라 이번에 추가.
+        waitlist_status = await bot_client.get_waitlist_status(message_id, discord_id)
+        on_waitlist = waitlist_status["on_waitlist"]
 
     raids = await bot_client.get_raids()
     raid_info = raids.get(party["raid_name"], {})
@@ -285,6 +290,7 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
         "can_switch_to_support": can_switch_to_support,
         "eligibility": eligibility,
         "character_is_support": character_is_support,
+        "on_waitlist": on_waitlist,
         "sub_parties": sub_parties,
         "party_groups": party_groups,
         "all_slots": all_slots,
@@ -344,6 +350,14 @@ async def leave(
 ):
     result = await bot_client.leave_party(message_id, user["discord_id"])
     return _redirect_with_result(message_id, result, "나가지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/waitlist")
+async def toggle_waitlist(
+    request: Request, message_id: str, user: dict = Depends(get_current_user)
+):
+    result = await bot_client.toggle_waitlist(message_id, user["discord_id"])
+    return _redirect_with_result(message_id, result, "빈자리 알림 설정을 바꾸지 못했습니다.")
 
 
 @router.get("/parties/{message_id}/switch")

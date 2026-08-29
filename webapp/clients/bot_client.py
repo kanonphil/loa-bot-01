@@ -376,6 +376,28 @@ async def leave_party(message_id: str, discord_id: str) -> dict:
     return resp.json()
 
 
+async def get_waitlist_status(message_id: str, discord_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/waitlist-status",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def toggle_waitlist(message_id: str, discord_id: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/waitlist",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",

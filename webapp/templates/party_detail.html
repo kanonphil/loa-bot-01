@@ -164,6 +164,14 @@
 <p class="party-cannot-join">{{ eligibility.reason }}</p>
 {% endif %}
 
+{% if not joined and party.status != "disbanded" %}
+<form method="post" action="/parties/{{ party.message_id }}/waitlist" class="party-waitlist-form">
+  <button type="submit" class="party-switch-btn">
+    {% if on_waitlist %}🔕 빈자리 알림 취소{% else %}🔔 빈자리 알림 받기{% endif %}
+  </button>
+</form>
+{% endif %}
+
 {% if party.status == "disbanded" %}
   {% if user.is_admin %}
   <div class="leader-panel">

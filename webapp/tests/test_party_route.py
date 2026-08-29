@@ -7,6 +7,7 @@ from webapp.tests.conftest import log_in
 PARTIES_URL = "http://bot-server.internal/api/internal/parties"
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
+WAITLIST_STATUS_URL = "http://bot-server.internal/api/internal/parties/p1/waitlist-status"
 JOIN_URL = "http://bot-server.internal/api/internal/parties/p1/join"
 LEAVE_URL = "http://bot-server.internal/api/internal/parties/p1/leave"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
@@ -166,6 +167,7 @@ def test_party_detail_shows_join_form_when_eligible(client):
             )
         )
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트", "바드", "도화가"]))
+        respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
@@ -222,6 +224,7 @@ def test_party_detail_shows_reason_when_cannot_join(client):
                 200, json={"can_join": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."}
             )
         )
+        respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
@@ -246,6 +249,7 @@ def test_join_posts_to_bot_and_shows_error_on_failure(client):
             )
         )
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트", "바드", "도화가"]))
+        respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
         join_route = respx.post(JOIN_URL).mock(
             return_value=httpx.Response(
                 200, json={"success": False, "reason": "다른 유저가 동시에 참여해 슬롯이 찼습니다."}
@@ -285,6 +289,79 @@ def test_leave_posts_to_bot(client):
     assert leave_route.called
 
 
+WAITLIST_URL = "http://bot-server.internal/api/internal/parties/p1/waitlist"
+
+
+def test_waitlist_toggle_posts_to_bot(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        waitlist_route = respx.post(WAITLIST_URL).mock(
+            return_value=httpx.Response(200, json={"success": True, "on_waitlist": True})
+        )
+
+        resp = client.post("/parties/p1/waitlist")
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
+    assert waitlist_route.called
+
+
+def test_waitlist_toggle_shows_error_on_failure(client):
+    with respx.mock:
+        log_in(client, discord_id="222")
+        respx.post(WAITLIST_URL).mock(
+            return_value=httpx.Response(200, json={"success": False, "reason": "이미 파티에 참여 중입니다."})
+        )
+
+        resp = client.post("/parties/p1/waitlist")
+
+    assert resp.status_code == 303
+    assert "join_error=" in resp.headers["location"]
+
+
+def test_party_detail_shows_waitlist_button_when_not_joined(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(ELIGIBILITY_URL).mock(
+            return_value=httpx.Response(200, json={"can_join": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."})
+        )
+        respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
+        resp = client.get("/parties/p1")
+
+    assert resp.status_code == 200
+    assert "빈자리 알림 받기" in resp.text
+    assert "party-waitlist-form" in resp.text
+
+
+def test_party_detail_shows_cancel_waitlist_when_already_on_it(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(ELIGIBILITY_URL).mock(
+            return_value=httpx.Response(200, json={"can_join": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."})
+        )
+        respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": True}))
+        resp = client.get("/parties/p1")
+
+    assert resp.status_code == 200
+    assert "빈자리 알림 취소" in resp.text
+
+
+def test_party_detail_hides_waitlist_button_when_already_joined(client):
+    with respx.mock:
+        log_in(client, discord_id="222")  # PARTY의 기존 슬롯 주인
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        resp = client.get("/parties/p1")
+
+    assert resp.status_code == 200
+    assert "party-waitlist-form" not in resp.text
+
+
 def test_split_party_groups_show_relative_numbers_per_group(monkeypatch):
     """회귀 테스트: 8인(4+4 분할) 파티는 1파티/2파티로 나뉘고, 각 파티 내부는
     절대 슬롯 번호가 아니라 1번부터 다시 매겨진 상대 번호로 표시되어야 한다.
@@ -311,9 +388,13 @@ def test_split_party_groups_show_relative_numbers_per_group(monkeypatch):
     async def fake_get_eligibility(message_id, discord_id):
         return {"can_join": False, "reason": "이미 참여 중입니다."}
 
+    async def fake_get_waitlist_status(message_id, discord_id):
+        return {"on_waitlist": False}
+
     monkeypatch.setattr(party_module.bot_client, "get_party", fake_get_party)
     monkeypatch.setattr(party_module.bot_client, "get_raids", fake_get_raids)
     monkeypatch.setattr(party_module.bot_client, "get_party_eligibility", fake_get_eligibility)
+    monkeypatch.setattr(party_module.bot_client, "get_waitlist_status", fake_get_waitlist_status)
 
     ctx = asyncio.run(party_module._detail_context("p1", "999999"))
 
@@ -367,9 +448,13 @@ def test_non_split_party_still_uses_flat_slot_list(monkeypatch):
     async def fake_get_eligibility(message_id, discord_id):
         return {"can_join": False, "reason": "이미 참여 중입니다."}
 
+    async def fake_get_waitlist_status(message_id, discord_id):
+        return {"on_waitlist": False}
+
     monkeypatch.setattr(party_module.bot_client, "get_party", fake_get_party)
     monkeypatch.setattr(party_module.bot_client, "get_raids", fake_get_raids)
     monkeypatch.setattr(party_module.bot_client, "get_party_eligibility", fake_get_eligibility)
+    monkeypatch.setattr(party_module.bot_client, "get_waitlist_status", fake_get_waitlist_status)
 
     ctx = asyncio.run(party_module._detail_context("p1", "999999"))
 
