@@ -17,6 +17,7 @@
 
 <div class="page-content calendar-page">
   <div class="calendar-toolbar">
+    <a href="/calendar?view={{ view }}" class="calendar-today-btn">오늘</a>
     <div class="calendar-header">
       {% if view == "week" %}
       <a href="/calendar?view=week&week_start={{ prev_week_start }}" class="calendar-nav-btn">&larr;</a>

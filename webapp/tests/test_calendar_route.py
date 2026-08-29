@@ -96,6 +96,20 @@ def test_calendar_month_navigation_links(client, monkeypatch):
     assert "/calendar?view=month&year=2026&month=6" in resp.text
 
 
+def test_calendar_today_button_targets_current_view_without_date_params(client, monkeypatch):
+    """여러 달/주를 넘겨봐도 "오늘" 버튼은 항상 날짜 파라미터 없는 URL이어야 한다 —
+    calendar_view가 년/월/week_start 없으면 이미 오늘 기준으로 렌더링하기 때문."""
+    _freeze_today(monkeypatch)
+    with respx.mock:
+        log_in(client)
+        respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
+        month_resp = client.get("/calendar?view=month&year=2020&month=1")
+        week_resp = client.get("/calendar?view=week&week_start=2020-01-01")
+
+    assert 'href="/calendar?view=month"' in month_resp.text
+    assert 'href="/calendar?view=week"' in week_resp.text
+
+
 def test_calendar_time_shown_is_derived_from_datetime_not_scheduled_time_text(client, monkeypatch):
     """scheduled_time은 "2026/07/05 오후 9시 정각"처럼 사람이 읽는 문자열이라 공백 기준으로
     자르면 "정각"/"30분" 같은 조각이 시간처럼 잘못 표시됐던 버그 — scheduled_datetime에서
