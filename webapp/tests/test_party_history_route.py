@@ -38,6 +38,7 @@ def test_history_page_shows_entries_with_status_labels(client):
     assert "취소" in body  # cancelled → 취소
     assert "서포터" in body
     assert "다음" not in body  # has_more=False면 다음 버튼 없음
+    assert 'data-filter-target="#history-list"' in body  # 검색창이 목록을 가리킨다
 
 
 def test_history_page_requires_login(client):

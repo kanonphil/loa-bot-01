@@ -12,13 +12,28 @@
 {% call ui.toolbar() %}
   {{ ui.filter_link("진행 중", "/admin/parties?tab=open", tab == "open", open_parties | length) }}
   {{ ui.filter_link("종료됨", "/admin/parties?tab=closed", tab == "closed", closed_parties | length) }}
+  {% if tab == "open" and open_parties %}
+  <label class="raid-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input type="search" class="js-list-filter" placeholder="레이드명으로 검색" aria-label="공대 검색" autocomplete="off"
+           data-filter-target="#admin-open-list" data-filter-item=".ui-card" data-filter-text=".ui-card-title"
+           data-filter-no-result="#admin-open-noresult">
+  </label>
+  {% elif tab == "closed" and closed_parties %}
+  <label class="raid-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input type="search" class="js-list-filter" placeholder="레이드명 또는 파티장으로 검색" aria-label="종료된 공대 검색" autocomplete="off"
+           data-filter-target="#admin-closed-list" data-filter-item=".admin-row" data-filter-text=".admin-row-name"
+           data-filter-no-result="#admin-closed-noresult">
+  </label>
+  {% endif %}
 {% endcall %}
 
 {% if tab == "open" %}
   {% if not open_parties %}
   {{ ui.empty("진행 중인 공대가 없습니다", icon="⚔️") }}
   {% else %}
-  <div class="ui-list">
+  <div class="ui-list" id="admin-open-list">
     {% for p in open_parties %}
     {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.status_tone) %}
       <div class="ui-row">
@@ -36,13 +51,14 @@
     {% endcall %}
     {% endfor %}
   </div>
+  <p class="raid-picker-noresult" id="admin-open-noresult" hidden>검색 결과가 없습니다.</p>
   {% endif %}
 
 {% else %}
   {% if not closed_parties %}
   {{ ui.empty("종료된 공대 이력이 없습니다", icon="🗂️") }}
   {% else %}
-  <ul class="admin-list">
+  <ul class="admin-list" id="admin-closed-list">
     {% for p in closed_parties %}
     <li class="admin-row">
       <span class="admin-row-name">
@@ -58,6 +74,7 @@
     </li>
     {% endfor %}
   </ul>
+  <p class="raid-picker-noresult" id="admin-closed-noresult" hidden>검색 결과가 없습니다.</p>
   {% endif %}
 {% endif %}
 </div>

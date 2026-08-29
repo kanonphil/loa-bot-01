@@ -180,6 +180,20 @@ def test_admin_parties_page_shows_open_and_closed_tabs(client, monkeypatch):
 
     assert open_resp.status_code == 200
     assert "아르모체(4막)" in open_resp.text
+    assert 'data-filter-target="#admin-open-list"' in open_resp.text
     assert closed_resp.status_code == 200
     assert "리더캐릭" in closed_resp.text  # 종료 탭에도 파티장 캐릭터명이 보임
     assert "되돌리기 가능" in closed_resp.text
+    assert 'data-filter-target="#admin-closed-list"' in closed_resp.text
+
+
+def test_admin_parties_page_hides_search_when_tab_is_empty(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
+    with respx.mock:
+        log_in(client, discord_id="999")
+        respx.get(ADMIN_PARTIES_URL).mock(
+            return_value=httpx.Response(200, json={"open": [], "closed": []})
+        )
+        resp = client.get("/admin/parties")
+
+    assert "js-list-filter" not in resp.text

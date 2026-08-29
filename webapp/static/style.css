@@ -1648,6 +1648,27 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   border: 1px solid var(--border);
 }
 
+/* 여러 달/주를 넘겨본 뒤 바로 현재로 돌아올 방법이 없었다 — 토글과 대칭되게
+   왼쪽에 둬서 헤더 중앙 정렬(제목)을 방해하지 않는다. */
+.calendar-today-btn {
+  position: absolute;
+  left: 0;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.calendar-today-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .calendar-view-btn {
   padding: 6px 14px;
   border-radius: 6px;
@@ -3833,7 +3854,8 @@ a.rank-row:hover {
     gap: 10px;
   }
 
-  .calendar-view-toggle {
+  .calendar-view-toggle,
+  .calendar-today-btn {
     position: static;
   }
 
