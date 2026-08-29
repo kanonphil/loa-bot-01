@@ -6,6 +6,7 @@ import bot.database.manager as db
 from bot.ui.views import RecruitView
 from bot.ui.embeds import party_list_embed
 from bot.database.manager import get_week_key, get_week_key_for_dt
+from bot.cogs.admin import _raid_autocomplete, _difficulty_autocomplete
 
 
 class Party(commands.Cog):
@@ -54,7 +55,13 @@ class Party(commands.Cog):
         name="공대확인",
         description="현재 서버에서 모집 중인 공대 목록을 확인합니다.",
     )
-    async def party_list(self, interaction: discord.Interaction) -> None:
+    @app_commands.describe(raid_name="특정 레이드만 보기 (선택)", difficulty="특정 난이도만 보기 (선택, 레이드 지정 시)")
+    @app_commands.rename(raid_name="레이드", difficulty="난이도")
+    @app_commands.autocomplete(raid_name=_raid_autocomplete, difficulty=_difficulty_autocomplete)
+    async def party_list(
+        self, interaction: discord.Interaction,
+        raid_name: str | None = None, difficulty: str | None = None,
+    ) -> None:
         guild_id = str(interaction.guild_id)
         forum_id = await db.get_forum_channel_id(guild_id)
         if not forum_id:
@@ -65,9 +72,15 @@ class Party(commands.Cog):
 
         await interaction.response.defer(thinking=True, ephemeral=True)
         parties = await db.get_guild_parties(guild_id)
+        # 웹 /parties는 이미 레이드명 검색이 있는데 디스코드 쪽엔 없어서 생긴 격차 —
+        # 길드당 파티 수가 적어 새 DB 쿼리 없이 파이썬에서 걸러도 충분하다.
+        if raid_name:
+            parties = [p for p in parties if p["raid_name"] == raid_name]
+        if difficulty:
+            parties = [p for p in parties if p["difficulty"] == difficulty]
         if not parties:
             await interaction.followup.send(
-                f"현재 모집 중인 공대가 없습니다.\n<#{forum_id}>", ephemeral=True
+                f"조건에 맞는 모집 중인 공대가 없습니다.\n<#{forum_id}>", ephemeral=True
             )
             return
 
