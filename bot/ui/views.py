@@ -182,6 +182,135 @@ async def _switch_role_core(
     return {"success": True, "reason": None}
 
 
+async def _create_invite_core(
+    bot: discord.Client, message_id: str, leader_discord_id: str,
+    target_discord_id: str, slot_number: int, leader_display_name: str | None = None,
+) -> dict:
+    """등록 유저 초대 생성 — Discord "초대" 버튼(InviteSlotSelectView._on_select)과
+    웹 API가 공유. 리더/관리자만 가능, 슬롯 점유 여부와 대상이 이미 파티에
+    있는지/이미 초대됐는지 검증한 뒤 DM으로 수락/거절 버튼을 보낸다.
+    DM 발송에 실패하면(DM 비활성화) 초대를 롤백한다.
+    leader_display_name: 디스코드 경로는 interaction.user.display_name(서버 닉네임)을
+    그대로 넘겨준다 — bot.fetch_user()는 길드 멤버가 아닌 User를 반환해 닉네임이 아닌
+    전역 사용자명이 나오므로, 넘겨받지 못했을 때만(웹 경로) fetch_user로 대체한다."""
+    party = await db.get_party(message_id)
+    err = _require_leader_or_admin(party, leader_discord_id)
+    if err:
+        return {"success": False, "reason": err}
+    if party["status"] == "disbanded":
+        return {"success": False, "reason": "이미 종료된 파티입니다."}
+
+    slots = await db.get_party_slots(message_id)
+    reserved = await db.get_reserved_slots(message_id)
+    occupied = {s["slot_number"] for s in slots}
+    if slot_number in occupied or slot_number in reserved:
+        return {"success": False, "reason": "이미 사용 중인 슬롯입니다."}
+
+    in_party_ids = {s["discord_id"] for s in slots} | set(reserved.values()) | {party["leader_id"]}
+    if target_discord_id in in_party_ids:
+        return {"success": False, "reason": "이미 파티에 참여했거나 초대된 유저입니다."}
+
+    added = await db.create_invite(message_id, target_discord_id, slot_number)
+    if not added:
+        return {"success": False, "reason": "이미 초대된 유저입니다."}
+
+    if not bot:
+        return {"success": True, "reason": None}
+
+    await _refresh_party_embed_with_reserved(bot, party)
+
+    leader_name = leader_display_name
+    if not leader_name:
+        try:
+            leader_user = await bot.fetch_user(int(leader_discord_id))
+            leader_name = leader_user.display_name
+        except (discord.NotFound, discord.HTTPException):
+            leader_name = "공대장"
+
+    raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
+    try:
+        target_user = await bot.fetch_user(int(target_discord_id))
+        await target_user.send(
+            f"⚔️ **{leader_name}**님이 **{raid_title}** 공대 **{slot_number}번** 슬롯에 초대했습니다!\n"
+            f"일정: **{party['scheduled_time']}** | {_party_url(party)}\n\n"
+            f"참여 의사를 알려주세요:",
+            view=InviteResponseView(message_id, party, target_discord_id, client=bot),
+        )
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        await db.delete_invite(message_id, target_discord_id)
+        await _refresh_party_embed_with_reserved(bot, party)
+        return {"success": False, "reason": "해당 유저의 DM이 비활성화되어 있습니다."}
+
+    return {"success": True, "reason": None}
+
+
+async def _accept_invite_core(
+    bot: discord.Client, message_id: str, discord_id: str,
+    character_name: str, role: str,
+) -> dict:
+    """초대 수락 — 웹 전용(디스코드는 단계별 위저드 뷰로 이미 동일 로직을 쓴다:
+    InviteResponseView.accept → InviteRoleSelectView/InviteCharSelectView). 웹은
+    캐릭터+역할을 폼 하나로 한 번에 받는다. 참여 규칙 검증(db.get_party_join_eligibility)과
+    슬롯 배정(db.assign_invite_slot)은 디스코드 경로와 동일한 함수를 그대로 쓴다."""
+    party = await db.get_party(message_id)
+    if not party or party["status"] == "disbanded":
+        return {"success": False, "reason": "이미 종료된 공대입니다."}
+
+    eligibility = await db.get_party_join_eligibility(message_id, discord_id)
+    if not eligibility["can_join"]:
+        return {"success": False, "reason": eligibility["reason"]}
+
+    match = next((q for q in eligibility["qualifying"] if q["name"] == character_name), None)
+    if not match:
+        return {"success": False, "reason": "참여 가능한 캐릭터 목록에 없습니다."}
+
+    if role == "support" and match["class"] not in SUPPORT_CLASSES:
+        return {"success": False, "reason": f"{match['class']}은(는) 서포터 역할을 맡을 수 없습니다."}
+
+    ok, msg = await db.assign_invite_slot(message_id, discord_id, match["name"], match["class"], role)
+    if not ok:
+        return {"success": False, "reason": msg}
+
+    updated_party = await db.get_party(message_id)
+    if bot and updated_party:
+        await _refresh_party_embed_with_reserved(bot, updated_party)
+        try:
+            leader = await bot.fetch_user(int(updated_party["leader_id"]))
+            await leader.send(
+                f"✅ **{match['name']}**({match['class']})님이 "
+                f"**{updated_party['raid_name']} {updated_party['difficulty']}** 공대에 참여했습니다!\n"
+                f"{_party_url(updated_party)}"
+            )
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+    return {"success": True, "reason": None}
+
+
+async def _decline_invite_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+    """초대 거절 — Discord InviteResponseView.거절과 웹 API가 공유."""
+    party = await db.get_party(message_id)
+    if not party:
+        return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+    reserved = await db.get_reserved_slots(message_id)
+    if discord_id not in reserved.values():
+        return {"success": False, "reason": "초대 정보를 찾을 수 없습니다."}
+
+    await db.delete_invite(message_id, discord_id)
+    if bot:
+        await _refresh_party_embed_with_reserved(bot, party)
+        try:
+            leader = await bot.fetch_user(int(party["leader_id"]))
+            await leader.send(
+                f"❌ <@{discord_id}>님이 **{party['raid_name']} {party['difficulty']}** 초대를 거절했습니다.\n"
+                f"{_party_url(party)}"
+            )
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+    return {"success": True, "reason": None}
+
+
 def _require_leader(party: dict | None, discord_id: str) -> str | None:
     """파티가 없거나 리더가 아니면 에러 사유 문자열, 문제없으면 None.
     디스코드 ⚙️관리 패널(_handle_manage)과 웹 API가 공유."""
@@ -708,18 +837,8 @@ class InviteResponseView(View):
         if str(interaction.user.id) != self.invitee_id:
             await interaction.response.send_message("본인만 응답할 수 있습니다.", ephemeral=True)
             return
-        await db.delete_invite(self.message_id, self.invitee_id)
+        await _decline_invite_core(interaction.client, self.message_id, self.invitee_id)
         await interaction.response.edit_message(content="❌ 초대를 거절했습니다.", view=None)
-        party = await db.get_party(self.message_id)
-        if party:
-            await _refresh_party_embed_with_reserved(interaction.client, party)
-        try:
-            leader = await interaction.client.fetch_user(int(self.party["leader_id"]))
-            await leader.send(
-                f"❌ <@{self.invitee_id}>님이 **{self.party['raid_name']} {self.party['difficulty']}** 초대를 거절했습니다.\n{_party_url(self.party)}"
-            )
-        except discord.HTTPException:
-            pass
         self.stop()
 
 
@@ -762,36 +881,17 @@ class InviteSlotSelectView(View):
             return
 
         slot = int(val)
-        added = await db.create_invite(self.party["message_id"], self.target_id, slot)
-        if not added:
-            await interaction.response.edit_message(content="❌ 이미 초대된 유저입니다.", view=None)
-            return
-
-        party = await db.get_party(self.party["message_id"])
-        if party:
-            await _refresh_party_embed_with_reserved(interaction.client, party)
-
-        raid_title = f"{self.party['raid_name']} {self.party['difficulty']} {self.party['proficiency']}"
-        view = InviteResponseView(self.party["message_id"], self.party, self.target_id,
-                                  client=interaction.client)
-        try:
-            target_user = await interaction.client.fetch_user(int(self.target_id))
-            await target_user.send(
-                f"⚔️ **{interaction.user.display_name}**님이 "
-                f"**{raid_title}** 공대 **{slot}번** 슬롯에 초대했습니다!\n"
-                f"일정: **{self.party['scheduled_time']}** | {_party_url(self.party)}\n\n"
-                f"참여 의사를 알려주세요:",
-                view=view,
-            )
+        result = await _create_invite_core(
+            interaction.client, self.party["message_id"], str(interaction.user.id),
+            self.target_id, slot, leader_display_name=interaction.user.display_name,
+        )
+        if not result["success"]:
+            await interaction.response.edit_message(content=f"❌ {result['reason']}", view=None)
+        else:
             await interaction.response.edit_message(
                 content=f"✅ **{self.target_name}**님에게 **{slot}번** 슬롯 초대를 발송했습니다.",
                 view=None,
             )
-        except discord.Forbidden:
-            await db.delete_invite(self.party["message_id"], self.target_id)
-            if party:
-                await _refresh_party_embed_with_reserved(interaction.client, party)
-            await interaction.response.edit_message(content="❌ 해당 유저의 DM이 비활성화되어 있습니다.", view=None)
         self.stop()
 
 
@@ -2787,21 +2887,8 @@ class ManageView(View):
         in_party_ids   = {s["discord_id"] for s in slots_in_party} | set(reserved.values())
         in_party_ids.add(party["leader_id"])
 
-        # API 등록 유저 목록 (이미 참여/예약된 유저 제외)
-        import aiosqlite
-        async with aiosqlite.connect(db.DB_PATH) as conn:
-            conn.row_factory = aiosqlite.Row
-            cur = await conn.execute(
-                "SELECT u.discord_id, "
-                "COALESCE("
-                "  (SELECT uc.character_name FROM user_characters uc WHERE uc.discord_id=u.discord_id ORDER BY uc.added_at LIMIT 1),"
-                "  (SELECT ps.character_name FROM party_slots ps WHERE ps.discord_id=u.discord_id ORDER BY ps.joined_at DESC LIMIT 1)"
-                ") AS representative "
-                "FROM users u ORDER BY u.registered_at DESC"
-            )
-            all_users = [dict(r) for r in await cur.fetchall()]
-
-        invitable = [u for u in all_users if u["discord_id"] not in in_party_ids]
+        # 웹 API(/parties/{id}/invitable-users)와 공유하는 조회 함수.
+        invitable = await db.get_invitable_users(in_party_ids)
         if not invitable:
             await interaction.response.send_message("초대 가능한 유저가 없습니다.", ephemeral=True)
             return

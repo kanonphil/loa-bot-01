@@ -1957,6 +1957,44 @@ async def get_reserved_slots(message_id: str) -> dict[int, str]:
     return {r[0]: r[1] for r in rows}
 
 
+async def get_invitable_users(exclude_ids: set[str] | list[str]) -> list[dict]:
+    """등록된(API 키 있는) 유저 전체 + 대표 캐릭터명(최초 등록 캐릭터, 없으면 최근 파티
+    참여 캐릭터) — Discord "초대" 버튼(ManageView._handle_invite)이 쓰던 인라인 쿼리를
+    옮긴 것. exclude_ids(이미 파티에 있거나 초대/예약된 유저)는 호출부에서 걸러낸다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT u.discord_id, "
+            "COALESCE("
+            "  (SELECT uc.character_name FROM user_characters uc WHERE uc.discord_id=u.discord_id ORDER BY uc.added_at LIMIT 1),"
+            "  (SELECT ps.character_name FROM party_slots ps WHERE ps.discord_id=u.discord_id ORDER BY ps.joined_at DESC LIMIT 1)"
+            ") AS representative "
+            "FROM users u ORDER BY u.registered_at DESC"
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+    exclude = set(exclude_ids)
+    return [r for r in rows if r["discord_id"] not in exclude]
+
+
+async def get_user_invites(discord_id: str) -> list[dict]:
+    """로그인한 유저에게 온 대기 중인 초대 목록 — 웹 "내게 온 초대" 화면용.
+    디스코드는 DM으로 바로 알림이 가서 이 조회가 필요 없었지만, 웹은 이 목록이
+    있어야 수락/거절할 방법이 생긴다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT i.message_id, i.slot_number, i.invited_at, "
+            "       p.raid_name, p.difficulty, p.proficiency, p.scheduled_time, "
+            "       p.scheduled_datetime, p.leader_id, p.min_level, p.status "
+            "FROM party_invites i JOIN parties p ON p.message_id = i.message_id "
+            "WHERE i.discord_id = ? "
+            "ORDER BY i.invited_at DESC",
+            (discord_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def assign_invite_slot(
     message_id: str, discord_id: str,
     character_name: str, character_class: str, role: str,

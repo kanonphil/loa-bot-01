@@ -431,6 +431,77 @@ async def toggle_waitlist(message_id: str, body: WaitlistBody):
   return {"success": True, "on_waitlist": True}
 
 
+# ── 파티 초대 (등록 유저만 — 게스트 초대는 아직 웹에 없음) ────────
+
+@router.get("/parties/{message_id}/invitable-users")
+async def invitable_users(message_id: str, discord_id: str):
+  """리더/관리자에게 보여줄 초대 가능 유저 + 빈 슬롯 목록. 웹의 초대 폼이 쓴다."""
+  from bot.ui.views import _require_leader_or_admin
+
+  party = await db.get_party(message_id)
+  err = _require_leader_or_admin(party, discord_id)
+  if err:
+    return {"success": False, "reason": err}
+
+  slots = await db.get_party_slots(message_id)
+  reserved = await db.get_reserved_slots(message_id)
+  in_party_ids = {s["discord_id"] for s in slots} | set(reserved.values()) | {party["leader_id"]}
+  users = await db.get_invitable_users(in_party_ids)
+  occupied = {s["slot_number"] for s in slots} | set(reserved.keys())
+  available_slots = [n for n in range(1, party["total_slots"] + 1) if n not in occupied]
+  return {"success": True, "users": users, "available_slots": available_slots}
+
+
+class CreateInviteBody(BaseModel):
+  discord_id: str
+  target_discord_id: str
+  slot_number: int
+
+
+@router.post("/parties/{message_id}/invite")
+async def create_invite(message_id: str, body: CreateInviteBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _create_invite_core
+
+  return await _create_invite_core(
+    bot_ref.get_bot(), message_id, body.discord_id, body.target_discord_id, body.slot_number
+  )
+
+
+@router.get("/my-invites")
+async def my_invites(discord_id: str):
+  """로그인한 유저에게 온 대기 중인 초대 목록 — 웹 전용(디스코드는 DM으로 바로 알림)."""
+  return await db.get_user_invites(discord_id)
+
+
+class AcceptInviteBody(BaseModel):
+  discord_id: str
+  character_name: str
+  role: str
+
+
+@router.post("/invites/{message_id}/accept")
+async def accept_invite(message_id: str, body: AcceptInviteBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _accept_invite_core
+
+  return await _accept_invite_core(
+    bot_ref.get_bot(), message_id, body.discord_id, body.character_name, body.role
+  )
+
+
+class DeclineInviteBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/invites/{message_id}/decline")
+async def decline_invite(message_id: str, body: DeclineInviteBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _decline_invite_core
+
+  return await _decline_invite_core(bot_ref.get_bot(), message_id, body.discord_id)
+
+
 @router.get("/parties/{message_id}/switch-eligibility")
 async def switch_eligibility(message_id: str, discord_id: str):
   """참여 캐릭터 변경 시 고를 수 있는 캐릭터 후보 — 같은 레이드의 다른 공대에 이미
