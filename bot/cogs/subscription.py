@@ -11,6 +11,12 @@ import bot.database.manager as db
 from bot.data.raids import RAIDS
 
 
+def _format_difficulty(difficulty: str) -> str:
+    """DB엔 "전체"로 저장하지만("전체 난이도" 그대로 저장하면 실제 난이도명과
+    헷갈릴 수 있어 짧은 값으로 저장), 사람에게 보여줄 땐 "전체 난이도"로 풀어준다."""
+    return "전체 난이도" if difficulty == "전체" else difficulty
+
+
 # ── 구독 선택 뷰 ─────────────────────────────────────────
 
 class RaidSelectView(View):
@@ -54,6 +60,12 @@ class RaidSelectView(View):
         diffs = RAIDS.get(raid_name, {}).get("difficulties", {})
         options = [
             discord.SelectOption(
+                label="전체 난이도",
+                description="새로 열리는 난이도가 늘어나도 매번 다시 구독할 필요 없음",
+                value="전체",
+            ),
+        ] + [
+            discord.SelectOption(
                 label=diff,
                 description=f"최소 {info['min_level']} | {info['total_slots']}인",
                 value=diff,
@@ -70,17 +82,18 @@ class RaidSelectView(View):
             return
         difficulty = interaction.data["values"][0]
         added = await db.subscribe_raid(self.discord_id, self.selected_raid, difficulty)
+        label = f"{self.selected_raid} {_format_difficulty(difficulty)}"
         if added:
             await interaction.response.edit_message(
                 content=(
-                    f"✅ **{self.selected_raid} {difficulty}** 구독 완료!\n"
+                    f"✅ **{label}** 구독 완료!\n"
                     f"새 공대 모집 시 DM으로 알려드립니다."
                 ),
                 view=None,
             )
         else:
             await interaction.response.edit_message(
-                content=f"이미 **{self.selected_raid} {difficulty}**를 구독 중입니다.",
+                content=f"이미 **{label}**를 구독 중입니다.",
                 view=None,
             )
 
@@ -93,7 +106,7 @@ class UnsubscribeView(View):
         self.discord_id = discord_id
         options = [
             discord.SelectOption(
-                label=f"{s['raid_name']} {s['difficulty']}",
+                label=f"{s['raid_name']} {_format_difficulty(s['difficulty'])}",
                 value=f"{s['raid_name']}|{s['difficulty']}",
             )
             for s in subs
@@ -109,7 +122,7 @@ class UnsubscribeView(View):
         raid_name, difficulty = interaction.data["values"][0].split("|", 1)
         removed = await db.unsubscribe_raid(self.discord_id, raid_name, difficulty)
         msg = (
-            f"🗑️ **{raid_name} {difficulty}** 구독이 취소되었습니다."
+            f"🗑️ **{raid_name} {_format_difficulty(difficulty)}** 구독이 취소되었습니다."
             if removed else "구독 정보를 찾을 수 없습니다."
         )
         await interaction.response.edit_message(content=msg, view=None)
@@ -138,7 +151,7 @@ class Subscription(commands.Cog):
                 "구독 중인 레이드가 없습니다.\n`/레이드구독`으로 구독해보세요!", ephemeral=True
             )
             return
-        lines = [f"🔔 **{s['raid_name']} {s['difficulty']}**" for s in subs]
+        lines = [f"🔔 **{s['raid_name']} {_format_difficulty(s['difficulty'])}**" for s in subs]
         await interaction.response.send_message(
             "**📋 구독 중인 레이드**\n" + "\n".join(lines), ephemeral=True
         )

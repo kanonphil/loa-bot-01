@@ -2594,10 +2594,12 @@ async def get_all_subscriptions() -> list[dict]:
 
 
 async def get_raid_subscribers(raid_name: str, difficulty: str) -> list[str]:
-    """특정 레이드+난이도 구독자 discord_id 목록 반환."""
+    """특정 레이드+난이도 구독자 discord_id 목록 반환. "전체" 난이도로 구독한
+    사람(RaidSelectView의 "전체 난이도" 옵션)도 같이 포함한다."""
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
-            "SELECT discord_id FROM raid_subscriptions WHERE raid_name=? AND difficulty=?",
+            "SELECT discord_id FROM raid_subscriptions "
+            "WHERE raid_name=? AND difficulty IN (?, '전체')",
             (raid_name, difficulty),
         )
         rows = await cur.fetchall()
