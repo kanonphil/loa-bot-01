@@ -398,6 +398,61 @@ async def toggle_waitlist(message_id: str, discord_id: str) -> dict:
     return resp.json()
 
 
+async def get_invitable_users(message_id: str, discord_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/invitable-users",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def create_invite(message_id: str, discord_id: str, target_discord_id: str, slot_number: int) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/invite",
+        json={"discord_id": discord_id, "target_discord_id": target_discord_id, "slot_number": slot_number},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def get_my_invites(discord_id: str) -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/my-invites",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def accept_invite(message_id: str, discord_id: str, character_name: str, role: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/invites/{message_id}/accept",
+        json={"discord_id": discord_id, "character_name": character_name, "role": role},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def decline_invite(message_id: str, discord_id: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/invites/{message_id}/decline",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",

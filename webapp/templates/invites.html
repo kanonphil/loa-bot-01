@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<h1>내게 온 초대</h1>
+<p class="settings-desc">파티장이 특정 슬롯에 초대한 공대 목록입니다. 게스트(미등록 유저) 초대는 아직 디스코드에서만 응답할 수 있습니다.</p>
+
+{% if action_result and not action_result.success %}
+<div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
+{% elif action_result and action_result.success %}
+<div class="flash-data" hidden data-type="success" data-message="✅ 처리되었습니다."></div>
+{% endif %}
+
+{% if not invites %}
+{{ ui.empty("받은 초대가 없습니다", "파티장이 초대하면 여기에 나타납니다.", "공대 목록 보기", "/parties", "📬") }}
+{% else %}
+<div class="ui-list">
+  {% for inv in invites %}
+  {% call ui.card() %}
+    <div class="ui-row">
+      <span class="ui-card-title">{{ inv.raid_name }} {{ inv.difficulty }}</span>
+      {{ ui.chip(inv.proficiency) }}
+      <span class="ui-spacer"></span>
+      <span class="ui-card-meta">{{ inv.slot_number }}번 슬롯</span>
+    </div>
+    <div class="ui-row">
+      <span class="ui-card-meta">{{ inv.schedule.when }}</span>
+      {% if inv.schedule.countdown %}{{ ui.chip(inv.schedule.countdown, inv.schedule.tone) }}{% endif %}
+    </div>
+
+    {% if inv.qualifying %}
+    <form method="post" action="/invites/{{ inv.message_id }}/accept" class="party-join-form invite-accept-form">
+      <select name="character_name" class="js-themed-select invite-char-select">
+        {% for q in inv.qualifying %}
+        <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
+        {% endfor %}
+      </select>
+      <select name="role" class="js-themed-select invite-role-select">
+        <option value="dps">딜러</option>
+        <option value="support">서포터</option>
+      </select>
+      <button type="submit">수락</button>
+    </form>
+    <script>
+      (function () {
+        var form = document.currentScript.previousElementSibling;
+        var isSupportMap = {{ inv.character_is_support | tojson }};
+        var charSelect = form.querySelector(".invite-char-select");
+        var roleSelect = form.querySelector(".invite-role-select");
+        var supportOption = roleSelect.querySelector('option[value="support"]');
+
+        function syncRole() {
+          var isSupport = isSupportMap[charSelect.value];
+          supportOption.disabled = !isSupport;
+          if (isSupport) roleSelect.value = "support";
+          else if (roleSelect.value === "support") roleSelect.value = "dps";
+          roleSelect.dispatchEvent(new Event("change"));
+        }
+        charSelect.addEventListener("change", syncRole);
+        syncRole();
+      })();
+    </script>
+    {% else %}
+    <p class="party-cannot-join">{{ inv.cannot_accept_reason or "참여 가능한 캐릭터가 없습니다." }}</p>
+    {% endif %}
+
+    <form method="post" action="/invites/{{ inv.message_id }}/decline">
+      <button type="submit" class="party-leave-btn">거절</button>
+    </form>
+  {% endcall %}
+  {% endfor %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

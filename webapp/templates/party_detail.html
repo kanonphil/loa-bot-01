@@ -203,6 +203,22 @@
     </form>
   </div>
 
+  {% if invitable_users and invitable_slots %}
+  <form method="post" action="/parties/{{ party.message_id }}/invite" class="leader-form">
+    <select name="target_discord_id" class="js-themed-select">
+      {% for u in invitable_users %}
+      <option value="{{ u.discord_id }}">{{ u.representative or u.discord_id }}</option>
+      {% endfor %}
+    </select>
+    <select name="slot_number" class="js-themed-select">
+      {% for n in invitable_slots %}
+      <option value="{{ n }}">{{ n }}번 슬롯</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="leader-btn">초대</button>
+  </form>
+  {% endif %}
+
   {% if other_members %}
   <form method="post" action="/parties/{{ party.message_id }}/kick" class="leader-form">
     <select name="target_discord_id" class="js-themed-select">

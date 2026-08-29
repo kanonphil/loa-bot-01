@@ -235,6 +235,16 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
         waitlist_status = await bot_client.get_waitlist_status(message_id, discord_id)
         on_waitlist = waitlist_status["on_waitlist"]
 
+    invitable_users = []
+    invitable_slots = []
+    if is_leader and party["status"] != "disbanded":
+        # 게스트 초대(미등록 유저)는 웹에 동등한 UI가 없어 v1 범위에서 제외 —
+        # 등록된 유저만 초대할 수 있다.
+        invite_result = await bot_client.get_invitable_users(message_id, discord_id)
+        if invite_result.get("success"):
+            invitable_users = invite_result["users"]
+            invitable_slots = invite_result["available_slots"]
+
     raids = await bot_client.get_raids()
     raid_info = raids.get(party["raid_name"], {})
     diff_info = (raid_info.get("difficulties") or {}).get(party["difficulty"], {})
@@ -291,6 +301,8 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
         "eligibility": eligibility,
         "character_is_support": character_is_support,
         "on_waitlist": on_waitlist,
+        "invitable_users": invitable_users,
+        "invitable_slots": invitable_slots,
         "sub_parties": sub_parties,
         "party_groups": party_groups,
         "all_slots": all_slots,
@@ -358,6 +370,18 @@ async def toggle_waitlist(
 ):
     result = await bot_client.toggle_waitlist(message_id, user["discord_id"])
     return _redirect_with_result(message_id, result, "빈자리 알림 설정을 바꾸지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/invite")
+async def invite(
+    request: Request,
+    message_id: str,
+    target_discord_id: str = Form(...),
+    slot_number: int = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.create_invite(message_id, user["discord_id"], target_discord_id, slot_number)
+    return _redirect_with_result(message_id, result, "초대를 보내지 못했습니다.")
 
 
 @router.get("/parties/{message_id}/switch")

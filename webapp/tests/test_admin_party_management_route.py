@@ -11,6 +11,7 @@ RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
 WAITLIST_STATUS_URL = "http://bot-server.internal/api/internal/parties/p1/waitlist-status"
+INVITABLE_USERS_URL = "http://bot-server.internal/api/internal/parties/p1/invitable-users"
 CLOSE_URL = "http://bot-server.internal/api/internal/parties/p1/close"
 REVERT_URL = "http://bot-server.internal/api/internal/admin/parties/p1/revert-clear"
 ADMIN_PARTIES_URL = "http://bot-server.internal/api/internal/admin/parties"
@@ -48,6 +49,7 @@ def test_admin_sees_leader_panel_on_party_they_do_not_lead(client, monkeypatch):
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json={"can_join": False, "reason": "이미 마감된 공대입니다."}))
         respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200

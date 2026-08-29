@@ -8,6 +8,7 @@ PARTIES_URL = "http://bot-server.internal/api/internal/parties"
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
 WAITLIST_STATUS_URL = "http://bot-server.internal/api/internal/parties/p1/waitlist-status"
+INVITABLE_USERS_URL = "http://bot-server.internal/api/internal/parties/p1/invitable-users"
 JOIN_URL = "http://bot-server.internal/api/internal/parties/p1/join"
 LEAVE_URL = "http://bot-server.internal/api/internal/parties/p1/leave"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
@@ -185,6 +186,7 @@ def test_party_detail_shows_leave_when_already_joined(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
@@ -206,6 +208,7 @@ def test_party_detail_shows_guest_badge_for_guest_slot(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=party_with_guest))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
@@ -356,6 +359,7 @@ def test_party_detail_hides_waitlist_button_when_already_joined(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200

@@ -8,6 +8,7 @@ PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
+INVITABLE_USERS_URL = "http://bot-server.internal/api/internal/parties/p1/invitable-users"
 CLOSE_URL = "http://bot-server.internal/api/internal/parties/p1/close"
 CLEAR_URL = "http://bot-server.internal/api/internal/parties/p1/clear"
 KICK_URL = "http://bot-server.internal/api/internal/parties/p1/kick"
@@ -45,11 +46,70 @@ def test_leader_sees_management_panel(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
     assert "파티장 관리" in resp.text
     assert "멤버캐릭" in resp.text  # 강제퇴장/위임 대상 목록에 다른 멤버가 보임
+
+
+def test_leader_sees_invite_form_with_candidates(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(
+            200, json={"success": True, "users": [{"discord_id": "333", "representative": "초대후보"}], "available_slots": [3, 4]}
+        ))
+        resp = client.get("/parties/p1")
+
+    assert resp.status_code == 200
+    assert "초대후보" in resp.text
+    assert "/parties/p1/invite" in resp.text
+    assert "3번 슬롯" in resp.text
+
+
+def test_leader_invite_form_hidden_when_no_candidates(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
+        resp = client.get("/parties/p1")
+
+    assert resp.status_code == 200
+    assert "/parties/p1/invite" not in resp.text
+
+
+def test_invite_submit_posts_to_bot_and_redirects(client):
+    INVITE_URL = "http://bot-server.internal/api/internal/parties/p1/invite"
+    with respx.mock:
+        log_in(client, discord_id="111")
+        invite_route = respx.post(INVITE_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/parties/p1/invite", data={"target_discord_id": "333", "slot_number": "3"})
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
+    assert invite_route.called
+    import json as _json
+    payload = _json.loads(invite_route.calls[0].request.content)
+    assert payload == {"discord_id": "111", "target_discord_id": "333", "slot_number": 3}
+
+
+def test_invite_submit_shows_error_on_failure(client):
+    INVITE_URL = "http://bot-server.internal/api/internal/parties/p1/invite"
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.post(INVITE_URL).mock(
+            return_value=httpx.Response(200, json={"success": False, "reason": "이미 초대된 유저입니다."})
+        )
+        resp = client.post("/parties/p1/invite", data={"target_discord_id": "333", "slot_number": "3"})
+
+    assert resp.status_code == 303
+    assert "join_error=" in resp.headers["location"]
 
 
 def test_non_leader_does_not_see_management_panel(client):
@@ -109,6 +169,7 @@ def test_kick_action_shows_error_reason(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp2 = client.get(resp.headers["location"])
     assert "파티원을 찾을 수 없습니다" in resp2.text
 
