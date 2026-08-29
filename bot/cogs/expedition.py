@@ -8,6 +8,18 @@ from bot.ui.embeds import expedition_embed, no_characters_embed
 from bot.ui.views import ExpeditionView, AddCharacterModal
 
 
+async def _my_character_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """본인이 등록한 캐릭터만 후보로 준다 — 다른 사람 캐릭터명이 유출되면 안 되므로
+    admin.py의 레이드/직업 자동완성과 달리 전체 목록이 아닌 본인 것만 조회한다."""
+    names = await db.get_user_characters(str(interaction.user.id))
+    return [
+        app_commands.Choice(name=name, value=name)
+        for name in names if current.lower() in name.lower()
+    ][:25]
+
+
 class Expedition(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -69,6 +81,7 @@ class Expedition(commands.Cog):
     @app_commands.command(name="캐릭터삭제", description="원정대에서 캐릭터를 삭제합니다.")
     @app_commands.describe(char_name="삭제할 캐릭터 이름")
     @app_commands.rename(char_name="캐릭터명")
+    @app_commands.autocomplete(char_name=_my_character_autocomplete)
     async def unregister_char(self, interaction: discord.Interaction, char_name: str) -> None:
         removed = await remove_character_and_leave_parties(interaction.client, str(interaction.user.id), char_name)
         if removed:
