@@ -1901,6 +1901,15 @@ class PartyView(View):
         switch_btn.callback = self._handle_switch_character
         self.add_item(switch_btn)
 
+        role_btn = Button(
+            label="역할 변경", emoji="🔄",
+            style=discord.ButtonStyle.secondary,
+            custom_id="party:switch-role",
+            row=2,
+        )
+        role_btn.callback = self._handle_switch_role
+        self.add_item(role_btn)
+
     # ── 참여하기 ────────────────────────────────────
 
     async def _handle_join(self, interaction: discord.Interaction) -> None:
@@ -2082,6 +2091,33 @@ class PartyView(View):
             view.message = await interaction.original_response()
         except discord.HTTPException:
             pass
+
+    # ── 역할 변경 ────────────────────────────────────
+    # 캐릭터는 그대로 두고 딜러/서포터만 바꾸는 저비용 액션 — 웹(party_detail.html)엔
+    # 이미 있었는데 디스코드엔 버튼이 안 붙어있었다. 직업 적합성/같은 소파티 내 서포터
+    # 중복 여부는 db.switch_party_role(_switch_role_core 경유)이 이미 검증하고 사유
+    # 메시지까지 만들어주므로 여기서 따로 재검증하지 않고 그대로 토글만 시도한다.
+
+    async def _handle_switch_role(self, interaction: discord.Interaction) -> None:
+        party = await db.get_party_by_channel(str(interaction.channel.id))
+        if not party or party["status"] == "disbanded":
+            await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
+            return
+
+        discord_id = str(interaction.user.id)
+        slots = await db.get_party_slots(party["message_id"])
+        my_slot = next((s for s in slots if s["discord_id"] == discord_id), None)
+        if not my_slot:
+            await interaction.response.send_message("이 파티에 참여 중이 아닙니다.", ephemeral=True)
+            return
+
+        new_role = "dps" if my_slot["role"] == "support" else "support"
+        result = await _switch_role_core(interaction.client, party["message_id"], discord_id, new_role)
+        if not result["success"]:
+            await interaction.response.send_message(result["reason"], ephemeral=True)
+            return
+        label = "서포터" if new_role == "support" else "딜러"
+        await interaction.response.send_message(f"✅ 역할이 **{label}**(으)로 변경되었습니다.", ephemeral=True)
 
     # ── 빈자리 알림 ──────────────────────────────────
 

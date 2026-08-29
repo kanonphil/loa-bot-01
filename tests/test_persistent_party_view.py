@@ -20,6 +20,7 @@ def test_party_view_is_persistent():
     custom_ids = {item.custom_id for item in view.children}
     assert custom_ids == {
         "party:join", "party:leave", "party:waitlist", "party:manage", "party:switch",
+        "party:switch-role",
     }
 
 
