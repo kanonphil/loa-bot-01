@@ -8,7 +8,8 @@
       "Bash(dir D:\\\\01-STUDY\\\\loa-bot /s /b)",
       "Bash(findstr /i \"assets\\\\|image\\\\|png\\\\|jpg\")",
       "Bash(git -C \"D:\\\\01-STUDY\\\\loa-bot\" status)",
-      "Bash(git -C \"D:\\\\01-STUDY\\\\loa-bot\" diff)"
+      "Bash(git -C \"D:\\\\01-STUDY\\\\loa-bot\" diff)",
+      "Bash(python -m pytest webapp/tests/test_expedition_route.py webapp/tests/test_pages_smoke.py -q)"
     ]
   },
   "hooks": {
