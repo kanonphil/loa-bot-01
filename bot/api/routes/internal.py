@@ -617,6 +617,31 @@ async def add_account(body: AddAccountBody):
   return {"success": True, "label": body.character_name, "added": added, "total": len(siblings or [])}
 
 
+@router.get("/accounts/list")
+async def list_accounts(discord_id: str):
+  """웹 '내 계정' 목록용 — Discord /api확인과 동일하게 마스킹된 키를 같이 내려준다."""
+  accounts = await db.list_user_api_keys(discord_id)
+  out = []
+  for acc in accounts:
+    key = await db.get_user_api_key_by_id(acc["id"])
+    masked = (key[:8] + "****" + key[-4:]) if key and len(key) > 12 else "****"
+    out.append({**acc, "masked_key": masked})
+  return out
+
+
+class RemoveAccountBody(BaseModel):
+  discord_id: str
+  key_id: int
+
+
+@router.post("/accounts/remove")
+async def remove_account(body: RemoveAccountBody):
+  """Discord /api삭제와 동일한 로직 — 계정 삭제 시 캐릭터 자체는 안 지우고
+  api_key_id만 NULL로 남긴다(db.remove_user_api_key)."""
+  removed = await db.remove_user_api_key(body.discord_id, body.key_id)
+  return {"success": removed}
+
+
 # ── 관리자 (카테고리/레이드/난이도/직업 CRUD) ─────────────────
 # Discord의 /관리 명령어군(bot/cogs/admin.py)과 같은 db 함수를 그대로 호출한다.
 # 웹앱은 ADMIN_API_KEY를 갖지 않으므로(웹앱 서버 침해 시에도 관리자 권한이 새지 않도록

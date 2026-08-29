@@ -22,7 +22,8 @@ async def _page_context(discord_id: str) -> dict:
             groups.append(group)
         group["characters"].append(c)
     # 캐릭터 카드 자체는 기존과 동일하게 평탄화된 목록으로도 노출 (기존 템플릿/테스트 호환)
-    return {"characters": characters, "character_groups": groups}
+    accounts = await bot_client.list_accounts(discord_id)
+    return {"characters": characters, "character_groups": groups, "accounts": accounts}
 
 
 @router.get("/expedition")
@@ -87,4 +88,19 @@ async def add_account(
         request,
         "expedition.html",
         {"user": user, "active": "expedition", "account_result": account_result, **ctx},
+    )
+
+
+@router.post("/expedition/remove-account")
+async def remove_account(
+    request: Request,
+    key_id: int = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    remove_account_result = await bot_client.remove_account(user["discord_id"], key_id)
+    ctx = await _page_context(user["discord_id"])
+    return templates.TemplateResponse(
+        request,
+        "expedition.html",
+        {"user": user, "active": "expedition", "remove_account_result": remove_account_result, **ctx},
     )

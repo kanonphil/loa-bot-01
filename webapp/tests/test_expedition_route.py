@@ -9,9 +9,15 @@ ADD_URL = "http://bot-server.internal/api/internal/characters/add"
 REMOVE_URL = "http://bot-server.internal/api/internal/characters/remove"
 SYNC_URL = "http://bot-server.internal/api/internal/characters/sync"
 ADD_ACCOUNT_URL = "http://bot-server.internal/api/internal/accounts/add"
+LIST_ACCOUNTS_URL = "http://bot-server.internal/api/internal/accounts/list"
+REMOVE_ACCOUNT_URL = "http://bot-server.internal/api/internal/accounts/remove"
 
 CHARACTERS = [
     {"character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0, "account_label": "발키리"},
+]
+
+ACCOUNTS = [
+    {"id": 1, "label": "발키리", "added_at": "2026-01-01T00:00:00", "masked_key": "abcd1234****wxyz"},
 ]
 
 TWO_ACCOUNT_CHARACTERS = [
@@ -19,6 +25,10 @@ TWO_ACCOUNT_CHARACTERS = [
     {"character_name": "워로드부캐", "character_class": "워로드", "item_level": 1700.0, "account_label": "발키리"},
     {"character_name": "슬레이어", "character_class": "슬레이어", "item_level": 1690.0, "account_label": "슬레이어부계정"},
 ]
+
+
+def _mock_accounts(accounts=None):
+    respx.get(LIST_ACCOUNTS_URL).mock(return_value=httpx.Response(200, json=accounts if accounts is not None else []))
 
 
 def test_expedition_requires_login(client):
@@ -31,6 +41,7 @@ def test_expedition_page_lists_characters(client):
     with respx.mock:
         log_in(client)
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
         resp = client.get("/expedition")
 
     assert resp.status_code == 200
@@ -42,6 +53,7 @@ def test_expedition_page_empty_state(client):
     with respx.mock:
         log_in(client)
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
+        _mock_accounts()
         resp = client.get("/expedition")
 
     assert resp.status_code == 200
@@ -53,6 +65,7 @@ def test_expedition_page_groups_by_account_when_multiple_accounts(client):
     with respx.mock:
         log_in(client)
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=TWO_ACCOUNT_CHARACTERS))
+        _mock_accounts()
         resp = client.get("/expedition")
 
     assert resp.status_code == 200
@@ -69,10 +82,34 @@ def test_expedition_page_single_account_has_no_group_title(client):
     with respx.mock:
         log_in(client)
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
         resp = client.get("/expedition")
 
     assert resp.status_code == 200
     assert "expedition-account-title" not in resp.text
+
+
+def test_expedition_page_lists_my_accounts_with_masked_key(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts(ACCOUNTS)
+        resp = client.get("/expedition")
+
+    assert resp.status_code == 200
+    assert "abcd1234****wxyz" in resp.text
+    assert 'name="key_id" value="1"' in resp.text
+
+
+def test_expedition_page_hides_account_section_when_no_accounts(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
+        _mock_accounts([])
+        resp = client.get("/expedition")
+
+    assert resp.status_code == 200
+    assert "내 계정" not in resp.text
 
 
 def test_add_character_success_shows_confirmation(client):
@@ -85,6 +122,7 @@ def test_add_character_success_shows_confirmation(client):
             )
         )
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
 
         resp = client.post("/expedition/add", data={"character_name": "발키리"})
 
@@ -99,6 +137,7 @@ def test_add_character_failure_shows_reason(client):
             return_value=httpx.Response(200, json={"success": False, "reason": "이미 등록된 캐릭터입니다."})
         )
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
 
         resp = client.post("/expedition/add", data={"character_name": "발키리"})
 
@@ -111,6 +150,7 @@ def test_remove_character_calls_bot(client):
         log_in(client)
         remove_route = respx.post(REMOVE_URL).mock(return_value=httpx.Response(200, json={"success": True}))
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
+        _mock_accounts()
 
         resp = client.post("/expedition/remove", data={"character_name": "발키리"})
 
@@ -125,6 +165,7 @@ def test_sync_shows_result(client):
             return_value=httpx.Response(200, json={"success": True, "updated": 2, "total": 2})
         )
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
 
         resp = client.post("/expedition/sync")
 
@@ -141,6 +182,7 @@ def test_add_account_success_shows_confirmation(client):
             )
         )
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
 
         resp = client.post(
             "/expedition/add-account",
@@ -161,6 +203,7 @@ def test_add_account_failure_shows_reason(client):
             )
         )
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
 
         resp = client.post(
             "/expedition/add-account",
@@ -169,3 +212,31 @@ def test_add_account_failure_shows_reason(client):
 
     assert resp.status_code == 200
     assert "동물롱장 길드 소속이 아닙니다" in resp.text
+
+
+def test_remove_account_success_shows_confirmation(client):
+    with respx.mock:
+        log_in(client)
+        remove_route = respx.post(REMOVE_ACCOUNT_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
+
+        resp = client.post("/expedition/remove-account", data={"key_id": "1"})
+
+    assert resp.status_code == 200
+    assert remove_route.called
+    assert remove_route.calls[0].request.content
+    assert "삭제되었습니다" in resp.text
+
+
+def test_remove_account_failure_shows_message(client):
+    with respx.mock:
+        log_in(client)
+        respx.post(REMOVE_ACCOUNT_URL).mock(return_value=httpx.Response(200, json={"success": False}))
+        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
+        _mock_accounts()
+
+        resp = client.post("/expedition/remove-account", data={"key_id": "999"})
+
+    assert resp.status_code == 200
+    assert "계정을 찾을 수 없습니다" in resp.text

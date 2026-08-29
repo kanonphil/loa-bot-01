@@ -112,3 +112,66 @@ def test_add_account_requires_webapp_key(client):
         json={"discord_id": "111", "api_key": "dummy-key", "character_name": "발키리"},
     )
     assert resp.status_code == 401
+
+
+# ── 계정 목록/삭제 (웹 "내 계정" 관리 — 기존 /api확인, /api삭제 웹 버전) ──────
+
+def test_list_accounts_returns_masked_key(client):
+    key_id = asyncio.run(db.add_user_api_key("111", "발키리", "abcdefgh12345678"))
+
+    resp = client.get("/api/internal/accounts/list", params={"discord_id": "111"}, headers=HEADERS)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["id"] == key_id
+    assert body[0]["label"] == "발키리"
+    assert body[0]["masked_key"] == "abcdefgh****5678"
+
+
+def test_list_accounts_empty_when_none_registered(client):
+    resp = client.get("/api/internal/accounts/list", params={"discord_id": "111"}, headers=HEADERS)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_remove_account_deletes_and_unlinks_characters(client):
+    key_id = asyncio.run(db.add_user_api_key("111", "발키리", "dummy-key"))
+    asyncio.run(db.add_character("111", "발키리캐릭", api_key_id=key_id))
+
+    resp = client.post(
+        "/api/internal/accounts/remove",
+        json={"discord_id": "111", "key_id": key_id},
+        headers=HEADERS,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"success": True}
+    assert asyncio.run(db.list_user_api_keys("111")) == []
+    # 계정만 삭제되고 캐릭터 자체는 남는다(연결만 해제)
+    assert "발키리캐릭" in asyncio.run(db.get_user_characters("111"))
+
+
+def test_remove_account_rejects_other_users_account(client):
+    """discord_id가 소유자와 다르면 삭제되면 안 된다 — remove_user_api_key의 ownership 체크."""
+    key_id = asyncio.run(db.add_user_api_key("111", "발키리", "dummy-key"))
+
+    resp = client.post(
+        "/api/internal/accounts/remove",
+        json={"discord_id": "222", "key_id": key_id},
+        headers=HEADERS,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"success": False}
+    assert len(asyncio.run(db.list_user_api_keys("111"))) == 1
+
+
+def test_list_accounts_requires_webapp_key(client):
+    resp = client.get("/api/internal/accounts/list", params={"discord_id": "111"})
+    assert resp.status_code == 401
+
+
+def test_remove_account_requires_webapp_key(client):
+    resp = client.post("/api/internal/accounts/remove", json={"discord_id": "111", "key_id": 1})
+    assert resp.status_code == 401

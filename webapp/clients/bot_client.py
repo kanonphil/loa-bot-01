@@ -260,6 +260,28 @@ async def add_account(discord_id: str, api_key: str, character_name: str) -> dic
     return resp.json()
 
 
+async def list_accounts(discord_id: str) -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/accounts/list",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def remove_account(discord_id: str, key_id: int) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/accounts/remove",
+        json={"discord_id": discord_id, "key_id": key_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def toggle_completion(
     discord_id: str, character_name: str, raid_name: str, difficulty: str
 ) -> bool:

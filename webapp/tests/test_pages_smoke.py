@@ -66,6 +66,7 @@ def _mock_everything():
         return_value=httpx.Response(200, json={"week_key": "2026-01-07", "completions": []})
     )
     respx.get(f"{B}/user-characters-grouped").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(f"{B}/accounts/list").mock(return_value=httpx.Response(200, json=[]))
     respx.get(f"{B}/support-classes").mock(return_value=httpx.Response(200, json=["바드"]))
     respx.get(f"{B}/ranking").mock(
         return_value=httpx.Response(200, json={"metric": "combat_power", "role": "dps", "entries": []})

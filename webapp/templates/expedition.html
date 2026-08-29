@@ -26,10 +26,39 @@
   {% endif %}
 {% endif %}
 
+{% if remove_account_result %}
+  {% if remove_account_result.success %}
+  <div class="flash-data" hidden data-type="success" data-message="🗑️ 계정이 삭제되었습니다."></div>
+  {% else %}
+  <div class="flash-data" hidden data-type="error" data-message="계정을 찾을 수 없습니다."></div>
+  {% endif %}
+{% endif %}
+
 <form method="post" action="/expedition/add" class="expedition-add-form">
   <input type="text" name="character_name" placeholder="캐릭터 이름 (정확히 입력)" maxlength="12" required>
   <button type="submit">캐릭터 추가</button>
 </form>
+
+{% if accounts %}
+<div class="expedition-account-add">
+  <h2 class="expedition-section-title">내 계정</h2>
+  <ul class="expedition-list">
+    {% for acc in accounts %}
+    <li class="expedition-item">
+      <span class="expedition-item-main">
+        <span class="dash-char-name">{{ acc.label }}</span>
+        <span class="expedition-item-meta"><code>{{ acc.masked_key }}</code></span>
+      </span>
+      <form method="post" action="/expedition/remove-account" class="expedition-remove-form"
+            onsubmit="return confirm('이 계정을 삭제할까요? 이 계정으로 등록된 캐릭터는 삭제되지 않고 계정 연결만 해제됩니다.');">
+        <input type="hidden" name="key_id" value="{{ acc.id }}">
+        <button type="submit" class="party-leave-btn">삭제</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 
 <div class="expedition-account-add">
   <h2 class="expedition-section-title">부계정 추가</h2>
