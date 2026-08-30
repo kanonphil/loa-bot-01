@@ -26,7 +26,6 @@ COGS = [
     "bot.cogs.subscription",
     "bot.cogs.invite",
     "bot.cogs.guide",
-    "bot.cogs.ranking",
 ]
 
 
