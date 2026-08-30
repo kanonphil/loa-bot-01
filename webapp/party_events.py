@@ -74,7 +74,7 @@ async def _detect_cleared_events(prev: dict[str, dict], current: dict[str, dict]
             events.append({
                 "type": "cleared",
                 "message_id": message_id,
-                "text": f"{party.get('raid_name', '')} {party.get('difficulty', '')} 공대가 클리어했습니다! 🏆",
+                "text": f"{party.get('raid_name', '')} {party.get('difficulty', '')} 공대가 클리어했습니다!",
                 "raid_name": party.get("raid_name"),
                 "difficulty": party.get("difficulty"),
             })

@@ -8,7 +8,7 @@
 {% if action_result and not action_result.success %}
 <div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
 {% elif action_result and action_result.success %}
-<div class="flash-data" hidden data-type="success" data-message="✅ 처리되었습니다."></div>
+<div class="flash-data" hidden data-type="success" data-message="처리되었습니다."></div>
 {% endif %}
 
 {% if not invites %}

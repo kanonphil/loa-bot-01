@@ -7,12 +7,12 @@
 {% if action_result and not action_result.success %}
 <div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
 {% elif action_result and action_result.success and action_result.character_name %}
-<div class="flash-data" hidden data-type="success" data-message="✅ {{ action_result.character_name }} ({{ action_result.character_class }} / {{ action_result.item_level }}) 등록 완료!"></div>
+<div class="flash-data" hidden data-type="success" data-message="{{ action_result.character_name }} ({{ action_result.character_class }} / {{ action_result.item_level }}) 등록 완료!"></div>
 {% endif %}
 
 {% if sync_result %}
   {% if sync_result.success %}
-  <div class="flash-data" hidden data-type="success" data-message="🔄 {{ sync_result.updated }}/{{ sync_result.total }}개 캐릭터 동기화 완료!"></div>
+  <div class="flash-data" hidden data-type="success" data-message="{{ sync_result.updated }}/{{ sync_result.total }}개 캐릭터 동기화 완료!"></div>
   {% else %}
   <div class="flash-data" hidden data-type="error" data-message="{{ sync_result.reason }}"></div>
   {% endif %}
@@ -20,7 +20,7 @@
 
 {% if account_result %}
   {% if account_result.success %}
-  <div class="flash-data" hidden data-type="success" data-message="✅ &quot;{{ account_result.label }}&quot; 계정 등록 완료! (원정대 캐릭터 {{ account_result.added }}/{{ account_result.total }}개 추가)"></div>
+  <div class="flash-data" hidden data-type="success" data-message="&quot;{{ account_result.label }}&quot; 계정 등록 완료! (원정대 캐릭터 {{ account_result.added }}/{{ account_result.total }}개 추가)"></div>
   {% else %}
   <div class="flash-data" hidden data-type="error" data-message="{{ account_result.reason }}"></div>
   {% endif %}
@@ -28,7 +28,7 @@
 
 {% if remove_account_result %}
   {% if remove_account_result.success %}
-  <div class="flash-data" hidden data-type="success" data-message="🗑️ 계정이 삭제되었습니다."></div>
+  <div class="flash-data" hidden data-type="success" data-message="계정이 삭제되었습니다."></div>
   {% else %}
   <div class="flash-data" hidden data-type="error" data-message="계정을 찾을 수 없습니다."></div>
   {% endif %}
