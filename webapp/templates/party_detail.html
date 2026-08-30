@@ -229,22 +229,20 @@
   {% if other_members %}
   <div class="leader-group">
     <span class="leader-group-label">멤버 관리</span>
-    <form method="post" action="/parties/{{ party.message_id }}/kick" class="leader-form">
-      <select name="target_discord_id" class="js-themed-select">
+    <div class="leader-form">
+      <select id="member-target-select" class="js-themed-select">
         {% for m in other_members %}
         <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
         {% endfor %}
       </select>
-      <button type="submit" class="leader-btn leader-btn-danger">강제 퇴장</button>
+      <button type="submit" form="kick-form" class="leader-btn leader-btn-danger">강제 퇴장</button>
+      <button type="submit" form="transfer-form" class="leader-btn">파티장 위임</button>
+    </div>
+    <form id="kick-form" method="post" action="/parties/{{ party.message_id }}/kick" hidden>
+      <input type="hidden" name="target_discord_id">
     </form>
-
-    <form method="post" action="/parties/{{ party.message_id }}/transfer-leader" class="leader-form">
-      <select name="new_leader_discord_id" class="js-themed-select">
-        {% for m in other_members %}
-        <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="leader-btn">파티장 위임</button>
+    <form id="transfer-form" method="post" action="/parties/{{ party.message_id }}/transfer-leader" hidden>
+      <input type="hidden" name="new_leader_discord_id">
     </form>
   </div>
   {% endif %}
@@ -256,6 +254,11 @@
       <input type="text" name="memo" maxlength="150" placeholder="공지/메모 (비우면 삭제)" value="{{ party.memo or '' }}">
       <button type="submit" class="leader-btn">일정 변경</button>
     </form>
+    <div class="leader-quick-adjust" id="reschedule-quick-adjust">
+      <button type="button" class="leader-btn-sm" data-adjust-minutes="30">+30분</button>
+      <button type="button" class="leader-btn-sm" data-adjust-minutes="60">+1시간</button>
+      <button type="button" class="leader-btn-sm" data-adjust-minutes="1440">+1일</button>
+    </div>
   </div>
 
   {% if not viewing_as_admin %}
@@ -271,7 +274,27 @@
 <script src="/static/flatpickr.min.js"></script>
 <script src="/static/party-datetime.js?v={{ static_version }}"></script>
 <script>
-  initPartyDatetimePicker("#reschedule-datetime-input");
+  (function () {
+    var picker = initPartyDatetimePicker("#reschedule-datetime-input", { minDate: null });
+    {% if party.scheduled_datetime %}
+    picker.setDate(new Date("{{ party.scheduled_datetime }}"), true);
+    {% endif %}
+    attachQuickAdjustButtons(picker, "#reschedule-quick-adjust");
+  })();
+
+  {% if other_members %}
+  (function () {
+    var select = document.getElementById("member-target-select");
+    var kickInput = document.querySelector('#kick-form input[name="target_discord_id"]');
+    var transferInput = document.querySelector('#transfer-form input[name="new_leader_discord_id"]');
+    function sync() {
+      kickInput.value = select.value;
+      transferInput.value = select.value;
+    }
+    select.addEventListener("change", sync);
+    sync();
+  })();
+  {% endif %}
 </script>
 {% endif %}
 

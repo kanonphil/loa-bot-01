@@ -1064,6 +1064,28 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   color: var(--danger);
 }
 
+/* 일정 변경 — 달력을 다시 열지 않고 소폭 조정할 수 있는 버튼 */
+.leader-quick-adjust {
+  display: flex;
+  gap: 6px;
+}
+
+.leader-btn-sm {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.leader-btn-sm:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .leader-form {
   display: flex;
   gap: 8px;

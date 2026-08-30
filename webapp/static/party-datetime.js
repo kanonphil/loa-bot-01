@@ -11,14 +11,18 @@ const KOREAN_LOCALE = {
   time_24hr: true,
 };
 
-function initPartyDatetimePicker(selector) {
-  flatpickr(selector, {
+function initPartyDatetimePicker(selector, options) {
+  options = options || {};
+  return flatpickr(selector, {
     enableTime: true,
     dateFormat: "Y-m-d\\TH:i", // 실제 폼 제출값 — 서버가 파싱하는 형식, 화면엔 안 보임
     altInput: true,
     altFormat: "Y-m-d (D) H:i", // 화면에 보여주는 값만 사람이 읽기 편하게
     time_24hr: true,
-    minDate: "today",
+    // 새 파티 생성은 과거 날짜를 막는 게 맞지만, 이미 지난 시각으로 예약돼 있던
+    // 파티를 재조정할 때는 그 값을 그대로 보여줘야 하므로(서버가 실제 저장은
+    // 여전히 막는다) 리스케줄 쪽에서 minDate: null을 넘겨 끌 수 있게 한다.
+    minDate: options.minDate !== undefined ? options.minDate : "today",
     hourIncrement: 1,
     minuteIncrement: 10,
     locale: KOREAN_LOCALE,
@@ -64,4 +68,19 @@ function attachPartyDatetimeStepButtons(selectedDates, dateStr, instance) {
     instance.minuteElement
   );
   minuteWrapper.appendChild(makeStepButton("+", () => step(instance.minuteElement, 10, 0, 59)));
+}
+
+// 일정을 완전히 새로 고르는 대신, "조금만 미루기"를 달력을 열지 않고 끝내기 위한
+// 버튼 — 현재 선택된 값(없으면 지금 시각)에 분 단위 오프셋을 더해 다시 세팅한다.
+function attachQuickAdjustButtons(picker, containerSelector) {
+  const container = document.querySelector(containerSelector);
+  if (!container || !picker) return;
+
+  container.querySelectorAll("[data-adjust-minutes]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const deltaMinutes = parseInt(btn.dataset.adjustMinutes, 10);
+      const base = picker.selectedDates[0] || new Date();
+      picker.setDate(new Date(base.getTime() + deltaMinutes * 60000), true);
+    });
+  });
 }
