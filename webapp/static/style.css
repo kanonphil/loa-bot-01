@@ -1037,6 +1037,33 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   flex-wrap: wrap;
 }
 
+/* 관리 폼들이 라벨 없이 나열돼 있어 각 줄이 뭘 하는 폼인지 한눈에 안
+   들어온다는 피드백 반영 — 기능 단위로 묶고 작은 라벨을 붙인다. */
+.leader-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.leader-group:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.leader-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.leader-group-danger .leader-group-label {
+  color: var(--danger);
+}
+
 .leader-form {
   display: flex;
   gap: 8px;
@@ -3987,40 +4014,61 @@ a.rank-row:hover {
 }
 
 .toast {
-  padding: 12px 16px;
-  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
   background: var(--panel);
   border: 1px solid var(--border);
   color: var(--text);
   font-size: 14px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  animation: toast-in 0.2s ease-out;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  cursor: default;
+  animation: toast-in 0.25s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
+/* 마우스를 올리면(toast.js가 .toast-hide를 붙인다) "치워버린다"는 느낌으로
+   바로 사라진다 — 굳이 X 버튼을 따로 안 둬도 다음 토스트를 스택 위쪽에서
+   바로 볼 수 있게. 순수 :hover로 하면 애니메이션 도중 마우스가 빠졌을 때
+   튕겨 돌아오므로, 클래스 토글 + JS의 remove()로 마무리한다. */
 .toast-hide {
-  animation: toast-out 0.3s ease-in forwards;
+  animation: toast-out 0.22s ease-in forwards;
+  pointer-events: none;
 }
 
-.toast-success {
-  border-color: var(--ok);
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
 }
 
-.toast-error {
-  border-color: var(--danger);
+.toast-icon svg {
+  width: 13px;
+  height: 13px;
 }
 
-.toast-info {
-  border-color: var(--accent);
+.toast-msg {
+  flex: 1;
+  line-height: 1.5;
 }
+
+.toast-success .toast-icon { background: var(--ok-soft); color: var(--ok); }
+.toast-error .toast-icon { background: var(--danger-soft); color: var(--danger); }
+.toast-info .toast-icon { background: var(--accent-soft); color: var(--accent); }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(24px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateX(28px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 @keyframes toast-out {
-  from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(24px); }
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to { opacity: 0; transform: translateX(28px) scale(0.96); }
 }
 
 /* ── 알림 종 아이콘 + 드롭다운 ─────────────────────────── */

@@ -1,21 +1,42 @@
 (function () {
   var TOAST_DURATION_MS = 4000;
+  var TOAST_EXIT_MS = 220;
+
+  var ICONS = {
+    success: '<path d="M20 6L9 17l-5-5"/>',
+    error: '<path d="M18 6L6 18M6 6l12 12"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/>',
+  };
 
   function showToast(message, type) {
     var container = document.getElementById("toast-container");
     if (!container || !message) return;
 
+    var kind = type || "info";
     var toast = document.createElement("div");
-    toast.className = "toast toast-" + (type || "info");
-    toast.textContent = message;
+    toast.className = "toast toast-" + kind;
+    toast.innerHTML =
+      '<span class="toast-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (ICONS[kind] || ICONS.info) +
+      "</svg></span>" +
+      '<span class="toast-msg"></span>';
+    toast.querySelector(".toast-msg").textContent = message;
     container.appendChild(toast);
 
-    setTimeout(function () {
+    var dismissed = false;
+    var timer = setTimeout(dismiss, TOAST_DURATION_MS);
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
+      clearTimeout(timer);
       toast.classList.add("toast-hide");
       setTimeout(function () {
         toast.remove();
-      }, 300);
-    }, TOAST_DURATION_MS);
+      }, TOAST_EXIT_MS);
+    }
+    // 스택 위에서 마우스를 대면 바로 치워지도록 — 다음 토스트를 기다릴
+    // 필요 없이 읽은 것부터 넘길 수 있게 하는 요청 반영.
+    toast.addEventListener("mouseenter", dismiss);
   }
 
   window.showToast = showToast;
