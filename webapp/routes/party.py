@@ -402,8 +402,10 @@ async def post_comment(
     content: str = Form(..., max_length=500),
     user: dict = Depends(get_current_user),
 ):
+    discord_id = user["discord_id"]
+    avatar_url = user.get("avatar_url") or f"https://cdn.discordapp.com/embed/avatars/{(int(discord_id) >> 22) % 6}.png"
     result = await bot_client.post_party_comment(
-        message_id, user["discord_id"], user["username"], user["avatar_url"], content.strip()
+        message_id, discord_id, user["username"], avatar_url, content.strip()
     )
     return _redirect_with_result(message_id, result, "댓글을 남기지 못했습니다.")
 
