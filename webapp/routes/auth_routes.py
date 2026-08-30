@@ -55,6 +55,9 @@ async def callback(request: Request, code: str, state: str):
         "username": discord_user.get("username"),
         "is_admin": discord_id in config.ADMIN_DISCORD_IDS,
         "avatar_url": avatar_url,
+        # 관리자여도 기본은 꺼둔다 — 아무 공대나 열 때마다 관리 패널이 바로
+        # 뜨는 게 번거롭다는 피드백으로, 켜고 싶을 때만 사이드바에서 켠다.
+        "admin_mode": False,
     }
     return RedirectResponse("/main")
 

@@ -46,6 +46,7 @@ def test_admin_sees_leader_panel_on_party_they_do_not_lead(client, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
     with respx.mock:
         log_in(client, discord_id="999")  # 파티원도 아니고 파티장도 아닌 관리자
+        client.post("/admin/toggle-mode")  # 기본 꺼짐 — 패널을 보려면 켜야 한다
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
@@ -118,6 +119,7 @@ def test_admin_sees_revert_panel_on_disbanded_party(client, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
     with respx.mock:
         log_in(client, discord_id="999")
+        client.post("/admin/toggle-mode")  # 기본 꺼짐 — 패널을 보려면 켜야 한다
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=DISBANDED_PARTY))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))

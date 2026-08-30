@@ -220,6 +220,48 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   letter-spacing: 0.04em;
 }
 
+.admin-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 16px;
+}
+
+.admin-mode-row form {
+  margin: 0;
+}
+
+.admin-mode-toggle {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.admin-mode-toggle.on {
+  background: var(--accent);
+}
+
+.admin-mode-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+
+.admin-mode-toggle.on .admin-mode-toggle-thumb {
+  transform: translateX(13px);
+}
+
 .sidebar-sessions {
   list-style: none;
   margin: 0;

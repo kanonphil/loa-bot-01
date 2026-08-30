@@ -174,7 +174,7 @@
 {% endif %}
 
 {% if party.status == "disbanded" %}
-  {% if user.is_admin %}
+  {% if user.is_admin and user.admin_mode %}
   <div class="leader-panel">
     <h2 class="leader-panel-title">관리자</h2>
     <p class="settings-desc">클리어 처리를 실수로 눌렀다면 되돌릴 수 있습니다. 파티원 전체의 이번 주 완료 체크도 함께 취소됩니다.</p>

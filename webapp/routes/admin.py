@@ -9,7 +9,7 @@
 다시 한다(bot/api/routes/internal.py의 _require_admin) — require_admin은 화면을
 숨기는 용도일 뿐이다."""
 import asyncio
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse
@@ -35,6 +35,22 @@ def _redirect(fallback_reason: str, result: dict, path: str) -> RedirectResponse
         reason = quote(result.get("reason") or fallback_reason)
         sep = "&" if "?" in path else "?"
         return RedirectResponse(f"{path}{sep}error={reason}", status_code=303)
+    return RedirectResponse(path, status_code=303)
+
+
+# ── 관리자 모드 토글 (사이드바 스위치 — 화면 노출만 제어, 실행 권한은 항상 유효) ──
+
+@router.post("/admin/toggle-mode")
+async def toggle_admin_mode(request: Request, user: dict = Depends(require_admin)):
+    session_user = request.session["user"]
+    session_user["admin_mode"] = not session_user.get("admin_mode", False)
+    request.session["user"] = session_user
+
+    # referer의 host는 신뢰하지 않고 경로만 취해 같은 사이트로만 돌려보낸다.
+    referer = urlparse(request.headers.get("referer", ""))
+    path = referer.path or "/main"
+    if referer.query:
+        path = f"{path}?{referer.query}"
     return RedirectResponse(path, status_code=303)
 
 

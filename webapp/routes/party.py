@@ -202,7 +202,9 @@ async def create_party_submit(
     return RedirectResponse(f"/parties/{message_id}", status_code=303)
 
 
-async def _detail_context(message_id: str, discord_id: str, is_admin: bool = False) -> dict:
+async def _detail_context(
+    message_id: str, discord_id: str, is_admin: bool = False, admin_mode: bool = False,
+) -> dict:
     party = await bot_client.get_party(message_id)
     if not party:
         return {"party": None}
@@ -212,8 +214,10 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
     # 관리자는 파티장이 아니어도 관리 패널을 쓸 수 있어야 한다(bot 쪽
     # _require_leader_or_admin과 짝) — is_leader를 느슨하게 확장하되, 템플릿에서
     # "당신이 파티장" 대신 "관리자 권한으로 보는 중"이라고 구분해서 보여준다.
-    is_leader = is_actual_leader or is_admin
-    viewing_as_admin = is_admin and not is_actual_leader
+    # admin_mode(사이드바 토글)가 꺼져 있으면 관리자여도 일반 참가자로만 본다 —
+    # 아무 공대나 열 때마다 관리 패널이 뜨는 걸 막기 위한 화면 전용 스위치.
+    is_leader = is_actual_leader or (is_admin and admin_mode)
+    viewing_as_admin = is_admin and admin_mode and not is_actual_leader
     other_members = [s for s in party["slots"] if s["discord_id"] != discord_id]
     my_slot = next((s for s in party["slots"] if s["discord_id"] == discord_id), None)
     can_switch_to_support = False
@@ -321,7 +325,10 @@ async def party_detail(
     cancelled: bool = False,
     user: dict = Depends(get_current_user),
 ):
-    ctx = await _detail_context(message_id, user["discord_id"], is_admin=user.get("is_admin", False))
+    ctx = await _detail_context(
+        message_id, user["discord_id"],
+        is_admin=user.get("is_admin", False), admin_mode=user.get("admin_mode", False),
+    )
     if join_error:
         action_result = {"success": False, "reason": join_error}
     elif cancelled:
