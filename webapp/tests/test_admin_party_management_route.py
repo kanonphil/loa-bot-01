@@ -7,6 +7,7 @@ from webapp import config
 from webapp.tests.conftest import log_in
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
+COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
@@ -46,6 +47,7 @@ def test_admin_sees_leader_panel_on_party_they_do_not_lead(client, monkeypatch):
     with respx.mock:
         log_in(client, discord_id="999")  # 파티원도 아니고 파티장도 아닌 관리자
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json={"can_join": False, "reason": "이미 마감된 공대입니다."}))
         respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
@@ -67,6 +69,7 @@ def test_admin_can_clear_party_via_leader_panel_route(client, monkeypatch):
             return_value=httpx.Response(200, json={"success": True, "cleared_count": 1})
         )
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=DISBANDED_PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post("/parties/p1/clear")
@@ -82,6 +85,7 @@ def test_non_admin_outsider_does_not_see_leader_panel(client, monkeypatch):
     with respx.mock:
         log_in(client, discord_id="555")  # 파티원도 아니고 관리자도 아님
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json={"can_join": False, "reason": "이미 마감된 공대입니다."}))
         respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
@@ -97,6 +101,7 @@ def test_admin_can_close_party_via_leader_panel_route(client, monkeypatch):
         log_in(client, discord_id="999")
         close_route = respx.post(CLOSE_URL).mock(return_value=httpx.Response(200, json={"success": True}))
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json={**PARTY, "status": "closed"}))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post("/parties/p1/close")
@@ -114,6 +119,7 @@ def test_admin_sees_revert_panel_on_disbanded_party(client, monkeypatch):
     with respx.mock:
         log_in(client, discord_id="999")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=DISBANDED_PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         resp = client.get("/parties/p1")
 
@@ -127,6 +133,7 @@ def test_non_admin_does_not_see_revert_panel_on_disbanded_party(client, monkeypa
     with respx.mock:
         log_in(client, discord_id="111")  # 원래 파티장이었던 사람 — 이제는 관리자 전용
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=DISBANDED_PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=[]))
         resp = client.get("/parties/p1")

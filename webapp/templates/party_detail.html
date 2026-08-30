@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block content %}
 <link rel="stylesheet" href="/static/flatpickr.min.css">
 {% if not party %}
@@ -258,6 +259,35 @@
   initPartyDatetimePicker("#reschedule-datetime-input");
 </script>
 {% endif %}
+
+<div class="leader-panel">
+  <h2 class="leader-panel-title">댓글</h2>
+  <p class="settings-desc">디스코드 스레드 채팅과 서로 연결돼 있습니다 — 여기 남긴 댓글은 디스코드에도 그대로 올라갑니다.</p>
+  {% if not comments %}
+  <p class="party-cannot-join">아직 댓글이 없습니다.</p>
+  {% else %}
+  <div class="party-comments-list">
+    {% for c in comments %}
+    <div class="party-comment">
+      <div class="party-comment-head">
+        <span class="party-comment-author">{{ c.author_name }}</span>
+        {% if c.source == "web" %}{{ ui.chip("웹", "accent") }}{% endif %}
+        <span class="party-comment-time">{{ c.created_at }}</span>
+      </div>
+      <p class="party-comment-body">{{ c.content }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if party.status != "disbanded" %}
+  <form method="post" action="/parties/{{ party.message_id }}/comments" class="party-comment-form">
+    <textarea name="content" maxlength="500" placeholder="댓글을 입력하세요" required></textarea>
+    <button type="submit" class="leader-btn">등록</button>
+  </form>
+  {% endif %}
+</div>
+
 <div class="party-member-popover" id="party-member-popover"></div>
 <script src="/static/party-member-card.js?v={{ static_version }}"></script>
 </div>

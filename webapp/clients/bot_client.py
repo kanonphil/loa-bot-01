@@ -453,6 +453,27 @@ async def decline_invite(message_id: str, discord_id: str) -> dict:
     return resp.json()
 
 
+async def get_party_comments(message_id: str) -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/comments",
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def post_party_comment(message_id: str, discord_id: str, display_name: str, avatar_url: str, content: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/comments",
+        json={"discord_id": discord_id, "display_name": display_name, "avatar_url": avatar_url, "content": content},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",

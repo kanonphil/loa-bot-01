@@ -311,6 +311,29 @@ async def _decline_invite_core(bot: discord.Client, message_id: str, discord_id:
     return {"success": True, "reason": None}
 
 
+async def _post_comment_core(
+    bot: discord.Client, message_id: str, discord_id: str,
+    display_name: str, avatar_url: str, content: str,
+) -> dict:
+    """웹에서 쓴 댓글 저장 + 디스코드 스레드로 릴레이. 저장과 릴레이를 분리한다 —
+    릴레이가 실패해도(스레드 잠김 등) 웹 화면에는 댓글이 남아야 한다."""
+    from bot.services.comment_bridge import relay_comment_to_discord
+
+    party = await db.get_party(message_id)
+    if not party:
+        return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+    if party["status"] == "disbanded":
+        return {"success": False, "reason": "이미 종료된 공대라 댓글을 남길 수 없습니다."}
+
+    await db.add_party_comment(message_id, discord_id, display_name, content, source="web")
+
+    relayed, relay_reason = (True, None)
+    if bot:
+        relayed, relay_reason = await relay_comment_to_discord(bot, party, display_name, avatar_url, content)
+
+    return {"success": True, "relayed": relayed, "relay_reason": relay_reason}
+
+
 def _require_leader(party: dict | None, discord_id: str) -> str | None:
     """파티가 없거나 리더가 아니면 에러 사유 문자열, 문제없으면 None.
     디스코드 ⚙️관리 패널(_handle_manage)과 웹 API가 공유."""

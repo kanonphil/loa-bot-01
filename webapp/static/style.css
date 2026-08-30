@@ -1050,6 +1050,72 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   color: var(--danger);
 }
 
+/* ── 파티 스레드 댓글 (디스코드 ↔ 웹) ──────────────────── */
+
+.party-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.party-comment {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+}
+
+.party-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.party-comment-author {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.party-comment-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.party-comment-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.party-comment-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.party-comment-form textarea {
+  flex: 1;
+  min-height: 60px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.party-comment-form textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
 /* ── 메인 대시보드 ─────────────────────────────────────── */
 
 .dashboard-grid {

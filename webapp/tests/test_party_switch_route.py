@@ -6,6 +6,7 @@ import respx
 from webapp.tests.conftest import log_in
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
+COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 SWITCH_ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/switch-eligibility"
@@ -61,6 +62,7 @@ def test_party_detail_shows_switch_button_when_joined(client):
     with respx.mock:
         log_in(client, discord_id="222")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
@@ -75,6 +77,7 @@ def test_switch_form_lists_candidates_and_marks_other_party(client):
     with respx.mock:
         log_in(client, discord_id="222")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(SWITCH_ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json=ELIGIBILITY))
         resp = client.get("/parties/p1/switch")
 
@@ -94,6 +97,7 @@ def test_switch_form_redirects_to_detail_when_cannot_switch(client):
     with respx.mock:
         log_in(client, discord_id="999")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(SWITCH_ELIGIBILITY_URL).mock(
             return_value=httpx.Response(
                 200, json={"can_switch": False, "reason": "이 파티에 참여하고 있지 않습니다."}
@@ -132,6 +136,7 @@ def test_switch_submit_shows_error_on_failure(client):
             )
         )
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post("/parties/p1/switch", data={"character_name": "부캐1"})

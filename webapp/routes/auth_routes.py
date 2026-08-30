@@ -43,10 +43,18 @@ async def callback(request: Request, code: str, state: str):
     if not await bot_client.is_registered(discord_id):
         return RedirectResponse("/login?error=not_registered")
 
+    # 파티 스레드 댓글을 웹에서 쓸 때 디스코드로 릴레이(웹훅)할 때 이름/아바타로 쓴다.
+    avatar_hash = discord_user.get("avatar")
+    if avatar_hash:
+        avatar_url = f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar_hash}.png"
+    else:
+        avatar_url = f"https://cdn.discordapp.com/embed/avatars/{(int(discord_id) >> 22) % 6}.png"
+
     request.session["user"] = {
         "discord_id": discord_id,
         "username": discord_user.get("username"),
         "is_admin": discord_id in config.ADMIN_DISCORD_IDS,
+        "avatar_url": avatar_url,
     }
     return RedirectResponse("/main")
 

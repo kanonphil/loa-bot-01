@@ -6,6 +6,7 @@ from webapp.tests.conftest import log_in
 
 PARTIES_URL = "http://bot-server.internal/api/internal/parties"
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
+COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
 WAITLIST_STATUS_URL = "http://bot-server.internal/api/internal/parties/p1/waitlist-status"
 INVITABLE_USERS_URL = "http://bot-server.internal/api/internal/parties/p1/invitable-users"
@@ -153,6 +154,7 @@ def test_party_detail_shows_join_form_when_eligible(client):
     with respx.mock:
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(
             return_value=httpx.Response(
@@ -184,6 +186,7 @@ def test_party_detail_shows_leave_when_already_joined(client):
     with respx.mock:
         log_in(client, discord_id="222")  # PARTY의 기존 슬롯 주인
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
@@ -206,6 +209,7 @@ def test_party_detail_shows_guest_badge_for_guest_slot(client):
     with respx.mock:
         log_in(client, discord_id="222")  # PARTY 슬롯 주인(리더) — eligibility 호출 없음
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=party_with_guest))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
@@ -221,6 +225,7 @@ def test_party_detail_shows_reason_when_cannot_join(client):
     with respx.mock:
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(
             return_value=httpx.Response(
@@ -238,6 +243,7 @@ def test_join_posts_to_bot_and_shows_error_on_failure(client):
     with respx.mock:
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(
             return_value=httpx.Response(
@@ -280,6 +286,7 @@ def test_leave_posts_to_bot(client):
         )
         after_leave_party = {**PARTY, "slots": []}
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=after_leave_party))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(
             return_value=httpx.Response(200, json={"can_join": False, "reason": "파티가 존재하지 않습니다."})
@@ -326,6 +333,7 @@ def test_party_detail_shows_waitlist_button_when_not_joined(client):
     with respx.mock:
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(
             return_value=httpx.Response(200, json={"can_join": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."})
@@ -342,6 +350,7 @@ def test_party_detail_shows_cancel_waitlist_when_already_on_it(client):
     with respx.mock:
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(ELIGIBILITY_URL).mock(
             return_value=httpx.Response(200, json={"can_join": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."})
@@ -357,6 +366,7 @@ def test_party_detail_hides_waitlist_button_when_already_joined(client):
     with respx.mock:
         log_in(client, discord_id="222")  # PARTY의 기존 슬롯 주인
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
@@ -395,10 +405,14 @@ def test_split_party_groups_show_relative_numbers_per_group(monkeypatch):
     async def fake_get_waitlist_status(message_id, discord_id):
         return {"on_waitlist": False}
 
+    async def fake_get_party_comments(message_id):
+        return []
+
     monkeypatch.setattr(party_module.bot_client, "get_party", fake_get_party)
     monkeypatch.setattr(party_module.bot_client, "get_raids", fake_get_raids)
     monkeypatch.setattr(party_module.bot_client, "get_party_eligibility", fake_get_eligibility)
     monkeypatch.setattr(party_module.bot_client, "get_waitlist_status", fake_get_waitlist_status)
+    monkeypatch.setattr(party_module.bot_client, "get_party_comments", fake_get_party_comments)
 
     ctx = asyncio.run(party_module._detail_context("p1", "999999"))
 
@@ -455,10 +469,14 @@ def test_non_split_party_still_uses_flat_slot_list(monkeypatch):
     async def fake_get_waitlist_status(message_id, discord_id):
         return {"on_waitlist": False}
 
+    async def fake_get_party_comments(message_id):
+        return []
+
     monkeypatch.setattr(party_module.bot_client, "get_party", fake_get_party)
     monkeypatch.setattr(party_module.bot_client, "get_raids", fake_get_raids)
     monkeypatch.setattr(party_module.bot_client, "get_party_eligibility", fake_get_eligibility)
     monkeypatch.setattr(party_module.bot_client, "get_waitlist_status", fake_get_waitlist_status)
+    monkeypatch.setattr(party_module.bot_client, "get_party_comments", fake_get_party_comments)
 
     ctx = asyncio.run(party_module._detail_context("p1", "999999"))
 

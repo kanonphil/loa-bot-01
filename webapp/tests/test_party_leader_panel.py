@@ -5,6 +5,7 @@ import respx
 from webapp.tests.conftest import log_in
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
+COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
@@ -44,6 +45,7 @@ def test_leader_sees_management_panel(client):
     with respx.mock:
         log_in(client, discord_id="111")  # 리더
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
@@ -58,6 +60,7 @@ def test_leader_sees_invite_form_with_candidates(client):
     with respx.mock:
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(
@@ -75,6 +78,7 @@ def test_leader_invite_form_hidden_when_no_candidates(client):
     with respx.mock:
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
@@ -116,6 +120,7 @@ def test_non_leader_does_not_see_management_panel(client):
     with respx.mock:
         log_in(client, discord_id="222")  # 일반 멤버
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         resp = client.get("/parties/p1")
 
@@ -128,6 +133,7 @@ def test_close_action_calls_bot(client):
         log_in(client, discord_id="111")
         close_route = respx.post(CLOSE_URL).mock(return_value=httpx.Response(200, json={"success": True}))
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json={**PARTY, "status": "closed"}))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post("/parties/p1/close")
@@ -142,6 +148,7 @@ def test_clear_action_shows_success(client):
         log_in(client, discord_id="111")
         respx.post(CLEAR_URL).mock(return_value=httpx.Response(200, json={"success": True, "cleared_count": 2}))
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json={**PARTY, "status": "disbanded"}))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post("/parties/p1/clear")
@@ -157,6 +164,7 @@ def test_kick_action_shows_error_reason(client):
             return_value=httpx.Response(200, json={"success": False, "reason": "파티원을 찾을 수 없습니다."})
         )
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
 
@@ -167,6 +175,7 @@ def test_kick_action_shows_error_reason(client):
 
     with respx.mock:
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
@@ -181,6 +190,7 @@ def test_reschedule_action_calls_bot_with_datetime(client):
             return_value=httpx.Response(200, json={"success": True, "scheduled_time": "05/21 21:00"})
         )
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post(
@@ -198,6 +208,7 @@ def test_transfer_leader_action_calls_bot(client):
         log_in(client, discord_id="111")
         transfer_route = respx.post(TRANSFER_URL).mock(return_value=httpx.Response(200, json={"success": True}))
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json={**PARTY, "leader_id": "222"}))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post("/parties/p1/transfer-leader", data={"new_leader_discord_id": "222"})
@@ -212,6 +223,7 @@ def test_cancel_action_calls_bot_with_reason(client):
         log_in(client, discord_id="111")
         cancel_route = respx.post(CANCEL_URL).mock(return_value=httpx.Response(200, json={"success": True}))
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json={**PARTY, "status": "disbanded"}))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
 
         resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
@@ -228,6 +240,7 @@ def test_cancel_success_shows_styled_confirmation_when_party_purged(client):
         respx.post(CANCEL_URL).mock(return_value=httpx.Response(200, json={"success": True}))
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, text="null"))
 
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
         assert resp.status_code == 303
         assert resp.headers["location"] == "/parties/p1?cancelled=1"
@@ -244,6 +257,7 @@ def test_visiting_unknown_party_shows_not_found_not_cancelled_message(client):
         log_in(client, discord_id="111")
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, text="null"))
 
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200

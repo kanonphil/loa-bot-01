@@ -502,6 +502,30 @@ async def decline_invite(message_id: str, body: DeclineInviteBody):
   return await _decline_invite_core(bot_ref.get_bot(), message_id, body.discord_id)
 
 
+# ── 파티 스레드 댓글 (디스코드 ↔ 웹 양방향) ─────────────────────
+
+@router.get("/parties/{message_id}/comments")
+async def get_party_comments(message_id: str):
+  return await db.get_party_comments(message_id)
+
+
+class PostCommentBody(BaseModel):
+  discord_id: str
+  display_name: str
+  avatar_url: str
+  content: str
+
+
+@router.post("/parties/{message_id}/comments")
+async def post_party_comment(message_id: str, body: PostCommentBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _post_comment_core
+
+  return await _post_comment_core(
+    bot_ref.get_bot(), message_id, body.discord_id, body.display_name, body.avatar_url, body.content
+  )
+
+
 @router.get("/parties/{message_id}/switch-eligibility")
 async def switch_eligibility(message_id: str, discord_id: str):
   """참여 캐릭터 변경 시 고를 수 있는 캐릭터 후보 — 같은 레이드의 다른 공대에 이미

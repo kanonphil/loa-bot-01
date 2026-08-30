@@ -245,6 +245,9 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
             invitable_users = invite_result["users"]
             invitable_slots = invite_result["available_slots"]
 
+    # 파티 스레드 댓글 — 리더 여부와 무관하게 누구나 볼 수 있다.
+    comments = await bot_client.get_party_comments(message_id)
+
     raids = await bot_client.get_raids()
     raid_info = raids.get(party["raid_name"], {})
     diff_info = (raid_info.get("difficulties") or {}).get(party["difficulty"], {})
@@ -303,6 +306,7 @@ async def _detail_context(message_id: str, discord_id: str, is_admin: bool = Fal
         "on_waitlist": on_waitlist,
         "invitable_users": invitable_users,
         "invitable_slots": invitable_slots,
+        "comments": comments,
         "sub_parties": sub_parties,
         "party_groups": party_groups,
         "all_slots": all_slots,
@@ -382,6 +386,19 @@ async def invite(
 ):
     result = await bot_client.create_invite(message_id, user["discord_id"], target_discord_id, slot_number)
     return _redirect_with_result(message_id, result, "초대를 보내지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/comments")
+async def post_comment(
+    request: Request,
+    message_id: str,
+    content: str = Form(..., max_length=500),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.post_party_comment(
+        message_id, user["discord_id"], user["username"], user["avatar_url"], content.strip()
+    )
+    return _redirect_with_result(message_id, result, "댓글을 남기지 못했습니다.")
 
 
 @router.get("/parties/{message_id}/switch")

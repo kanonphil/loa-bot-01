@@ -32,7 +32,10 @@ COGS = [
 class LoABot(commands.Bot):
     def __init__(self) -> None:
         intents = discord.Intents.default()
-        intents.message_content = False
+        # 파티 스레드 댓글을 웹에도 보여주려면 메시지 "내용"을 읽어야 한다 — 특권
+        # 인텐트라 Discord 개발자 포털에서 이 봇 앱에 대해 별도로 켜야 코드와 무관하게
+        # 실제로 켜진다(코드만 True로 바꿔도 포털에서 안 켜져 있으면 계속 빈 문자열이 옴).
+        intents.message_content = True
         intents.members = True
         super().__init__(command_prefix="!", intents=intents, help_command=None)
         self._thread_purge_failures: dict[str, int] = {}  # channel_id → 실패 횟수
@@ -78,6 +81,22 @@ class LoABot(commands.Bot):
         exc = task.exception()
         if exc is not None:
             print(f"[LoABot] FastAPI 서버가 예외로 종료됨: {type(exc).__name__}: {exc}")
+
+    async def on_message(self, message: discord.Message) -> None:
+        # 봇 자신(웹 댓글을 웹훅으로 릴레이한 메시지 포함)이 보낸 메시지가 다시
+        # 저장되면 무한 중복이 생긴다 — webhook_id가 있으면(웹훅으로 온 메시지)
+        # 무조건 무시하고, author.bot도 별도로 걸러 다른 봇의 메시지도 막는다.
+        if message.author.bot or message.webhook_id is not None:
+            await self.process_commands(message)
+            return
+
+        party = await db.get_party_by_channel(str(message.channel.id))
+        if party and party["status"] != "disbanded":
+            await db.add_party_comment(
+                party["message_id"], str(message.author.id), message.author.display_name,
+                message.content, source="discord", discord_message_id=str(message.id),
+            )
+        await self.process_commands(message)
 
     async def on_ready(self) -> None:
         print(f"[LoABot] {self.user} 로그인 완료")

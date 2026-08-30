@@ -188,6 +188,20 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     pre_notify_hours  REAL NOT NULL DEFAULT 1.0
 );
 
+CREATE TABLE IF NOT EXISTS party_comments (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_message_id   TEXT,
+    discord_id         TEXT,
+    author_name        TEXT,
+    content            TEXT,
+    source             TEXT,  -- 'discord' | 'web'
+    discord_message_id TEXT,  -- source='discord'일 때만 채움
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_party_comments_party
+    ON party_comments(party_message_id);
+
 CREATE TABLE IF NOT EXISTS notification_logs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_id  TEXT NOT NULL,
@@ -1990,6 +2004,34 @@ async def get_user_invites(discord_id: str) -> list[dict]:
             "WHERE i.discord_id = ? "
             "ORDER BY i.invited_at DESC",
             (discord_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def add_party_comment(
+    party_message_id: str, discord_id: str, author_name: str, content: str,
+    source: str, discord_message_id: str | None = None,
+) -> None:
+    """파티 스레드 댓글 저장(디스코드/웹 공용) — 파티가 나중에 purge(party_history로
+    이관)돼도 이 테이블은 독립적이라 계속 조회 가능하다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO party_comments "
+            "(party_message_id, discord_id, author_name, content, source, discord_message_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (party_message_id, discord_id, author_name, content, source, discord_message_id),
+        )
+        await db.commit()
+
+
+async def get_party_comments(party_message_id: str) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT id, discord_id, author_name, content, source, created_at "
+            "FROM party_comments WHERE party_message_id=? ORDER BY created_at ASC, id ASC",
+            (party_message_id,),
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
