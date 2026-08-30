@@ -333,15 +333,35 @@ async def _post_comment_core(
         relay_display_name = member.display_name
         relay_avatar_url = str(member.display_avatar.url)
 
-    await db.add_party_comment(message_id, discord_id, display_name, content, source="web")
-
-    relayed, relay_reason = (True, None)
+    relayed, relay_reason, relay_message_id = True, None, None
     if bot:
-        relayed, relay_reason = await relay_comment_to_discord(
+        relayed, relay_reason, relay_message_id = await relay_comment_to_discord(
             bot, party, relay_display_name, relay_avatar_url, content
         )
 
+    await db.add_party_comment(
+        message_id, discord_id, display_name, content, source="web", discord_message_id=relay_message_id
+    )
+
     return {"success": True, "relayed": relayed, "relay_reason": relay_reason}
+
+
+async def _delete_comment_core(bot: discord.Client, message_id: str, comment_id: int, discord_id: str) -> dict:
+    """웹 댓글 삭제 + 릴레이됐던 디스코드 메시지 삭제. 디스코드 쪽 삭제가 실패해도(메시지가 이미
+    지워졌거나 권한 문제) 웹 삭제 자체는 성공으로 처리한다 — 릴레이 실패해도 웹 저장은 남기는
+    _post_comment_core와 같은 철학."""
+    from bot.services.comment_bridge import delete_relayed_message
+
+    deleted, discord_message_id = await db.delete_party_comment(comment_id, discord_id)
+    if not deleted:
+        return {"success": False, "reason": "댓글을 찾을 수 없거나 삭제 권한이 없습니다."}
+
+    if bot and discord_message_id:
+        party = await db.get_party(message_id)
+        if party:
+            await delete_relayed_message(bot, party, discord_message_id)
+
+    return {"success": True}
 
 
 def _require_leader(party: dict | None, discord_id: str) -> str | None:

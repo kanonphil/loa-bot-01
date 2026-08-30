@@ -2037,15 +2037,20 @@ async def get_party_comments(party_message_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-async def delete_party_comment(comment_id: int, discord_id: str) -> bool:
-    """본인이 웹에서 쓴 댓글만 삭제 가능. 삭제됐으면 True, 대상이 없거나 본인 게 아니면 False."""
+async def delete_party_comment(comment_id: int, discord_id: str) -> tuple[bool, str | None]:
+    """본인이 웹에서 쓴 댓글만 삭제 가능. (삭제됐는지, 그 댓글의 discord_message_id)."""
     async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "DELETE FROM party_comments WHERE id=? AND discord_id=? AND source='web'",
+            "SELECT discord_message_id FROM party_comments WHERE id=? AND discord_id=? AND source='web'",
             (comment_id, discord_id),
         )
+        row = await cur.fetchone()
+        if row is None:
+            return False, None
+        await db.execute("DELETE FROM party_comments WHERE id=?", (comment_id,))
         await db.commit()
-        return cur.rowcount > 0
+        return True, row["discord_message_id"]
 
 
 async def assign_invite_slot(

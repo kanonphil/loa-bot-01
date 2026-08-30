@@ -532,8 +532,10 @@ class DeleteCommentBody(BaseModel):
 
 @router.post("/parties/{message_id}/comments/{comment_id}/delete")
 async def delete_party_comment(message_id: str, comment_id: int, body: DeleteCommentBody):
-  deleted = await db.delete_party_comment(comment_id, body.discord_id)
-  return {"success": deleted}
+  from bot.api import bot_ref
+  from bot.ui.views import _delete_comment_core
+
+  return await _delete_comment_core(bot_ref.get_bot(), message_id, comment_id, body.discord_id)
 
 
 @router.get("/parties/{message_id}/switch-eligibility")

@@ -27,23 +27,41 @@ async def _get_or_create_bridge_webhook(parent_channel: discord.abc.GuildChannel
     return wh
 
 
+async def _resolve_bridge_webhook(bot: discord.Client, party: dict) -> tuple[discord.Webhook | None, str | None]:
+    thread = bot.get_channel(int(party["channel_id"]))
+    if thread is None:
+        thread = await bot.fetch_channel(int(party["channel_id"]))
+    parent = thread.parent
+    if parent is None:
+        return None, "스레드의 부모 채널을 찾을 수 없습니다."
+    return await _get_or_create_bridge_webhook(parent), None
+
+
 async def relay_comment_to_discord(
     bot: discord.Client, party: dict, display_name: str, avatar_url: str, content: str,
-) -> tuple[bool, str | None]:
-    """성공 시 (True, None), 실패(스레드 잠김/권한 없음 등) 시 (False, 사유)."""
+) -> tuple[bool, str | None, str | None]:
+    """성공 시 (True, None, 보낸 메시지의 디스코드 ID), 실패(스레드 잠김/권한 없음 등) 시 (False, 사유, None)."""
     try:
-        thread = bot.get_channel(int(party["channel_id"]))
-        if thread is None:
-            thread = await bot.fetch_channel(int(party["channel_id"]))
-        parent = thread.parent
-        if parent is None:
-            return False, "스레드의 부모 채널을 찾을 수 없습니다."
-
-        webhook = await _get_or_create_bridge_webhook(parent)
-        await webhook.send(
+        webhook, err = await _resolve_bridge_webhook(bot, party)
+        if webhook is None:
+            return False, err, None
+        msg = await webhook.send(
             content=content, username=display_name, avatar_url=avatar_url,
-            thread=discord.Object(id=int(party["channel_id"])),
+            thread=discord.Object(id=int(party["channel_id"])), wait=True,
         )
+        return True, None, str(msg.id)
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+        return False, f"디스코드에 전달하지 못했습니다: {e}", None
+
+
+async def delete_relayed_message(bot: discord.Client, party: dict, discord_message_id: str) -> tuple[bool, str | None]:
+    """웹훅으로 릴레이했던 디스코드 메시지를 지운다. 이미 지워졌거나 권한이 없어도 실패만 알리고
+    예외를 던지지 않는다 — 웹 쪽 삭제 자체는 이미 끝난 뒤라 되돌릴 필요가 없다."""
+    try:
+        webhook, err = await _resolve_bridge_webhook(bot, party)
+        if webhook is None:
+            return False, err
+        await webhook.delete_message(int(discord_message_id), thread=discord.Object(id=int(party["channel_id"])))
         return True, None
     except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-        return False, f"디스코드에 전달하지 못했습니다: {e}"
+        return False, f"디스코드 메시지를 삭제하지 못했습니다: {e}"

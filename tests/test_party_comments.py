@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import bot.database.manager as db
-from bot.ui.views import _post_comment_core
+from bot.ui.views import _delete_comment_core, _post_comment_core
 
 LEADER_ID = "111"
 COMMENTER_ID = "222"
@@ -56,19 +56,33 @@ def test_delete_party_comment_removes_own_web_comment(party):
     asyncio.run(db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web"))
     comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
 
-    deleted = asyncio.run(db.delete_party_comment(comment_id, COMMENTER_ID))
+    deleted, discord_message_id = asyncio.run(db.delete_party_comment(comment_id, COMMENTER_ID))
 
     assert deleted is True
+    assert discord_message_id is None
     assert asyncio.run(db.get_party_comments(party)) == []
+
+
+def test_delete_party_comment_returns_discord_message_id_when_relayed(party):
+    asyncio.run(
+        db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web", discord_message_id="9001")
+    )
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    deleted, discord_message_id = asyncio.run(db.delete_party_comment(comment_id, COMMENTER_ID))
+
+    assert deleted is True
+    assert discord_message_id == "9001"
 
 
 def test_delete_party_comment_rejects_other_users_comment(party):
     asyncio.run(db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web"))
     comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
 
-    deleted = asyncio.run(db.delete_party_comment(comment_id, LEADER_ID))
+    deleted, discord_message_id = asyncio.run(db.delete_party_comment(comment_id, LEADER_ID))
 
     assert deleted is False
+    assert discord_message_id is None
     assert len(asyncio.run(db.get_party_comments(party))) == 1
 
 
@@ -76,14 +90,17 @@ def test_delete_party_comment_rejects_discord_sourced_comment(party):
     asyncio.run(db.add_party_comment(party, LEADER_ID, "리더캐릭", "디스코드에서 쓴 댓글", source="discord", discord_message_id="9001"))
     comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
 
-    deleted = asyncio.run(db.delete_party_comment(comment_id, LEADER_ID))
+    deleted, discord_message_id = asyncio.run(db.delete_party_comment(comment_id, LEADER_ID))
 
     assert deleted is False
+    assert discord_message_id is None
     assert len(asyncio.run(db.get_party_comments(party))) == 1
 
 
 def test_delete_party_comment_returns_false_for_missing_comment(party):
-    assert asyncio.run(db.delete_party_comment(9999, COMMENTER_ID)) is False
+    deleted, discord_message_id = asyncio.run(db.delete_party_comment(9999, COMMENTER_ID))
+    assert deleted is False
+    assert discord_message_id is None
 
 
 # ── _post_comment_core ───────────────────────────────────────
@@ -97,7 +114,7 @@ def _make_bot(relay_result=(True, None)):
 
 
 def test_post_comment_core_saves_and_relays(party, monkeypatch):
-    relay_mock = AsyncMock(return_value=(True, None))
+    relay_mock = AsyncMock(return_value=(True, None, "9001"))
     monkeypatch.setattr("bot.services.comment_bridge.relay_comment_to_discord", relay_mock)
 
     bot = _make_bot()
@@ -114,9 +131,23 @@ def test_post_comment_core_saves_and_relays(party, monkeypatch):
     relay_mock.assert_awaited_once()
 
 
+def test_post_comment_core_stores_relayed_discord_message_id(party, monkeypatch):
+    relay_mock = AsyncMock(return_value=(True, None, "9001"))
+    monkeypatch.setattr("bot.services.comment_bridge.relay_comment_to_discord", relay_mock)
+
+    bot = _make_bot()
+    asyncio.run(
+        _post_comment_core(bot, party, COMMENTER_ID, "댓글러", "https://example.com/a.png", "안녕하세요")
+    )
+
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+    _, discord_message_id = asyncio.run(db.delete_party_comment(comment_id, COMMENTER_ID))
+    assert discord_message_id == "9001"
+
+
 def test_post_comment_core_saves_even_if_relay_fails(party, monkeypatch):
     """릴레이(디스코드 전송)가 실패해도(스레드 잠김 등) 웹 화면용 저장은 남아야 한다."""
-    relay_mock = AsyncMock(return_value=(False, "스레드가 잠겨 있습니다"))
+    relay_mock = AsyncMock(return_value=(False, "스레드가 잠겨 있습니다", None))
     monkeypatch.setattr("bot.services.comment_bridge.relay_comment_to_discord", relay_mock)
 
     bot = _make_bot()
@@ -132,7 +163,7 @@ def test_post_comment_core_saves_even_if_relay_fails(party, monkeypatch):
 
 def test_post_comment_core_relays_with_guild_nickname_and_avatar_when_member_found(party, monkeypatch):
     """길드 멤버가 조회되면 세션의 전역 계정명/아바타 대신 서버 별명/서버 프사로 릴레이해야 한다."""
-    relay_mock = AsyncMock(return_value=(True, None))
+    relay_mock = AsyncMock(return_value=(True, None, "9001"))
     monkeypatch.setattr("bot.services.comment_bridge.relay_comment_to_discord", relay_mock)
 
     member = MagicMock()
@@ -157,7 +188,7 @@ def test_post_comment_core_relays_with_guild_nickname_and_avatar_when_member_fou
 
 def test_post_comment_core_falls_back_to_global_identity_when_member_not_found(party, monkeypatch):
     """길드/멤버를 못 찾으면(캐시 미스 등) 웹앱이 보낸 전역 계정명/아바타 그대로 릴레이한다."""
-    relay_mock = AsyncMock(return_value=(True, None))
+    relay_mock = AsyncMock(return_value=(True, None, "9001"))
     monkeypatch.setattr("bot.services.comment_bridge.relay_comment_to_discord", relay_mock)
 
     bot = _make_bot()  # get_guild가 None을 반환하도록 기본 설정됨
@@ -196,6 +227,72 @@ def test_post_comment_core_rejects_missing_party(tmp_path, monkeypatch):
     )
     assert result["success"] is False
     assert "찾을 수 없습니다" in result["reason"]
+
+
+# ── _delete_comment_core ──────────────────────────────────────
+
+def test_delete_comment_core_deletes_relayed_discord_message(party, monkeypatch):
+    asyncio.run(
+        db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web", discord_message_id="9001")
+    )
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    delete_mock = AsyncMock(return_value=(True, None))
+    monkeypatch.setattr("bot.services.comment_bridge.delete_relayed_message", delete_mock)
+
+    bot = _make_bot()
+    result = asyncio.run(_delete_comment_core(bot, party, comment_id, COMMENTER_ID))
+
+    assert result == {"success": True}
+    delete_mock.assert_awaited_once()
+    args, _ = delete_mock.call_args
+    assert args[0] is bot
+    assert args[2] == "9001"
+
+
+def test_delete_comment_core_skips_discord_delete_when_never_relayed(party, monkeypatch):
+    """애초에 릴레이가 실패해 discord_message_id가 없는 댓글은 디스코드 삭제를 시도하지 않는다."""
+    asyncio.run(db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web"))
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    delete_mock = AsyncMock()
+    monkeypatch.setattr("bot.services.comment_bridge.delete_relayed_message", delete_mock)
+
+    bot = _make_bot()
+    result = asyncio.run(_delete_comment_core(bot, party, comment_id, COMMENTER_ID))
+
+    assert result == {"success": True}
+    delete_mock.assert_not_called()
+
+
+def test_delete_comment_core_rejects_when_not_owner(party, monkeypatch):
+    asyncio.run(
+        db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web", discord_message_id="9001")
+    )
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    delete_mock = AsyncMock()
+    monkeypatch.setattr("bot.services.comment_bridge.delete_relayed_message", delete_mock)
+
+    bot = _make_bot()
+    result = asyncio.run(_delete_comment_core(bot, party, comment_id, LEADER_ID))
+
+    assert result["success"] is False
+    delete_mock.assert_not_called()
+    assert len(asyncio.run(db.get_party_comments(party))) == 1
+
+
+def test_delete_comment_core_succeeds_without_bot(party):
+    """봇 인스턴스가 없어도(테스트/기동 초기 등) 웹 삭제 자체는 성공해야 한다."""
+    asyncio.run(
+        db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web", discord_message_id="9001")
+    )
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    result = asyncio.run(_delete_comment_core(None, party, comment_id, COMMENTER_ID))
+
+    assert result == {"success": True}
+    assert asyncio.run(db.get_party_comments(party)) == []
 
 
 # ── LoABot.on_message ─────────────────────────────────────────
