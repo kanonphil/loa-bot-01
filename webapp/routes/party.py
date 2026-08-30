@@ -410,6 +410,17 @@ async def post_comment(
     return _redirect_with_result(message_id, result, "댓글을 남기지 못했습니다.")
 
 
+@router.post("/parties/{message_id}/comments/{comment_id}/delete")
+async def delete_comment(
+    request: Request,
+    message_id: str,
+    comment_id: int,
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.delete_party_comment(message_id, comment_id, user["discord_id"])
+    return _redirect_with_result(message_id, result, "댓글을 삭제하지 못했습니다.")
+
+
 @router.get("/parties/{message_id}/switch")
 async def switch_character_form(
     request: Request, message_id: str, user: dict = Depends(get_current_user)

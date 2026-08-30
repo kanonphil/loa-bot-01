@@ -50,12 +50,49 @@ def test_get_comments_empty_when_none(party):
     assert asyncio.run(db.get_party_comments(party)) == []
 
 
+# ── db.delete_party_comment ───────────────────────────────────
+
+def test_delete_party_comment_removes_own_web_comment(party):
+    asyncio.run(db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web"))
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    deleted = asyncio.run(db.delete_party_comment(comment_id, COMMENTER_ID))
+
+    assert deleted is True
+    assert asyncio.run(db.get_party_comments(party)) == []
+
+
+def test_delete_party_comment_rejects_other_users_comment(party):
+    asyncio.run(db.add_party_comment(party, COMMENTER_ID, "댓글러", "지울 댓글", source="web"))
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    deleted = asyncio.run(db.delete_party_comment(comment_id, LEADER_ID))
+
+    assert deleted is False
+    assert len(asyncio.run(db.get_party_comments(party))) == 1
+
+
+def test_delete_party_comment_rejects_discord_sourced_comment(party):
+    asyncio.run(db.add_party_comment(party, LEADER_ID, "리더캐릭", "디스코드에서 쓴 댓글", source="discord", discord_message_id="9001"))
+    comment_id = asyncio.run(db.get_party_comments(party))[0]["id"]
+
+    deleted = asyncio.run(db.delete_party_comment(comment_id, LEADER_ID))
+
+    assert deleted is False
+    assert len(asyncio.run(db.get_party_comments(party))) == 1
+
+
+def test_delete_party_comment_returns_false_for_missing_comment(party):
+    assert asyncio.run(db.delete_party_comment(9999, COMMENTER_ID)) is False
+
+
 # ── _post_comment_core ───────────────────────────────────────
 
 def _make_bot(relay_result=(True, None)):
     bot = MagicMock()
     bot.get_channel = MagicMock(return_value=None)
     bot.fetch_channel = AsyncMock()
+    bot.get_guild = MagicMock(return_value=None)
     return bot
 
 
@@ -91,6 +128,47 @@ def test_post_comment_core_saves_even_if_relay_fails(party, monkeypatch):
     assert result["relayed"] is False
     assert result["relay_reason"] == "스레드가 잠겨 있습니다"
     assert len(asyncio.run(db.get_party_comments(party))) == 1
+
+
+def test_post_comment_core_relays_with_guild_nickname_and_avatar_when_member_found(party, monkeypatch):
+    """길드 멤버가 조회되면 세션의 전역 계정명/아바타 대신 서버 별명/서버 프사로 릴레이해야 한다."""
+    relay_mock = AsyncMock(return_value=(True, None))
+    monkeypatch.setattr("bot.services.comment_bridge.relay_comment_to_discord", relay_mock)
+
+    member = MagicMock()
+    member.display_name = "서버별명"
+    member.display_avatar.url = "https://cdn.discordapp.com/guilds/1/users/222/avatars/abc.png"
+    guild = MagicMock()
+    guild.get_member = MagicMock(return_value=member)
+
+    bot = _make_bot()
+    bot.get_guild = MagicMock(return_value=guild)
+
+    asyncio.run(
+        _post_comment_core(bot, party, COMMENTER_ID, "전역계정명", "https://example.com/global.png", "안녕하세요")
+    )
+
+    relay_mock.assert_awaited_once()
+    args, _ = relay_mock.call_args
+    assert args[2] == "서버별명"
+    assert args[3] == "https://cdn.discordapp.com/guilds/1/users/222/avatars/abc.png"
+    guild.get_member.assert_called_once_with(int(COMMENTER_ID))
+
+
+def test_post_comment_core_falls_back_to_global_identity_when_member_not_found(party, monkeypatch):
+    """길드/멤버를 못 찾으면(캐시 미스 등) 웹앱이 보낸 전역 계정명/아바타 그대로 릴레이한다."""
+    relay_mock = AsyncMock(return_value=(True, None))
+    monkeypatch.setattr("bot.services.comment_bridge.relay_comment_to_discord", relay_mock)
+
+    bot = _make_bot()  # get_guild가 None을 반환하도록 기본 설정됨
+
+    asyncio.run(
+        _post_comment_core(bot, party, COMMENTER_ID, "전역계정명", "https://example.com/global.png", "안녕하세요")
+    )
+
+    args, _ = relay_mock.call_args
+    assert args[2] == "전역계정명"
+    assert args[3] == "https://example.com/global.png"
 
 
 def test_post_comment_core_rejects_disbanded_party(party, monkeypatch):

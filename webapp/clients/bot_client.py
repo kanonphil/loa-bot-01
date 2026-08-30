@@ -474,6 +474,17 @@ async def post_party_comment(message_id: str, discord_id: str, display_name: str
     return resp.json()
 
 
+async def delete_party_comment(message_id: str, comment_id: int, discord_id: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/comments/{comment_id}/delete",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",

@@ -526,6 +526,16 @@ async def post_party_comment(message_id: str, body: PostCommentBody):
   )
 
 
+class DeleteCommentBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/parties/{message_id}/comments/{comment_id}/delete")
+async def delete_party_comment(message_id: str, comment_id: int, body: DeleteCommentBody):
+  deleted = await db.delete_party_comment(comment_id, body.discord_id)
+  return {"success": deleted}
+
+
 @router.get("/parties/{message_id}/switch-eligibility")
 async def switch_eligibility(message_id: str, discord_id: str):
   """참여 캐릭터 변경 시 고를 수 있는 캐릭터 후보 — 같은 레이드의 다른 공대에 이미

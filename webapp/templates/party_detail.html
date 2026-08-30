@@ -311,6 +311,11 @@
         <span class="party-comment-author">{{ c.author_name }}</span>
         {% if c.source == "web" %}{{ ui.chip("웹", "accent") }}{% endif %}
         <span class="party-comment-time">{{ c.created_at }}</span>
+        {% if c.source == "web" and c.discord_id == user.discord_id %}
+        <form method="post" action="/parties/{{ party.message_id }}/comments/{{ c.id }}/delete" class="party-comment-delete-form">
+          <button type="submit" class="party-comment-delete-btn" title="삭제">삭제</button>
+        </form>
+        {% endif %}
       </div>
       <p class="party-comment-body">{{ c.content }}</p>
     </div>

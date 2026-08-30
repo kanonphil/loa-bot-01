@@ -1172,6 +1172,23 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   margin-left: auto;
 }
 
+.party-comment-delete-form {
+  margin: 0;
+}
+
+.party-comment-delete-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.party-comment-delete-btn:hover {
+  color: var(--danger);
+}
+
 .party-comment-body {
   margin: 0;
   font-size: 13px;

@@ -325,11 +325,21 @@ async def _post_comment_core(
     if party["status"] == "disbanded":
         return {"success": False, "reason": "이미 종료된 공대라 댓글을 남길 수 없습니다."}
 
+    # 웹훅 릴레이에는 세션의 전역 계정명/아바타 대신, 조회되면 서버 별명/서버 프사를 쓴다.
+    relay_display_name, relay_avatar_url = display_name, avatar_url
+    guild = bot.get_guild(int(party["guild_id"])) if bot and party.get("guild_id") else None
+    member = guild.get_member(int(discord_id)) if guild else None
+    if member:
+        relay_display_name = member.display_name
+        relay_avatar_url = str(member.display_avatar.url)
+
     await db.add_party_comment(message_id, discord_id, display_name, content, source="web")
 
     relayed, relay_reason = (True, None)
     if bot:
-        relayed, relay_reason = await relay_comment_to_discord(bot, party, display_name, avatar_url, content)
+        relayed, relay_reason = await relay_comment_to_discord(
+            bot, party, relay_display_name, relay_avatar_url, content
+        )
 
     return {"success": True, "relayed": relayed, "relay_reason": relay_reason}
 

@@ -111,3 +111,52 @@ def test_post_comment_shows_error_on_failure(client):
 
     assert resp.status_code == 303
     assert "join_error=" in resp.headers["location"]
+
+
+def test_party_detail_shows_delete_button_only_for_own_web_comment(client):
+    with respx.mock:
+        _mock_base(client, discord_id="222", comments=COMMENTS)
+        respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json={"can_join": False, "reason": "이미 마감된 공대입니다."}))
+        respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
+        resp = client.get("/parties/p1")
+
+    body = resp.text
+    assert 'action="/parties/p1/comments/2/delete"' in body
+    assert 'action="/parties/p1/comments/1/delete"' not in body
+
+
+def test_party_detail_hides_delete_button_for_others_web_comment(client):
+    with respx.mock:
+        _mock_base(client, discord_id="111", comments=COMMENTS)
+        resp = client.get("/parties/p1")
+
+    assert "/comments/2/delete" not in resp.text
+    assert "/comments/1/delete" not in resp.text
+
+
+def test_delete_comment_calls_bot_with_session_identity(client):
+    with respx.mock:
+        log_in(client, discord_id="222")
+        delete_route = respx.post(f"{COMMENTS_URL}/2/delete").mock(
+            return_value=httpx.Response(200, json={"success": True})
+        )
+
+        resp = client.post("/parties/p1/comments/2/delete")
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
+    assert delete_route.called
+    import json as _json
+    payload = _json.loads(delete_route.calls[0].request.content)
+    assert payload["discord_id"] == "222"
+
+
+def test_delete_comment_shows_error_on_failure(client):
+    with respx.mock:
+        log_in(client, discord_id="222")
+        respx.post(f"{COMMENTS_URL}/2/delete").mock(return_value=httpx.Response(200, json={"success": False}))
+
+        resp = client.post("/parties/p1/comments/2/delete")
+
+    assert resp.status_code == 303
+    assert "join_error=" in resp.headers["location"]
