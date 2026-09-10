@@ -11,31 +11,18 @@ router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 @router.get("")
 async def get_users(guild_id: str | None = None):
+  from bot.database.manager import _REPRESENTATIVE_CHARACTER_SQL
+
   async with aiosqlite.connect(db.DB_PATH) as conn:
     conn.row_factory = aiosqlite.Row
-    # 1단계: 유저 목록 조회
     cur = await conn.execute(
-      "SELECT discord_id, registered_at FROM users ORDER BY registered_at DESC"
+      "SELECT u.discord_id, u.registered_at, "
+      f"{_REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative "
+      "FROM users u ORDER BY u.registered_at DESC"
     )
     users = [dict(r) for r in await cur.fetchall()]
-    # 2단계: 각 유저의 대표 캐릭터 조회 (user_characters 우선, 없으면 party_slots)
-    for u in users:
-      cur = await conn.execute(
-        "SELECT character_name FROM user_characters WHERE discord_id=? LIMIT 1",
-        (u["discord_id"],),
-      )
-      row = await cur.fetchone()
-      if row:
-        u["representative"] = row[0]
-      else:
-        cur = await conn.execute(
-          "SELECT character_name FROM party_slots WHERE discord_id=? ORDER BY joined_at DESC LIMIT 1",
-          (u["discord_id"],),
-        )
-        row = await cur.fetchone()
-        u["representative"] = row[0] if row else None
 
-  # 3단계: 디스코드 서버 별명 조회
+  # 디스코드 서버 별명 조회
   if guild_id:
     bot = bot_ref.get_bot()
     if bot:

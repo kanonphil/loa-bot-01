@@ -779,18 +779,16 @@ async def get_expedition_ranking(metric: str, limit: int = 100, role: str | None
             # 랭킹"은 실제 등록된 길드원 캐릭터만 보여줘야 하므로 INNER JOIN으로 제외한다.
             cur = await db.execute(
                 "SELECT c.discord_id, "
-                "  (SELECT uc2.character_name FROM user_characters uc2 "
-                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS character_name, "
-                "  (SELECT uc2.character_class FROM user_characters uc2 "
-                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS character_class, "
-                "  (SELECT uc2.item_level FROM user_characters uc2 "
-                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS item_level, "
-                "  (SELECT uc2.combat_power FROM user_characters uc2 "
-                "     WHERE uc2.discord_id=c.discord_id ORDER BY uc2.added_at LIMIT 1) AS combat_power, "
+                "  rep.character_name AS character_name, "
+                "  rep.character_class AS character_class, "
+                "  rep.item_level AS item_level, "
+                "  rep.combat_power AS combat_power, "
                 "  COUNT(*) AS value "
                 "FROM raid_completions c "
                 "JOIN user_characters uc "
                 "  ON uc.discord_id=c.discord_id AND uc.character_name=c.character_name "
+                "LEFT JOIN user_characters rep "
+                f"  ON rep.discord_id=c.discord_id AND rep.character_name={_REPRESENTATIVE_CHARACTER_SQL.format(alias='c')} "
                 "WHERE c.week_key=? "
                 "GROUP BY c.discord_id "
                 "ORDER BY value DESC "
@@ -1971,18 +1969,31 @@ async def get_reserved_slots(message_id: str) -> dict[int, str]:
     return {r[0]: r[1] for r in rows}
 
 
+# 대표 캐릭터 선택 우선순위(여러 쿼리가 공유) — ① 그 계정이 최초 등록한 API 키의
+# 인증 캐릭터(user_api_keys.label과 이름이 일치) → ② 없으면 가장 먼저 추가된 캐릭터
+# → ③ 그것도 없으면 최근 참여 슬롯 캐릭터. added_at만으로 정렬하면 "원정대 전체
+# 자동 등록"이 여러 캐릭터를 같은 타임스탬프로 한꺼번에 넣어서 순서가 API 응답
+# 순서에 좌우되고, 인증에 쓴 캐릭터가 아닌 엉뚱한 캐릭터가 뽑히는 문제가 있었다.
+_REPRESENTATIVE_CHARACTER_SQL = (
+    "COALESCE("
+    "  (SELECT uc.character_name FROM user_characters uc"
+    "   JOIN user_api_keys uk ON uk.discord_id=uc.discord_id AND uk.label=uc.character_name"
+    "   WHERE uc.discord_id={alias}.discord_id ORDER BY uk.id ASC LIMIT 1),"
+    "  (SELECT uc.character_name FROM user_characters uc WHERE uc.discord_id={alias}.discord_id ORDER BY uc.added_at LIMIT 1),"
+    "  (SELECT ps.character_name FROM party_slots ps WHERE ps.discord_id={alias}.discord_id ORDER BY ps.joined_at DESC LIMIT 1)"
+    ")"
+)
+
+
 async def get_invitable_users(exclude_ids: set[str] | list[str]) -> list[dict]:
-    """등록된(API 키 있는) 유저 전체 + 대표 캐릭터명(최초 등록 캐릭터, 없으면 최근 파티
-    참여 캐릭터) — Discord "초대" 버튼(ManageView._handle_invite)이 쓰던 인라인 쿼리를
-    옮긴 것. exclude_ids(이미 파티에 있거나 초대/예약된 유저)는 호출부에서 걸러낸다."""
+    """등록된(API 키 있는) 유저 전체 + 대표 캐릭터명 — Discord "초대" 버튼
+    (ManageView._handle_invite)이 쓰던 인라인 쿼리를 옮긴 것. exclude_ids(이미
+    파티에 있거나 초대/예약된 유저)는 호출부에서 걸러낸다."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT u.discord_id, "
-            "COALESCE("
-            "  (SELECT uc.character_name FROM user_characters uc WHERE uc.discord_id=u.discord_id ORDER BY uc.added_at LIMIT 1),"
-            "  (SELECT ps.character_name FROM party_slots ps WHERE ps.discord_id=u.discord_id ORDER BY ps.joined_at DESC LIMIT 1)"
-            ") AS representative "
+            f"{_REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative "
             "FROM users u ORDER BY u.registered_at DESC"
         )
         rows = [dict(r) for r in await cur.fetchall()]
