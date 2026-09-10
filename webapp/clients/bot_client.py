@@ -519,13 +519,9 @@ async def switch_role(message_id: str, discord_id: str, new_role: str) -> dict:
 
 
 async def get_proficiency_options() -> list[dict]:
-    resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/proficiency-options",
-        headers=_headers(),
-        timeout=10,
+    return await _cached_get(
+        "proficiency_options", f"{config.BOT_API_BASE_URL}/api/internal/parties/proficiency-options"
     )
-    resp.raise_for_status()
-    return resp.json()
 
 
 async def create_party(
@@ -629,6 +625,17 @@ async def transfer_leader(message_id: str, discord_id: str, new_leader_discord_i
     resp = await _get_client().post(
         f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/transfer-leader",
         json={"discord_id": discord_id, "new_leader_discord_id": new_leader_discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def edit_party_difficulty(message_id: str, discord_id: str, difficulty: str, proficiency: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/edit-difficulty",
+        json={"discord_id": discord_id, "difficulty": difficulty, "proficiency": proficiency},
         headers=_headers(),
         timeout=10,
     )

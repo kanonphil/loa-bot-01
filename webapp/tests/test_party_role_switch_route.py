@@ -7,6 +7,7 @@ from webapp.tests.conftest import log_in
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
+PROFICIENCY_URL = "http://bot-server.internal/api/internal/parties/proficiency-options"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 SWITCH_ROLE_URL = "http://bot-server.internal/api/internal/parties/p1/switch-role"
 INVITABLE_USERS_URL = "http://bot-server.internal/api/internal/parties/p1/invitable-users"
@@ -56,6 +57,7 @@ def test_party_detail_shows_dps_button_when_currently_support(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY_AS_SUPPORT))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
 
@@ -70,6 +72,7 @@ def test_party_detail_shows_support_button_when_dps_with_support_class(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY_AS_DPS_SUPPORT_CLASS))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트", "바드"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
@@ -84,6 +87,7 @@ def test_party_detail_hides_role_switch_when_dps_with_non_support_class(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY_AS_DPS_NON_SUPPORT_CLASS))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트", "바드"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")

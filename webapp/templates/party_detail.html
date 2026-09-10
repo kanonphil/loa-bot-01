@@ -247,6 +247,25 @@
   </div>
   {% endif %}
 
+  {% if difficulty_options %}
+  <div class="leader-group">
+    <span class="leader-group-label">난이도/숙련도 수정</span>
+    <form method="post" action="/parties/{{ party.message_id }}/edit-difficulty" class="leader-form">
+      <select name="difficulty" class="js-themed-select">
+        {% for d in difficulty_options %}
+        <option value="{{ d }}" {% if d == party.difficulty %}selected{% endif %}>{{ d }}</option>
+        {% endfor %}
+      </select>
+      <select name="proficiency" class="js-themed-select">
+        {% for p in proficiency_options %}
+        <option value="{{ p.value }}" title="{{ p.description }}" {% if p.value == party.proficiency %}selected{% endif %}>{{ p.label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="leader-btn">난이도/숙련도 수정</button>
+    </form>
+  </div>
+  {% endif %}
+
   <div class="leader-group">
     <span class="leader-group-label">일정 변경</span>
     <form method="post" action="/parties/{{ party.message_id }}/reschedule" class="leader-form">

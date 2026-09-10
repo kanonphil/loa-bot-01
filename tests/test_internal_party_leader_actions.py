@@ -268,3 +268,85 @@ def test_transfer_leader_rejects_non_member(client, fake_bot):
     body = resp.json()
     assert body["success"] is False
     assert "참여 중인 인원" in body["reason"]
+
+
+# ── 난이도/숙련도 수정 ───────────────────────────────────────
+# 아르모체(4막): 노말(min_level=1700, total_slots=8), 하드(min_level=1720, total_slots=8)
+# 픽스처의 두 캐릭터는 둘 다 item_level=1710.0 — 노말은 통과하지만 하드는 미달.
+
+def test_edit_proficiency_only_always_allowed_even_with_members_below_new_difficulty_level(client, fake_bot):
+    """숙련도만 바꾸는 건 레벨/정원과 무관하게 항상 가능해야 한다(트라이→숙련 전환)."""
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "노말", "proficiency": "트라이"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is True
+    party = asyncio.run(db.get_party("999"))
+    assert party["difficulty"] == "노말"
+    assert party["proficiency"] == "트라이"
+
+
+def test_edit_difficulty_blocks_when_member_under_new_min_level(client, fake_bot):
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "하드", "proficiency": "숙련"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "요구 레벨" in body["reason"]
+    party = asyncio.run(db.get_party("999"))
+    assert party["difficulty"] == "노말"  # 변경 안 됨
+
+
+def test_edit_difficulty_succeeds_when_all_members_meet_new_level(client, fake_bot):
+    asyncio.run(db.update_character_cache(LEADER_ID, "워로드캐릭", item_level=1730.0, character_class="워로드"))
+    asyncio.run(db.update_character_cache(MEMBER_ID, "발키리", item_level=1730.0, character_class="홀리나이트"))
+
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "하드", "proficiency": "숙련"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is True
+    party = asyncio.run(db.get_party("999"))
+    assert party["difficulty"] == "하드"
+    assert party["min_level"] == 1720
+
+
+def test_admin_can_edit_difficulty_without_being_leader(client, fake_bot, monkeypatch):
+    import config
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"777"})
+
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": "777", "difficulty": "노말", "proficiency": "트라이"},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+
+
+def test_non_leader_cannot_edit_difficulty(client, fake_bot):
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": MEMBER_ID, "difficulty": "노말", "proficiency": "트라이"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "파티장만" in body["reason"]
+
+
+def test_edit_difficulty_rejected_when_party_disbanded(client, fake_bot):
+    asyncio.run(db.disband_party("999"))
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "하드", "proficiency": "숙련"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "종료된 파티" in body["reason"]

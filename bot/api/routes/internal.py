@@ -676,6 +676,22 @@ async def transfer_leader_route(message_id: str, body: TransferLeaderBody):
   )
 
 
+class EditPartyDifficultyBody(BaseModel):
+  discord_id: str
+  difficulty: str
+  proficiency: str
+
+
+@router.post("/parties/{message_id}/edit-difficulty")
+async def edit_party_difficulty(message_id: str, body: EditPartyDifficultyBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _edit_party_difficulty_core
+
+  return await _edit_party_difficulty_core(
+    bot_ref.get_bot(), message_id, body.discord_id, body.difficulty, body.proficiency
+  )
+
+
 # ── 원정대 관리 (길드원 셀프서비스) ──────────────────────────
 # Discord의 /캐릭터등록, /캐릭터삭제, "동기화" 버튼(bot/ui/views.py)과 동일한 로직.
 

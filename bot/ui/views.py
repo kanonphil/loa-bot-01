@@ -647,6 +647,67 @@ async def _reschedule_party_core(
     return {"success": True, "reason": None, "scheduled_time": scheduled_time}
 
 
+async def _edit_party_difficulty_core(
+    bot: discord.Client, message_id: str, discord_id: str, difficulty: str, proficiency: str,
+) -> dict:
+    """난이도/숙련도 변경 — 디스코드 관리 패널과 웹 API가 공유. 파티장뿐 아니라
+    관리자도 가능(reschedule과 동일). 숙련도는 정원/레벨에 영향이 없어 항상 바꿀 수
+    있지만, 난이도는 새 정원/레벨 요건에 현재 참여자가 다 맞아야만 바꿀 수 있다 —
+    슬롯 재배치는 하지 않고 정원/레벨 검증만 한다(트라이→숙련처럼 인원 그대로
+    유지한 채 전환하는 게 목적)."""
+    party = await db.get_party(message_id)
+    err = _require_leader_or_admin(party, discord_id)
+    if err:
+        return {"success": False, "reason": err}
+    if party["status"] == "disbanded":
+        return {"success": False, "reason": "이미 종료된 파티입니다."}
+
+    diff_info = get_difficulty_info(party["raid_name"], difficulty)
+    if not diff_info:
+        return {"success": False, "reason": "존재하지 않는 난이도입니다."}
+    new_total_slots, new_min_level = diff_info["total_slots"], diff_info["min_level"]
+
+    filled = await db.get_party_slot_item_levels(message_id)
+    if len(filled) > new_total_slots:
+        return {
+            "success": False,
+            "reason": f"현재 참여 인원({len(filled)}명)이 새 난이도의 정원({new_total_slots}명)보다 많습니다.",
+        }
+    under_level = [f["character_name"] for f in filled if f["item_level"] is None or f["item_level"] < new_min_level]
+    if under_level:
+        return {
+            "success": False,
+            "reason": f"{', '.join(under_level)}님이 새 난이도의 요구 레벨({new_min_level})에 못 미칩니다.",
+        }
+
+    await db.update_party_difficulty(message_id, difficulty, proficiency, new_total_slots, new_min_level)
+    updated = await db.get_party(message_id)
+
+    if bot and updated:
+        await _refresh_party_embed_with_reserved(bot, updated)
+        try:
+            channel = bot.get_channel(int(updated["channel_id"])) or await bot.fetch_channel(int(updated["channel_id"]))
+            raid_info = RAIDS.get(updated["raid_name"], {})
+            short_name = raid_info.get("short_name", updated["raid_name"])
+            new_name = f"{short_name} {updated['difficulty']} {updated['proficiency']} — {updated['scheduled_time']}"
+            await channel.edit(name=new_name)
+            await channel.send(f"🛠️ 난이도/숙련도가 **{updated['difficulty']} {updated['proficiency']}**로 변경되었습니다.")
+        except Exception:
+            pass
+
+        raid_title = f"{updated['raid_name']} {updated['difficulty']}"
+        link = _party_url(updated)
+        leader_id = updated["leader_id"]
+        for f in filled:
+            if f["discord_id"] != leader_id:
+                await _send_dm(
+                    bot, f["discord_id"],
+                    f"🛠️ **{raid_title}** 공대의 난이도/숙련도가 변경되었습니다.\n{link}",
+                )
+
+    return {"success": True}
+
+
 async def _transfer_leader_core(
     bot: discord.Client, message_id: str, discord_id: str, new_leader_discord_id: str
 ) -> dict:
@@ -2718,6 +2779,77 @@ class RoleSelectView(View):
 
 
 # ─────────────────────────────────────────────────────
+# 난이도/숙련도 수정 선택 뷰
+# ─────────────────────────────────────────────────────
+
+class DifficultyEditView(View):
+    """난이도 Select + 숙련도 Select를 한 화면에 두고 "확인" 버튼으로 한 번에
+    제출한다 — Modal은 TextInput만 지원해 고정 선택지인 난이도/숙련도엔 안 맞는다."""
+
+    def __init__(
+        self, party: dict, original_message: discord.Message | None, total_slots: int,
+    ) -> None:
+        super().__init__(timeout=60)
+        self.party             = party
+        self.original_message  = original_message
+        self.total_slots       = total_slots
+        self.selected_difficulty  = party["difficulty"]
+        self.selected_proficiency = party["proficiency"]
+
+        raid_info = RAIDS.get(party["raid_name"], {})
+        diff_options = [
+            discord.SelectOption(label=d, value=d, default=(d == party["difficulty"]))
+            for d in (raid_info.get("difficulties") or {}).keys()
+        ]
+        diff_select = Select(placeholder="난이도 선택", options=diff_options, row=0)
+        diff_select.callback = self._on_select_difficulty
+        self.add_item(diff_select)
+
+        prof_options = [
+            discord.SelectOption(label=p, value=p, description=desc, default=(p == party["proficiency"]))
+            for p, desc in PROFICIENCY.items()
+        ]
+        prof_select = Select(placeholder="숙련도 선택", options=prof_options, row=1)
+        prof_select.callback = self._on_select_proficiency
+        self.add_item(prof_select)
+
+        confirm_btn = Button(label="확인", style=discord.ButtonStyle.primary, row=2)
+        confirm_btn.callback = self._on_confirm
+        self.add_item(confirm_btn)
+
+    async def _on_select_difficulty(self, interaction: discord.Interaction) -> None:
+        self.selected_difficulty = interaction.data["values"][0]
+        await interaction.response.defer()
+
+    async def _on_select_proficiency(self, interaction: discord.Interaction) -> None:
+        self.selected_proficiency = interaction.data["values"][0]
+        await interaction.response.defer()
+
+    async def _on_confirm(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        result = await _edit_party_difficulty_core(
+            interaction.client, self.party["message_id"], str(interaction.user.id),
+            self.selected_difficulty, self.selected_proficiency,
+        )
+        if not result["success"]:
+            await interaction.edit_original_response(content=f"❌ {result['reason']}", view=None)
+            return
+        label = f"{self.selected_difficulty} {self.selected_proficiency}"
+        if self.original_message:
+            post_party = await db.get_party(self.party["message_id"])
+            if post_party and post_party["status"] != "disbanded":
+                manage_view = ManageView(post_party, self.original_message, self.total_slots)
+                await interaction.edit_original_response(
+                    content=f"✅ 난이도/숙련도가 **{label}**로 변경되었습니다.", view=manage_view,
+                )
+                manage_view._manage_interaction = interaction
+                return
+        await interaction.edit_original_response(
+            content=f"✅ 난이도/숙련도가 **{label}**로 변경되었습니다.", view=None
+        )
+
+
+# ─────────────────────────────────────────────────────
 # 강제 퇴장 선택 뷰
 # ─────────────────────────────────────────────────────
 
@@ -2844,6 +2976,11 @@ class ManageView(View):
                                   style=discord.ButtonStyle.secondary, row=3)
         guest_invite_btn.callback = self._handle_guest_invite
         self.add_item(guest_invite_btn)
+
+        edit_difficulty_btn = Button(label="난이도 수정", emoji="🛠️",
+                                     style=discord.ButtonStyle.secondary, row=4)
+        edit_difficulty_btn.callback = self._handle_edit_difficulty
+        self.add_item(edit_difficulty_btn)
 
 
     # ── 모집 마감 ─────────────────────────────────────
@@ -2986,6 +3123,16 @@ class ManageView(View):
             return
         view = DelegateSelectView(party, delegable)
         await interaction.response.edit_message(content="👑 파티장을 위임할 파티원을 선택하세요:", view=view)
+
+    # ── 난이도/숙련도 수정 ─────────────────────────────
+
+    async def _handle_edit_difficulty(self, interaction: discord.Interaction) -> None:
+        party = await db.get_party(self.party["message_id"])
+        if not party or party["status"] == "disbanded":
+            await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
+            return
+        view = DifficultyEditView(party, self.original_message, self.total_slots)
+        await interaction.response.edit_message(content="🛠️ 변경할 난이도/숙련도를 선택하세요:", view=view)
 
 
 # ─────────────────────────────────────────────────────

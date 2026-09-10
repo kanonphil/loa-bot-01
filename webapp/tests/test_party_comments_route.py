@@ -7,6 +7,7 @@ from webapp.tests.conftest import log_in
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
+PROFICIENCY_URL = "http://bot-server.internal/api/internal/parties/proficiency-options"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/p1/eligibility"
 WAITLIST_STATUS_URL = "http://bot-server.internal/api/internal/parties/p1/waitlist-status"
@@ -43,6 +44,7 @@ def _mock_base(client, discord_id="111", party=None, comments=None):
     respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=party or PARTY))
     respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=comments if comments is not None else []))
     respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+    respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
     respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
     respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
 

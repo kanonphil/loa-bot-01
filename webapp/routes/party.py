@@ -258,6 +258,12 @@ async def _detail_context(
     party_split = diff_info.get("party_split")
     is_split = bool(party_split and party["total_slots"] > party_split)
 
+    difficulty_options = []
+    proficiency_options = []
+    if is_leader and party["status"] != "disbanded":
+        difficulty_options = list((raid_info.get("difficulties") or {}).keys())
+        proficiency_options = await bot_client.get_proficiency_options()
+
     slot_by_number = {s["slot_number"]: s for s in party["slots"]}
 
     sub_parties = None
@@ -314,6 +320,8 @@ async def _detail_context(
         "sub_parties": sub_parties,
         "party_groups": party_groups,
         "all_slots": all_slots,
+        "difficulty_options": difficulty_options,
+        "proficiency_options": proficiency_options,
     }
 
 
@@ -537,6 +545,20 @@ async def transfer_leader(
         message_id, user["discord_id"], new_leader_discord_id
     )
     return _redirect_with_result(message_id, result, "파티장을 위임하지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/edit-difficulty")
+async def edit_party_difficulty(
+    request: Request,
+    message_id: str,
+    difficulty: str = Form(...),
+    proficiency: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    result = await bot_client.edit_party_difficulty(
+        message_id, user["discord_id"], difficulty, proficiency
+    )
+    return _redirect_with_result(message_id, result, "난이도/숙련도를 변경하지 못했습니다.")
 
 
 @router.post("/parties/{message_id}/admin-revert-clear")

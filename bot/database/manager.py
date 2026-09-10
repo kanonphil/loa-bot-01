@@ -1646,6 +1646,35 @@ async def update_party_schedule(
         await db.commit()
 
 
+async def update_party_difficulty(
+    message_id: str, difficulty: str, proficiency: str, total_slots: int, min_level: int
+) -> None:
+    """난이도/숙련도 변경 — 정원/레벨 요건도 새 난이도 기준으로 함께 갱신된다.
+    기존 슬롯 번호는 건드리지 않는다(재배치는 별도)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE parties SET difficulty=?, proficiency=?, total_slots=?, min_level=? WHERE message_id=?",
+            (difficulty, proficiency, total_slots, min_level, message_id),
+        )
+        await db.commit()
+
+
+async def get_party_slot_item_levels(message_id: str) -> list[dict]:
+    """참여 중인 슬롯별 캐릭터/아이템 레벨 — 난이도 변경 시 레벨 요건 검증용.
+    게스트 초대 등 user_characters에 매칭되는 캐릭터가 없으면 item_level=None."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT ps.discord_id, ps.character_name, uc.item_level "
+            "FROM party_slots ps LEFT JOIN user_characters uc "
+            "  ON uc.discord_id=ps.discord_id AND uc.character_name=ps.character_name "
+            "WHERE ps.party_message_id=?",
+            (message_id,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def close_party(message_id: str) -> None:
     """모집만 마감 (파티는 유지 — 클리어 가능)."""
     async with aiosqlite.connect(DB_PATH) as db:

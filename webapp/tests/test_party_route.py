@@ -13,6 +13,7 @@ INVITABLE_USERS_URL = "http://bot-server.internal/api/internal/parties/p1/invita
 JOIN_URL = "http://bot-server.internal/api/internal/parties/p1/join"
 LEAVE_URL = "http://bot-server.internal/api/internal/parties/p1/leave"
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
+PROFICIENCY_URL = "http://bot-server.internal/api/internal/parties/proficiency-options"
 SUPPORT_CLASSES_URL = "http://bot-server.internal/api/internal/support-classes"
 
 RAIDS = {
@@ -188,6 +189,7 @@ def test_party_detail_shows_leave_when_already_joined(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
@@ -211,6 +213,7 @@ def test_party_detail_shows_guest_badge_for_guest_slot(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=party_with_guest))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
@@ -368,6 +371,7 @@ def test_party_detail_hides_waitlist_button_when_already_joined(client):
         respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
         respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
         respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
         resp = client.get("/parties/p1")
