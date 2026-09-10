@@ -18,6 +18,7 @@ from webapp import config
 from webapp.auth.dependencies import require_admin
 from webapp.clients import bot_client
 from webapp.format import party_view
+from webapp.routes.party import _history_view
 from webapp.templating import templates
 
 router = APIRouter()
@@ -255,3 +256,39 @@ async def admin_parties_page(
             "closed_parties": closed_parties,
         },
     )
+
+
+# ── 유저 관리 (Electron 관리자 앱에만 있던 기능을 웹에도 추가) ────────
+# 목록/검색은 기존 종료된 공대 목록과 같은 방식으로 클라이언트에서 필터링한다
+# (js-list-filter) — 등록 유저 수가 페이지네이션이 필요할 만큼 크지 않다.
+
+@router.get("/admin/users")
+async def admin_users_page(request: Request, user: dict = Depends(require_admin)):
+    users = await bot_client.admin_list_users(user["discord_id"], config.DISCORD_GUILD_ID)
+    return templates.TemplateResponse(
+        request,
+        "admin_users.html",
+        {"user": user, "active": "admin_users", "users": users},
+    )
+
+
+@router.get("/admin/users/{target_discord_id}/details")
+async def admin_user_details(
+    request: Request, target_discord_id: str, user: dict = Depends(require_admin),
+):
+    """유저 행을 펼칠 때 캐릭터/참여 이력을 지연 조회(htmx) — 목록 조회 한 번에
+    전체 유저의 캐릭터/이력까지 같이 가져오면 유저 수만큼 N+1이 생긴다."""
+    characters, history = await asyncio.gather(
+        bot_client.admin_get_user_characters(user["discord_id"], target_discord_id),
+        bot_client.admin_get_user_history(user["discord_id"], target_discord_id),
+    )
+    entries = [_history_view(e) for e in history["entries"]]
+    return templates.TemplateResponse(
+        request, "_admin_user_details.html", {"characters": characters, "entries": entries},
+    )
+
+
+@router.post("/admin/users/{target_discord_id}/delete")
+async def admin_delete_user_route(target_discord_id: str, user: dict = Depends(require_admin)):
+    result = await bot_client.admin_delete_user(user["discord_id"], target_discord_id)
+    return _redirect("유저 데이터를 삭제하지 못했습니다.", result, "/admin/users")

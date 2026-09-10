@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<h1>유저 관리</h1>
+<p class="settings-desc">
+  등록된 유저 전체를 조회하고, 행을 펼쳐 캐릭터/참여 이력을 확인하거나 데이터를 삭제할 수 있습니다.
+</p>
+
+{% call ui.toolbar() %}
+  {% if users %}
+  <label class="raid-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input type="search" class="js-list-filter" placeholder="닉네임 또는 디스코드 ID로 검색" aria-label="유저 검색" autocomplete="off"
+           data-filter-target="#admin-users-list" data-filter-item=".admin-row" data-filter-text=".admin-row-name"
+           data-filter-no-result="#admin-users-noresult">
+  </label>
+  {% endif %}
+{% endcall %}
+
+<div class="settings-card admin-card">
+{% if not users %}
+{{ ui.empty("등록된 유저가 없습니다", icon="👤") }}
+{% else %}
+<ul class="admin-list" id="admin-users-list">
+  {% for u in users %}
+  <li class="admin-row">
+    <span class="admin-row-name">
+      {{ u.representative or u.discord_nick or u.discord_id }}
+      <span class="admin-row-sub">
+        {% if u.discord_nick and u.discord_nick != u.representative %}{{ u.discord_nick }} &middot; {% endif %}{{ u.discord_id }}
+      </span>
+    </span>
+    <span class="admin-row-actions">
+      <button type="button" class="admin-toggle-link"
+              hx-get="/admin/users/{{ u.discord_id }}/details"
+              hx-target="#admin-user-details-{{ u.discord_id }}"
+              hx-swap="innerHTML">상세</button>
+      <form method="post" action="/admin/users/{{ u.discord_id }}/delete"
+            onsubmit="return confirm('{{ u.representative or u.discord_id }}의 모든 데이터(API 키&middot;캐릭터)를 삭제할까요? 되돌릴 수 없습니다.');">
+        <button type="submit" class="admin-danger-link">삭제</button>
+      </form>
+    </span>
+  </li>
+  <li class="admin-user-details" id="admin-user-details-{{ u.discord_id }}"></li>
+  {% endfor %}
+</ul>
+<p class="raid-picker-noresult" id="admin-users-noresult" hidden>검색 결과가 없습니다.</p>
+{% endif %}
+</div>
+</div>
+{% endblock %}

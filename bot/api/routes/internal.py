@@ -1033,3 +1033,75 @@ async def admin_revert_clear(message_id: str, body: AdminPartyActionBody):
   from bot.ui.views import _admin_revert_clear_core
 
   return await _admin_revert_clear_core(bot_ref.get_bot(), message_id, body.discord_id)
+
+
+# ── 유저 관리 (Electron 관리자 앱 전용이던 기능을 웹에도 노출) ────────
+# 관리자 API(/api/users, ADMIN_API_KEY)와 데이터/로직은 같지만, 웹앱에는 그 키를
+# 주지 않으므로 X-Webapp-Key + _require_admin 재검증으로 별도 노출한다.
+
+@router.get("/admin/users")
+async def admin_list_users(discord_id: str, guild_id: str | None = None, q: str | None = None):
+  err = _require_admin(discord_id)
+  if err:
+    raise HTTPException(status_code=403, detail=err)
+
+  import aiosqlite
+
+  async with aiosqlite.connect(db.DB_PATH) as conn:
+    conn.row_factory = aiosqlite.Row
+    cur = await conn.execute(
+      "SELECT u.discord_id, u.registered_at, "
+      f"{db._REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative "
+      "FROM users u ORDER BY u.registered_at DESC"
+    )
+    users = [dict(r) for r in await cur.fetchall()]
+
+  if guild_id:
+    from bot.api import bot_ref
+    bot = bot_ref.get_bot()
+    guild = bot.get_guild(int(guild_id)) if bot else None
+    if guild:
+      for u in users:
+        member = guild.get_member(int(u["discord_id"]))
+        u["discord_nick"] = member.display_name if member else None
+
+  if q:
+    needle = q.strip().lower()
+    users = [
+      u for u in users
+      if needle in (u.get("representative") or "").lower()
+      or needle in (u.get("discord_nick") or "").lower()
+      or needle in u["discord_id"]
+    ]
+
+  return users
+
+
+@router.get("/admin/users/{target_discord_id}/characters")
+async def admin_user_characters(target_discord_id: str, discord_id: str):
+  err = _require_admin(discord_id)
+  if err:
+    raise HTTPException(status_code=403, detail=err)
+  return await db.get_cached_characters(target_discord_id, max_age_hours=99999)
+
+
+@router.get("/admin/users/{target_discord_id}/history")
+async def admin_user_history(target_discord_id: str, discord_id: str, limit: int = 20, offset: int = 0):
+  err = _require_admin(discord_id)
+  if err:
+    raise HTTPException(status_code=403, detail=err)
+  entries, has_more, total_count = await db.get_user_party_history(target_discord_id, limit, offset)
+  return {"entries": entries, "has_more": has_more, "total_count": total_count}
+
+
+class AdminDeleteUserBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/admin/users/{target_discord_id}/delete")
+async def admin_delete_user(target_discord_id: str, body: AdminDeleteUserBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  await db.delete_user(target_discord_id)
+  return {"success": True}

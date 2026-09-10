@@ -750,3 +750,49 @@ async def admin_revert_clear(message_id: str, discord_id: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ── 관리자 (유저 관리 — Electron 관리자 앱에만 있던 기능을 웹에도 노출) ───
+
+async def admin_list_users(discord_id: str, guild_id: str | None = None, q: str | None = None) -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/users",
+        params={k: v for k, v in {"discord_id": discord_id, "guild_id": guild_id, "q": q}.items() if v},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_get_user_characters(discord_id: str, target_discord_id: str) -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{target_discord_id}/characters",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_get_user_history(discord_id: str, target_discord_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{target_discord_id}/history",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_delete_user(discord_id: str, target_discord_id: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{target_discord_id}/delete",
+        json={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()

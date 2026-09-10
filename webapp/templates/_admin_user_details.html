@@ -1,0 +1,31 @@
+{% import "_ui.html" as ui %}
+<div class="admin-user-details-inner">
+  <div class="admin-user-details-section">
+    <span class="admin-row-sub">캐릭터 ({{ characters | length }})</span>
+    {% if not characters %}
+    <p class="settings-desc">등록된 캐릭터가 없습니다.</p>
+    {% else %}
+    <ul class="admin-user-char-list">
+      {% for c in characters %}
+      <li>{{ c.character_name }} <span class="admin-row-sub">{{ c.character_class or "?" }} &middot; {{ c.item_level or "?" }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  <div class="admin-user-details-section">
+    <span class="admin-row-sub">참여 이력 (최근 {{ entries | length }}건)</span>
+    {% if not entries %}
+    <p class="settings-desc">참여 이력이 없습니다.</p>
+    {% else %}
+    <ul class="admin-user-history-list">
+      {% for e in entries %}
+      <li>
+        <span>{{ e.raid_name }} {{ e.difficulty }} &middot; {{ e.character_name }}</span>
+        {{ ui.chip(e.status_label, e.status_tone) }}
+        <span class="admin-row-sub">{{ e.scheduled_time or "일정 미정" }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>

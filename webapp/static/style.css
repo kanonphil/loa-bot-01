@@ -4778,6 +4778,43 @@ select.settings-select {
 .admin-toggle-link:hover { color: var(--text); border-color: var(--accent-dim); }
 .admin-danger-link:hover { color: var(--danger); border-color: var(--danger); }
 
+.admin-user-details:empty { display: none; }
+
+.admin-user-details-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: -4px 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.admin-user-details-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-user-char-list,
+.admin-user-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.admin-user-history-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* 폼 한 줄에 placeholder만 믿고 우겨넣던 방식(카테고리/레이드/난이도 추가 폼) —
    필드가 많아지면 폭이 모자라 placeholder가 잘리고, 입력을 시작하면 힌트가
    사라지는 문제가 있었다. 라벨을 항상 보이게 하고, 화면 폭에 맞게 자동으로
