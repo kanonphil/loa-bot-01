@@ -44,7 +44,7 @@ def test_waitlist_status_defaults_false(client):
         "/api/internal/parties/900/waitlist-status", params={"discord_id": OTHER_ID}, headers=HEADERS
     )
     assert resp.status_code == 200
-    assert resp.json() == {"on_waitlist": False}
+    assert resp.json() == {"on_waitlist": False, "count": 0}
 
 
 def test_toggle_waitlist_adds_then_removes(client):
@@ -57,7 +57,7 @@ def test_toggle_waitlist_adds_then_removes(client):
     status = client.get(
         "/api/internal/parties/900/waitlist-status", params={"discord_id": OTHER_ID}, headers=HEADERS
     )
-    assert status.json() == {"on_waitlist": True}
+    assert status.json() == {"on_waitlist": True, "count": 1}
 
     resp2 = client.post(
         "/api/internal/parties/900/waitlist", json={"discord_id": OTHER_ID}, headers=HEADERS
