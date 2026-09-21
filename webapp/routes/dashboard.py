@@ -86,11 +86,13 @@ async def main_dashboard(request: Request, user: dict = Depends(get_current_user
 @router.get("/nav-badges")
 async def nav_badges(user: dict = Depends(get_current_user)):
     """사이드바 메뉴 옆 숫자. 페이지 렌더를 막지 않도록 로드 후 따로 가져간다."""
-    parties, progress = await asyncio.gather(
+    parties, progress, invites = await asyncio.gather(
         bot_client.list_parties(config.DISCORD_GUILD_ID),
         bot_client.get_raid_progress(user["discord_id"]),
+        bot_client.get_my_invites(user["discord_id"]),
     )
     return {
         "parties": sum(1 for p in parties if p["status"] == "recruiting"),
         "raid_check": max(progress["total"] - progress["done"], 0),
+        "invites": len(invites),
     }

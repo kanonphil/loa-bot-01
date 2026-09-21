@@ -32,11 +32,19 @@ def _reset_state(tmp_path, monkeypatch):
     party_events._last_fingerprint = None
     party_events._notification_subscribers.clear()
     party_events._last_snapshot = None
+    party_events._last_web_notification_id = None
+
+    # 봇의 개인 알림 큐 — 기본은 비어 있음(개별 테스트가 덮어쓴다)
+    async def empty_feed(after_id):
+        return {"latest_id": 0, "items": []}
+
+    monkeypatch.setattr(party_events.bot_client, "get_web_notifications", empty_feed)
     yield
     party_events._subscribers.clear()
     party_events._last_fingerprint = None
     party_events._notification_subscribers.clear()
     party_events._last_snapshot = None
+    party_events._last_web_notification_id = None
 
 
 def test_fingerprint_changes_when_slot_count_changes():
@@ -230,3 +238,67 @@ def test_poll_once_ignores_cancelled_party(monkeypatch):
     asyncio.run(party_events._poll_once())
 
     assert notif_queue.empty()
+
+
+# ── 봇 개인 알림(web_notifications) 수집 ────────────────────────
+
+def test_first_web_notification_poll_only_sets_cursor(monkeypatch):
+    async def fake_list_parties(guild_id):
+        return []
+
+    async def feed(after_id):
+        assert after_id is None
+        return {"latest_id": 41, "items": [{"id": 41, "discord_id": "111", "kind": "kicked", "message_id": "1", "text": "x"}]}
+
+    monkeypatch.setattr(party_events.bot_client, "list_parties", fake_list_parties)
+    monkeypatch.setattr(party_events.bot_client, "get_web_notifications", feed)
+    queue = party_events.subscribe_notifications()
+    asyncio.run(party_events._poll_once())
+    assert party_events._last_web_notification_id == 41
+    assert queue.empty()  # 기동 직후 지난 알림은 다시 뿌리지 않는다
+    assert asyncio.run(notification_store.unread_count("111", personal_only=True)) == 0
+
+
+def test_web_notifications_are_stored_as_personal_and_fanned_out(monkeypatch):
+    async def fake_list_parties(guild_id):
+        return []
+
+    calls = []
+
+    async def feed(after_id):
+        calls.append(after_id)
+        if after_id is None:
+            return {"latest_id": 10, "items": []}
+        return {"latest_id": 12, "items": [
+            {"id": 11, "discord_id": "111", "kind": "invited", "message_id": "p1", "text": "초대됨"},
+            {"id": 12, "discord_id": "222", "kind": "kicked", "message_id": "p1", "text": "퇴장됨"},
+        ]}
+
+    monkeypatch.setattr(party_events.bot_client, "list_parties", fake_list_parties)
+    monkeypatch.setattr(party_events.bot_client, "get_web_notifications", feed)
+    queue = party_events.subscribe_notifications()
+    asyncio.run(party_events._poll_once())
+    asyncio.run(party_events._poll_once())
+
+    assert calls == [None, 10]
+    assert party_events._last_web_notification_id == 12
+    events = [queue.get_nowait() for _ in range(2)]
+    assert [e["target_discord_id"] for e in events] == ["111", "222"]
+    assert events[0]["type"] == "invited"
+    # 구독 안 한 유저도 본인 것만 보이고, 남의 개인 알림은 안 보인다
+    assert asyncio.run(notification_store.unread_count("111", personal_only=True)) == 1
+    assert asyncio.run(notification_store.unread_count("222", personal_only=True)) == 1
+    assert asyncio.run(notification_store.unread_count("333", personal_only=True)) == 0
+
+
+def test_web_notification_feed_failure_does_not_break_party_polling(monkeypatch):
+    async def fake_list_parties(guild_id):
+        return [PARTY_A]
+
+    async def feed(after_id):
+        raise RuntimeError("bot down")
+
+    monkeypatch.setattr(party_events.bot_client, "list_parties", fake_list_parties)
+    monkeypatch.setattr(party_events.bot_client, "get_web_notifications", feed)
+    asyncio.run(party_events._poll_once())
+    assert party_events._last_fingerprint is not None

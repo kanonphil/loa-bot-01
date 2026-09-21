@@ -60,6 +60,17 @@ async def user_characters_grouped(discord_id: str):
   return await db.get_cached_characters_with_account(discord_id, max_age_hours=99999)
 
 
+@router.get("/web-notifications")
+async def web_notifications(after_id: int | None = None, limit: int = 200):
+  """봇이 보낸 DM/공지의 웹 알림함 복사본. after_id 없이 부르면 현재 최신 id만 준다
+  (웹앱이 기동 직후 지난 알림을 다시 뿌리지 않도록)."""
+  latest = await db.get_latest_web_notification_id()
+  if after_id is None:
+    return {"latest_id": latest, "items": []}
+  items = await db.get_web_notifications_after(after_id, limit)
+  return {"latest_id": max([latest] + [i["id"] for i in items]), "items": items}
+
+
 @router.get("/user-party-history")
 async def user_party_history(discord_id: str, limit: int = 20, offset: int = 0):
   """웹 '공대 이력' 페이지용 — 관리자 전용 /api/users/{id}/history와 별도 엔드포인트로
@@ -303,7 +314,8 @@ async def party_detail(message_id: str):
   if not party:
     return None
   slots = await db.get_party_slots(message_id)
-  return {**party, "slots": slots}
+  waitlist = await db.get_waitlist(message_id)
+  return {**party, "slots": slots, "waitlist_count": len(waitlist)}
 
 
 @router.get("/parties/{message_id}/eligibility")
@@ -326,7 +338,7 @@ async def join_party(message_id: str, body: JoinPartyBody):
   import discord as _discord
   from bot.api import bot_ref
   from bot.data.raids import SUPPORT_CLASSES
-  from bot.ui.views import _party_url, _refresh_party_embed_with_reserved, _send_dm
+  from bot.ui.views import _notify_members_web, _party_url, _refresh_party_embed_with_reserved, _send_dm
 
   result = await db.get_party_join_eligibility(message_id, body.discord_id)
   if not result["can_join"]:
@@ -376,12 +388,16 @@ async def join_party(message_id: str, body: JoinPartyBody):
           )
         except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
           pass
+        await _notify_members_web(
+          message_id, "party_full", f"{party['raid_name']} {party['difficulty']} 파티가 완성되었습니다.",
+        )
       if party["leader_id"] != body.discord_id:
         raid_title = f"{party['raid_name']} {party['difficulty']}"
         role_icon = "🛡️" if role == "support" else "⚔️"
         await _send_dm(
           bot, party["leader_id"],
           f"{role_icon} **{raid_title}** 공대에 **{body.character_name}**({char_info['class']})이(가) 참여했습니다!\n{_party_url(party)}",
+          kind="member_joined", message_id=message_id,
         )
 
   return {"success": success, "slot_number": slot_number, "message": message}
@@ -403,7 +419,7 @@ async def leave_party(message_id: str, body: LeavePartyBody):
 @router.get("/parties/{message_id}/waitlist-status")
 async def waitlist_status(message_id: str, discord_id: str):
   waitlist = await db.get_waitlist(message_id)
-  return {"on_waitlist": discord_id in waitlist}
+  return {"on_waitlist": discord_id in waitlist, "count": len(waitlist)}
 
 
 class WaitlistBody(BaseModel):

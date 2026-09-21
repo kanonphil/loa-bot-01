@@ -7,7 +7,7 @@ from datetime import datetime, time, timezone, timedelta
 import bot.database.manager as db
 import bot.api.lostark as loa
 from bot.services.expedition import sync_all_accounts_daily
-from bot.ui.views import PartyView, _refresh_party_embed_with_reserved, _send_dm
+from bot.ui.views import PartyView, _refresh_party_embed_with_reserved, _send_dm, _notify_members_web
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
 
@@ -154,6 +154,7 @@ class LoABot(commands.Bot):
                     f"⏰ **{raid_title}** 공격대 시작 시간입니다!\n"
                     f"{mentions or leader_mention}"
                 )
+                await _notify_members_web(party["message_id"], "party_starting", f"{raid_title} 공격대 시작 시간입니다.")
                 await db.mark_notified(party["message_id"])
             except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
                 print(f"[시작 알림] 발송 실패 (message_id={party.get('message_id')}): {type(e).__name__}: {e}")

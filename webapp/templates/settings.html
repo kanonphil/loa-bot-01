@@ -25,6 +25,7 @@
     <label class="settings-check"><input type="checkbox" name="created" {% if prefs.notify_created %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 공대 모집 시작</label>
     <label class="settings-check"><input type="checkbox" name="cleared" {% if prefs.notify_cleared %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 공대 클리어</label>
     <label class="settings-check"><input type="checkbox" name="guest_joined" {% if prefs.notify_guest_joined %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 게스트 합류</label>
+    <label class="settings-check"><input type="checkbox" name="personal" {% if prefs.notify_personal %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 내게 온 알림 (초대·강제 퇴장·파티장 위임·일정/난이도 변경·빈자리·파티 완성·시작 시간)</label>
     <button type="submit" class="settings-toggle-btn">저장</button>
   </form>
 </div>

@@ -21,6 +21,8 @@ _last_fingerprint: str | None = None
 
 _notification_subscribers: set[asyncio.Queue] = set()
 _last_snapshot: dict[str, dict] | None = None
+# 봇이 보낸 DM/공지의 웹 복사본(web_notifications) 커서 — None이면 아직 첫 조회 전.
+_last_web_notification_id: int | None = None
 
 
 def _fingerprint(parties: list[dict]) -> str:
@@ -115,6 +117,31 @@ async def _poll_once() -> None:
             for queue in list(_notification_subscribers):
                 queue.put_nowait(saved)
     _last_snapshot = current_snapshot
+
+    await _ingest_web_notifications()
+
+
+async def _ingest_web_notifications() -> None:
+    """봇이 DM으로 보낸 개인 알림(초대/강퇴/위임/일정·난이도 변경/빈자리/파티 완성/시작
+    시간)을 같은 폴링 주기에 가져와 본인 앞으로 온 알림으로 저장하고 toast로 흘린다.
+    첫 조회는 커서만 잡는다(기동 직후 지난 알림을 다시 뿌리지 않도록)."""
+    global _last_web_notification_id
+    try:
+        feed = await bot_client.get_web_notifications(_last_web_notification_id)
+    except Exception:
+        logger.exception("웹 알림 큐 조회 실패")
+        return
+    if _last_web_notification_id is None:
+        _last_web_notification_id = int(feed.get("latest_id") or 0)
+        return
+    for item in feed.get("items", []):
+        saved = await notification_store.add_notification(
+            item["kind"], item.get("message_id") or "", item["text"],
+            target_discord_id=item["discord_id"],
+        )
+        for queue in list(_notification_subscribers):
+            queue.put_nowait(saved)
+    _last_web_notification_id = int(feed.get("latest_id") or _last_web_notification_id)
 
 
 async def poll_loop() -> None:

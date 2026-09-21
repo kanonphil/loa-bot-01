@@ -10,14 +10,17 @@ import aiosqlite
 from webapp import config
 
 SCHEMA = """
+-- target_discord_id가 NULL이면 길드 전체 이벤트(생성/클리어/게스트 합류), 값이 있으면
+-- 그 유저 개인 알림(초대/강퇴/위임/일정 변경/빈자리/파티 완성/시작 시간 — 봇 DM의 웹 복사본).
 CREATE TABLE IF NOT EXISTS notifications (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    type        TEXT NOT NULL,
-    message_id  TEXT NOT NULL,
-    text        TEXT NOT NULL,
-    raid_name   TEXT,
-    difficulty  TEXT,
-    created_at  TEXT NOT NULL
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    type              TEXT NOT NULL,
+    message_id        TEXT NOT NULL,
+    text              TEXT NOT NULL,
+    raid_name         TEXT,
+    difficulty        TEXT,
+    target_discord_id TEXT,
+    created_at        TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS notification_reads (
@@ -32,7 +35,8 @@ CREATE TABLE IF NOT EXISTS notification_subscriptions (
     subscribed           INTEGER NOT NULL DEFAULT 0,
     notify_created       INTEGER NOT NULL DEFAULT 1,
     notify_cleared       INTEGER NOT NULL DEFAULT 1,
-    notify_guest_joined  INTEGER NOT NULL DEFAULT 1
+    notify_guest_joined  INTEGER NOT NULL DEFAULT 1,
+    notify_personal      INTEGER NOT NULL DEFAULT 1
 );
 
 -- 레이드+난이도 단위 알림 필터 (봇의 /레이드구독과 같은 개념).
@@ -55,7 +59,13 @@ _MIGRATIONS = [
     "ALTER TABLE notification_subscriptions ADD COLUMN notify_created INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE notification_subscriptions ADD COLUMN notify_cleared INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE notification_subscriptions ADD COLUMN notify_guest_joined INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE notifications ADD COLUMN target_discord_id TEXT",
+    "ALTER TABLE notification_subscriptions ADD COLUMN notify_personal INTEGER NOT NULL DEFAULT 1",
 ]
+
+# 이 유저에게 보이는 알림 — 전체 이벤트 + 본인 앞으로 온 개인 알림
+_VISIBLE = "(n.target_discord_id IS NULL OR n.target_discord_id = ?)"
+_PERSONAL_ONLY = "n.target_discord_id = ?"
 
 
 def _now_iso() -> str:
@@ -106,7 +116,7 @@ async def get_preferences(discord_id: str) -> dict:
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT subscribed, notify_created, notify_cleared, notify_guest_joined "
+            "SELECT subscribed, notify_created, notify_cleared, notify_guest_joined, notify_personal "
             "FROM notification_subscriptions WHERE discord_id=?",
             (discord_id,),
         )
@@ -122,20 +132,23 @@ async def get_preferences(discord_id: str) -> dict:
         "notify_created": bool(row["notify_created"]) if row else True,
         "notify_cleared": bool(row["notify_cleared"]) if row else True,
         "notify_guest_joined": bool(row["notify_guest_joined"]) if row else True,
+        "notify_personal": bool(row["notify_personal"]) if row else True,
         "raid_filters": filters,
     }
 
 
-async def set_type_preferences(discord_id: str, created: bool, cleared: bool, guest_joined: bool) -> None:
+async def set_type_preferences(
+    discord_id: str, created: bool, cleared: bool, guest_joined: bool, personal: bool = True,
+) -> None:
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         await db.execute(
             "INSERT INTO notification_subscriptions "
-            "(discord_id, subscribed, notify_created, notify_cleared, notify_guest_joined) "
-            "VALUES (?, 0, ?, ?, ?) "
+            "(discord_id, subscribed, notify_created, notify_cleared, notify_guest_joined, notify_personal) "
+            "VALUES (?, 0, ?, ?, ?, ?) "
             "ON CONFLICT(discord_id) DO UPDATE SET "
             "notify_created=excluded.notify_created, notify_cleared=excluded.notify_cleared, "
-            "notify_guest_joined=excluded.notify_guest_joined",
-            (discord_id, int(created), int(cleared), int(guest_joined)),
+            "notify_guest_joined=excluded.notify_guest_joined, notify_personal=excluded.notify_personal",
+            (discord_id, int(created), int(cleared), int(guest_joined), int(personal)),
         )
         await db.commit()
 
@@ -165,9 +178,14 @@ async def remove_raid_filter(discord_id: str, raid_name: str, difficulty: str | 
         await db.commit()
 
 
-def _matches(prefs: dict, event_type: str, raid_name: str | None, difficulty: str | None) -> bool:
+def _matches(
+    prefs: dict, event_type: str, raid_name: str | None, difficulty: str | None, targeted: bool = False,
+) -> bool:
     """이 알림이 유저의 종류 토글 + 레이드 필터를 통과하는지.
-    레이드 정보가 없는 알림(구버전 데이터)은 필터로 거르지 않고 보여준다."""
+    레이드 정보가 없는 알림(구버전 데이터)은 필터로 거르지 않고 보여준다.
+    개인 알림(targeted)은 본인 앞으로 온 것이라 레이드 필터와 무관하게 '개인 알림' 토글만 본다."""
+    if targeted:
+        return prefs.get("notify_personal", True)
     if not prefs.get(f"notify_{event_type}", True):
         return False
     filters = prefs.get("raid_filters") or []
@@ -179,10 +197,12 @@ def _matches(prefs: dict, event_type: str, raid_name: str | None, difficulty: st
     return False
 
 
-async def event_matches(discord_id: str, event_type: str, raid_name: str | None, difficulty: str | None) -> bool:
+async def event_matches(
+    discord_id: str, event_type: str, raid_name: str | None, difficulty: str | None, targeted: bool = False,
+) -> bool:
     """실시간 toast(SSE)에서 유저별로 이 이벤트를 보낼지 판단."""
     prefs = await get_preferences(discord_id)
-    return _matches(prefs, event_type, raid_name, difficulty)
+    return _matches(prefs, event_type, raid_name, difficulty, targeted)
 
 
 async def add_notification(
@@ -191,13 +211,14 @@ async def add_notification(
     text: str,
     raid_name: str | None = None,
     difficulty: str | None = None,
+    target_discord_id: str | None = None,
 ) -> dict:
     now = _now_iso()
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         cur = await db.execute(
-            "INSERT INTO notifications (type, message_id, text, raid_name, difficulty, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (event_type, message_id, text, raid_name, difficulty, now),
+            "INSERT INTO notifications (type, message_id, text, raid_name, difficulty, target_discord_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (event_type, message_id, text, raid_name, difficulty, target_discord_id, now),
         )
         await db.commit()
         return {
@@ -207,65 +228,77 @@ async def add_notification(
             "text": text,
             "raid_name": raid_name,
             "difficulty": difficulty,
+            "target_discord_id": target_discord_id,
             "created_at": now,
         }
 
 
-async def list_unread(discord_id: str, limit: int = 30) -> list[dict]:
+def _filter_rows(prefs: dict, rows: list[dict], limit: int) -> list[dict]:
+    filtered = [
+        r for r in rows
+        if _matches(prefs, r["type"], r["raid_name"], r["difficulty"], targeted=bool(r.get("target_discord_id")))
+    ]
+    return filtered[:limit]
+
+
+async def list_unread(discord_id: str, limit: int = 30, personal_only: bool = False) -> list[dict]:
+    """personal_only: 구독하지 않은 유저 — 전체 이벤트 이력은 안 쌓지만 본인 앞으로 온
+    개인 알림(초대/강퇴 등)은 봐야 하므로 그것만 보여준다."""
     prefs = await get_preferences(discord_id)
+    scope = _PERSONAL_ONLY if personal_only else _VISIBLE
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT n.id, n.type, n.message_id, n.text, n.raid_name, n.difficulty, n.created_at "
+            "SELECT n.id, n.type, n.message_id, n.text, n.raid_name, n.difficulty, n.target_discord_id, n.created_at "
             "FROM notifications n "
-            "WHERE NOT EXISTS ("
+            f"WHERE {scope} AND NOT EXISTS ("
             "  SELECT 1 FROM notification_reads r "
             "  WHERE r.notification_id = n.id AND r.discord_id = ?"
             ") "
             "ORDER BY n.id DESC",
-            (discord_id,),
+            (discord_id, discord_id),
         )
         rows = [dict(r) for r in await cur.fetchall()]
-    filtered = [r for r in rows if _matches(prefs, r["type"], r["raid_name"], r["difficulty"])]
-    return filtered[:limit]
+    return _filter_rows(prefs, rows, limit)
 
 
-async def unread_count(discord_id: str) -> int:
+async def unread_count(discord_id: str, personal_only: bool = False) -> int:
     """읽지 않은 알림 수 — 종류 토글/레이드 필터 적용 후 개수라 list_unread를 재사용한다.
     (알림 보존 기간이 짧아 행 수가 적으므로 전체 조회 비용은 무시할 수준)"""
-    return len(await list_unread(discord_id, limit=10**9))
+    return len(await list_unread(discord_id, limit=10**9, personal_only=personal_only))
 
 
-async def list_read(discord_id: str, limit: int = 30) -> list[dict]:
+async def list_read(discord_id: str, limit: int = 30, personal_only: bool = False) -> list[dict]:
     """이미 읽은 알림 — 종 아이콘 패널의 "읽음" 탭용. 종류 토글/레이드 필터는 동일하게 적용."""
     prefs = await get_preferences(discord_id)
+    scope = _PERSONAL_ONLY if personal_only else _VISIBLE
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT n.id, n.type, n.message_id, n.text, n.raid_name, n.difficulty, n.created_at "
+            "SELECT n.id, n.type, n.message_id, n.text, n.raid_name, n.difficulty, n.target_discord_id, n.created_at "
             "FROM notifications n "
             "JOIN notification_reads r ON r.notification_id = n.id AND r.discord_id = ? "
+            f"WHERE {scope} "
             "ORDER BY n.id DESC",
-            (discord_id,),
+            (discord_id, discord_id),
         )
         rows = [dict(r) for r in await cur.fetchall()]
-    filtered = [r for r in rows if _matches(prefs, r["type"], r["raid_name"], r["difficulty"])]
-    return filtered[:limit]
+    return _filter_rows(prefs, rows, limit)
 
 
 async def mark_all_read(discord_id: str) -> int:
-    """이 유저가 아직 안 읽은 모든 알림을 읽음 처리. 종 아이콘을 열기만 해도 전부 읽음이 되도록.
-    반환: 새로 읽음 처리된 알림 수."""
+    """이 유저에게 보이는 안 읽은 알림을 전부 읽음 처리(남의 개인 알림은 건드리지 않는다).
+    종 아이콘을 열기만 해도 전부 읽음이 되도록. 반환: 새로 읽음 처리된 알림 수."""
     now = _now_iso()
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         cur = await db.execute(
             "INSERT OR IGNORE INTO notification_reads (discord_id, notification_id, read_at) "
             "SELECT ?, n.id, ? FROM notifications n "
-            "WHERE NOT EXISTS ("
+            f"WHERE {_VISIBLE} AND NOT EXISTS ("
             "  SELECT 1 FROM notification_reads r "
             "  WHERE r.notification_id = n.id AND r.discord_id = ?"
             ")",
-            (discord_id, now, discord_id),
+            (discord_id, now, discord_id, discord_id),
         )
         await db.commit()
         return cur.rowcount
@@ -311,8 +344,9 @@ async def mark_read(discord_id: str, notification_id: int) -> dict | None:
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT id, type, message_id, text, created_at FROM notifications WHERE id=?",
-            (notification_id,),
+            "SELECT id, type, message_id, text, target_discord_id, created_at FROM notifications "
+            "WHERE id=? AND (target_discord_id IS NULL OR target_discord_id=?)",
+            (notification_id, discord_id),
         )
         row = await cur.fetchone()
         if not row:

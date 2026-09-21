@@ -60,6 +60,7 @@ def _mock(parties=None, progress=None, characters=None):
     )
     respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=parties or []))
     respx.get(PROGRESS_URL).mock(return_value=httpx.Response(200, json=progress or PROGRESS))
+    respx.get("http://bot-server.internal/api/internal/my-invites").mock(return_value=httpx.Response(200, json=[]))
 
 
 def test_dashboard_requires_login(client):
@@ -137,7 +138,7 @@ def test_nav_badges(client):
         resp = client.get("/nav-badges")
 
     assert resp.status_code == 200
-    assert resp.json() == {"parties": 2, "raid_check": 1}
+    assert resp.json() == {"parties": 2, "raid_check": 1, "invites": 0}
 
 
 def test_nav_badges_requires_login(client):

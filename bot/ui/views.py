@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import discord
 from discord.ui import View, Button, Select, Modal, TextInput
 from datetime import datetime, timezone, timedelta
@@ -62,6 +64,7 @@ async def _leave_party_core(bot: discord.Client, message_id: str, discord_id: st
                     bot, new_leader,
                     f"👑 **{updated_party['raid_name']} {updated_party['difficulty']}** "
                     f"공대의 파티장이 되었습니다!\n{_party_url(updated_party)}",
+                    kind="leader_transferred", message_id=updated_party["message_id"],
                 )
             return True, None
 
@@ -240,6 +243,10 @@ async def _create_invite_core(
             f"일정: **{party['scheduled_time']}** | {_party_url(party)}\n\n"
             f"참여 의사를 알려주세요:",
             view=InviteResponseView(message_id, party, target_discord_id, client=bot),
+        )
+        await db.add_web_notification(
+            target_discord_id, "invited", message_id,
+            f"{leader_name}님이 {raid_title} 공대 {slot_number}번 슬롯에 초대했습니다. 초대함에서 수락하거나 거절할 수 있습니다.",
         )
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         await db.delete_invite(message_id, target_discord_id)
@@ -621,7 +628,7 @@ async def _cancel_party_core(
             dm_content += f"\n📌 사유: {reason_text}"
         for s in slots:
             if s["discord_id"] != party["leader_id"]:
-                await _send_dm(bot, s["discord_id"], dm_content)
+                await _send_dm(bot, s["discord_id"], dm_content, kind="cancelled", message_id=None)
 
         from bot.ui.embeds import party_embed
         try:
@@ -666,6 +673,7 @@ async def _kick_member_core(
         await _send_dm(
             bot, target_discord_id,
             f"⚠️ **{raid_title}** 공대에서 파티장에 의해 퇴장되었습니다.",
+            kind="kicked", message_id=message_id,
         )
         updated = await db.get_party(message_id)
         if updated:
@@ -721,6 +729,7 @@ async def _reschedule_party_core(
                     bot, s["discord_id"],
                     f"📅 **{raid_title}** 공대 일정이 변경되었습니다.\n"
                     f"새 일정: **{scheduled_time}**{reason_text}\n{link}",
+                    kind="rescheduled", message_id=message_id,
                 )
 
     return {"success": True, "reason": None, "scheduled_time": scheduled_time}
@@ -799,6 +808,7 @@ async def _edit_party_difficulty_core(
                 await _send_dm(
                     bot, f["discord_id"],
                     f"🛠️ **{raid_title}** 공대의 난이도/숙련도가 변경되었습니다.\n{link}",
+                    kind="difficulty_changed", message_id=message_id,
                 )
 
     return {"success": True}
@@ -830,6 +840,7 @@ async def _transfer_leader_core(
         await _send_dm(
             bot, new_leader_discord_id,
             f"👑 **{updated['raid_name']} {updated['difficulty']}** 공대의 파티장이 되었습니다!\n{_party_url(updated)}",
+            kind="leader_transferred", message_id=message_id,
         )
 
     return {"success": True, "reason": None}
@@ -1248,11 +1259,46 @@ class GuestCharacterNameModal(Modal, title="게스트 캐릭터 확인"):
 # 유틸
 # ─────────────────────────────────────────────────────
 
-async def _send_dm(client: discord.Client, discord_id: str, content: str) -> None:
+_WEB_TEXT_URL = re.compile(r"https?://\S+")
+_WEB_TEXT_LEADING_SYMBOLS = re.compile(r"^[^\w가-힣(]+")
+
+
+def _web_text(content: str) -> str:
+    """DM 본문을 웹 알림용 한 줄로 — 마크다운 굵게/디스코드 링크/맨 앞 이모지를 걷어낸다
+    (웹 토스트에는 이모지를 쓰지 않기로 함)."""
+    lines = []
+    for line in content.replace("**", "").splitlines():
+        line = _WEB_TEXT_URL.sub("", line).strip(" |")
+        line = _WEB_TEXT_LEADING_SYMBOLS.sub("", line).strip()
+        if line:
+            lines.append(line)
+    return " ".join(lines)
+
+
+async def _send_dm(
+    client: discord.Client, discord_id: str, content: str,
+    *, kind: str = "dm", message_id: str | None = None,
+) -> None:
+    """디스코드 DM + 같은 내용을 웹 알림함에도 남긴다(DM이 막혀 있어도 웹에는 남도록
+    DM 성공 여부와 무관하게 기록)."""
     try:
         user = await client.fetch_user(int(discord_id))
         await user.send(content)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+    try:
+        await db.add_web_notification(discord_id, kind, message_id, _web_text(content))
+    except Exception:
+        pass
+
+
+async def _notify_members_web(message_id: str, kind: str, text: str, exclude: str | None = None) -> None:
+    """채널 공지(파티 완성/시작 시간)처럼 DM이 아닌 알림을 파티원 전원의 웹 알림함에 남긴다."""
+    try:
+        for s in await db.get_party_slots(message_id):
+            if s["discord_id"] != exclude:
+                await db.add_web_notification(s["discord_id"], kind, message_id, text)
+    except Exception:
         pass
 
 
@@ -1271,6 +1317,7 @@ async def _notify_waitlist(client: discord.Client, party: dict) -> None:
         await _send_dm(
             client, discord_id,
             f"🔔 **{raid_title}** 공대에 빈 자리가 생겼습니다!\n{link}",
+            kind="waitlist_open", message_id=party["message_id"],
         )
     await db.clear_waitlist(party["message_id"])
 
@@ -1950,6 +1997,7 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
                     interaction.client, s["discord_id"],
                     f"📅 **{raid_title}** 공대 일정이 변경되었습니다.\n"
                     f"새 일정: **{scheduled_time}**{reason_text}\n{link}",
+                    kind="rescheduled", message_id=self.party["message_id"],
                 )
 
 
@@ -2151,6 +2199,7 @@ async def _auto_join_dps(
             await _send_dm(
                 interaction.client, party_info["leader_id"],
                 f"⚔️ **{raid_title}** 공대에 **{char_info['name']}**({char_info['class']})이(가) 참여했습니다!\n{link}",
+                kind="member_joined", message_id=party_info["message_id"],
             )
 
 
@@ -2336,6 +2385,7 @@ class PartyView(View):
                 await _send_dm(
                     interaction.client, new_leader,
                     f"👑 **{party['raid_name']} {party['difficulty']}** 공대의 파티장이 되었습니다!\n{_party_url(party)}",
+                    kind="leader_transferred", message_id=party["message_id"],
                 )
                 return
             else:
@@ -2488,6 +2538,9 @@ class PartyView(View):
             mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
             await message.channel.send(
                 f"🎉 **{party['raid_name']} {party['difficulty']}** 파티가 완성되었습니다!\n{mentions}"
+            )
+            await _notify_members_web(
+                party["message_id"], "party_full", f"{party['raid_name']} {party['difficulty']} 파티가 완성되었습니다.",
             )
         elif was_full and party["status"] == "recruiting":
             raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
@@ -2875,6 +2928,7 @@ class RoleSelectView(View):
                 await _send_dm(
                     interaction.client, party["leader_id"],
                     f"{role_icon} **{raid_title}** 공대에 **{char['name']}**({char['class']})이(가) 참여했습니다!\n{_party_url(party)}",
+                    kind="member_joined", message_id=party["message_id"],
                 )
         return cb
 

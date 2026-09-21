@@ -255,3 +255,52 @@ def test_delete_expired_removes_old_notifications_and_reads(db_path):
         assert [n["text"] for n in remaining] == ["recent"]
 
     asyncio.run(run())
+
+
+# ── 개인 알림(target_discord_id) ─────────────────────────────────
+
+def test_personal_notification_visible_only_to_target(db_path):
+    asyncio.run(notification_store.set_subscribed("111", True))
+    asyncio.run(notification_store.set_subscribed("222", True))
+    asyncio.run(notification_store.add_notification("kicked", "p1", "퇴장됨", target_discord_id="111"))
+    asyncio.run(notification_store.add_notification("created", "p2", "새 공대"))
+
+    mine = asyncio.run(notification_store.list_unread("111"))
+    assert [n["type"] for n in mine] == ["created", "kicked"]
+    theirs = asyncio.run(notification_store.list_unread("222"))
+    assert [n["type"] for n in theirs] == ["created"]
+
+
+def test_personal_only_scope_hides_broadcasts_for_unsubscribed(db_path):
+    asyncio.run(notification_store.add_notification("kicked", "p1", "퇴장됨", target_discord_id="111"))
+    asyncio.run(notification_store.add_notification("created", "p2", "새 공대"))
+    only_mine = asyncio.run(notification_store.list_unread("111", personal_only=True))
+    assert [n["type"] for n in only_mine] == ["kicked"]
+    assert asyncio.run(notification_store.unread_count("111", personal_only=True)) == 1
+
+
+def test_personal_toggle_off_hides_personal_but_not_broadcasts(db_path):
+    asyncio.run(notification_store.set_subscribed("111", True))
+    asyncio.run(notification_store.set_type_preferences("111", True, True, True, personal=False))
+    asyncio.run(notification_store.add_notification("kicked", "p1", "퇴장됨", target_discord_id="111"))
+    asyncio.run(notification_store.add_notification("created", "p2", "새 공대"))
+    assert [n["type"] for n in asyncio.run(notification_store.list_unread("111"))] == ["created"]
+    assert asyncio.run(notification_store.event_matches("111", "kicked", None, None, targeted=True)) is False
+    assert asyncio.run(notification_store.event_matches("111", "created", None, None)) is True
+
+
+def test_mark_all_read_does_not_touch_others_personal(db_path):
+    asyncio.run(notification_store.set_subscribed("111", True))
+    asyncio.run(notification_store.set_subscribed("222", True))
+    asyncio.run(notification_store.add_notification("kicked", "p1", "퇴장됨", target_discord_id="222"))
+    asyncio.run(notification_store.add_notification("created", "p2", "새 공대"))
+    asyncio.run(notification_store.mark_all_read("111"))
+    assert asyncio.run(notification_store.unread_count("111")) == 0
+    # 222 쪽은 아무것도 읽음 처리되지 않았다 — 본인 개인 알림 + 전체 이벤트 둘 다 그대로
+    assert asyncio.run(notification_store.unread_count("222")) == 2
+
+
+def test_mark_read_refuses_others_personal(db_path):
+    saved = asyncio.run(notification_store.add_notification("kicked", "p1", "퇴장됨", target_discord_id="222"))
+    assert asyncio.run(notification_store.mark_read("111", saved["id"])) is None
+    assert asyncio.run(notification_store.mark_read("222", saved["id"]))["type"] == "kicked"

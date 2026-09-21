@@ -921,3 +921,16 @@ async def admin_set_completion(
 
 async def admin_status(discord_id: str) -> dict:
     return await _admin_get("status", discord_id)
+
+
+async def get_web_notifications(after_id: int | None) -> dict:
+    """봇이 보낸 DM/공지의 웹 알림함 복사본 — after_id가 None이면 커서(latest_id)만 받는다."""
+    params = {} if after_id is None else {"after_id": after_id}
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/web-notifications",
+        params=params,
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()

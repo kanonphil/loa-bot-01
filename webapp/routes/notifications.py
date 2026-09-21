@@ -25,9 +25,13 @@ async def _stream(request: Request, discord_id: str | None = None):
                 break
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL_SECONDS)
-                # 실시간 toast도 유저의 종류 토글/레이드 필터를 따른다
+                # 개인 알림은 받는 사람에게만, 전체 이벤트는 유저의 종류 토글/레이드 필터대로
+                target = event.get("target_discord_id")
+                if target and target != discord_id:
+                    continue
                 if discord_id is not None and not await notification_store.event_matches(
-                    discord_id, event.get("type"), event.get("raid_name"), event.get("difficulty")
+                    discord_id, event.get("type"), event.get("raid_name"), event.get("difficulty"),
+                    targeted=bool(target),
                 ):
                     continue
                 yield f"event: notification\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -44,16 +48,17 @@ async def notification_stream(request: Request, user: dict = Depends(get_current
 
 @router.get("/notifications/count")
 async def notification_count(user: dict = Depends(get_current_user)):
+    """구독하지 않은 유저도 본인 앞으로 온 개인 알림(초대/강퇴 등)은 세어준다."""
     subscribed = await notification_store.is_subscribed(user["discord_id"])
-    count = await notification_store.unread_count(user["discord_id"]) if subscribed else 0
+    count = await notification_store.unread_count(user["discord_id"], personal_only=not subscribed)
     return {"subscribed": subscribed, "count": count}
 
 
 @router.get("/notifications/panel")
 async def notification_panel(request: Request, user: dict = Depends(get_current_user)):
     subscribed = await notification_store.is_subscribed(user["discord_id"])
-    items = await notification_store.list_unread(user["discord_id"]) if subscribed else []
-    read_items = await notification_store.list_read(user["discord_id"]) if subscribed else []
+    items = await notification_store.list_unread(user["discord_id"], personal_only=not subscribed)
+    read_items = await notification_store.list_read(user["discord_id"], personal_only=not subscribed)
     for item in items + read_items:
         item["time_ago"] = _time_ago(item.get("created_at"))
     return templates.TemplateResponse(
@@ -74,6 +79,10 @@ async def mark_all_read(user: dict = Depends(get_current_user)):
 async def open_notification(notification_id: int, user: dict = Depends(get_current_user)):
     notif = await notification_store.mark_read(user["discord_id"], notification_id)
     if not notif:
+        return RedirectResponse("/parties", status_code=303)
+    if notif["type"] == "invited":
+        return RedirectResponse("/invites", status_code=303)
+    if not notif.get("message_id"):
         return RedirectResponse("/parties", status_code=303)
     return RedirectResponse(f"/parties/{notif['message_id']}", status_code=303)
 
@@ -115,6 +124,7 @@ async def save_type_preferences(request: Request, user: dict = Depends(get_curre
         created="created" in form,
         cleared="cleared" in form,
         guest_joined="guest_joined" in form,
+        personal="personal" in form,
     )
     return RedirectResponse("/settings", status_code=303)
 

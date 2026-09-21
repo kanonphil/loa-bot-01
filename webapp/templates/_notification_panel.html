@@ -6,8 +6,14 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2.5l7 7-9 9-7 2 2-7 7-9z"/></svg>
       {% elif n.type == "cleared" %}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a1 1 0 0 0-1 1c0 2 2 4 4 4M17 6h3a1 1 0 0 1 1 1c0 2-2 4-4 4"/></svg>
-      {% elif n.type == "guest_joined" %}
+      {% elif n.type == "guest_joined" or n.type == "member_joined" %}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+      {% elif n.type == "invited" %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+      {% elif n.type in ("rescheduled", "party_starting") %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      {% elif n.type in ("kicked", "cancelled") %}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
       {% else %}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
       {% endif %}
@@ -23,12 +29,15 @@
   <span class="notif-panel-title">알림</span>
   <a href="/settings" class="notif-panel-settings-link">설정</a>
 </div>
-{% if not subscribed %}
+{% if not subscribed and not items and not read_items %}
 <div class="notif-panel-empty">
-  <p>알림을 구독하면 여기서 이력을 볼 수 있어요.</p>
+  <p>알림을 구독하면 공대 모집/클리어 소식도 여기 쌓여요. 내게 온 초대·변경 알림은 구독 없이도 보입니다.</p>
   <a href="/settings" class="notif-panel-settings-link">알림 설정으로 이동 &rarr;</a>
 </div>
 {% else %}
+{% if not subscribed %}
+<p class="notif-panel-hint">구독하지 않아 내게 온 알림만 보입니다. <a href="/settings">구독하기</a></p>
+{% endif %}
 <div class="notif-panel-tabs">
   <button type="button" class="notif-tab is-active" data-notif-tab="unread">
     안 읽음{% if items %} <span class="notif-tab-count">{{ items | length }}</span>{% endif %}

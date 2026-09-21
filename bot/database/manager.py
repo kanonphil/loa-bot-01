@@ -211,6 +211,17 @@ CREATE TABLE IF NOT EXISTS notification_logs (
     sent_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 봇이 보낸 DM/채널 공지를 웹에도 똑같이 보여주기 위한 개인 알림 큐. 웹앱이 10초마다
+-- id 기준으로 새 행만 가져가 자기 알림함에 넣는다(웹앱 DB는 별도라 봇이 직접 못 씀).
+CREATE TABLE IF NOT EXISTS web_notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id  TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    message_id  TEXT,
+    text        TEXT NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS party_pre_notifications (
     message_id  TEXT,
     discord_id  TEXT,
@@ -2317,6 +2328,36 @@ async def log_notification(
             (discord_id, raid_name, difficulty, message_id),
         )
         await db.commit()
+
+
+async def add_web_notification(discord_id: str, kind: str, message_id: str | None, text: str) -> int:
+    """웹 알림함용 개인 알림 1건 저장. 7일 지난 행은 같이 정리한다(웹앱이 이미 가져갔고,
+    웹 알림함 자체의 보관기간이 따로 있다)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "INSERT INTO web_notifications (discord_id, kind, message_id, text) VALUES (?, ?, ?, ?)",
+            (discord_id, kind, message_id, text),
+        )
+        await db.execute("DELETE FROM web_notifications WHERE created_at < datetime('now', '-7 days')")
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_latest_web_notification_id() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT COALESCE(MAX(id), 0) FROM web_notifications")
+        return (await cur.fetchone())[0]
+
+
+async def get_web_notifications_after(after_id: int, limit: int = 200) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT id, discord_id, kind, message_id, text, created_at FROM web_notifications "
+            "WHERE id > ? ORDER BY id ASC LIMIT ?",
+            (after_id, limit),
+        )
+        return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_notification_logs(limit: int = 100) -> list[dict]:
