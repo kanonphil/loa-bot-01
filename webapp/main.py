@@ -6,6 +6,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import PlainTextResponse, RedirectResponse
 from starlette.staticfiles import StaticFiles
@@ -85,6 +86,12 @@ app.add_middleware(
     max_age=config.SESSION_MAX_AGE_DAYS * 24 * 60 * 60,
     domain=config.SESSION_COOKIE_DOMAIN,
 )
+
+# 원본→Cloudflare 구간이 느려질 때(2026-09-21: 엣지→원본 왕복 1.3초+패킷 손실로 116KB
+# CSS가 60초 넘게 걸림) 전송량 자체를 줄이는 게 유일하게 앱 쪽에서 할 수 있는 완화다 —
+# HTML/CSS/JS는 gzip으로 5~10배 작아진다. SSE(text/event-stream)는 Starlette가 알아서
+# 제외하므로 실시간 알림에는 영향 없음.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
