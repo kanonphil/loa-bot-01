@@ -1,0 +1,37 @@
+{% import "_ui.html" as ui %}
+<div class="leader-panel" id="party-comments">
+  <h2 class="leader-panel-title">댓글</h2>
+  <p class="settings-desc">디스코드 스레드 채팅과 서로 연결돼 있습니다 — 여기 남긴 댓글은 디스코드에도 그대로 올라갑니다.</p>
+  {% if not comments %}
+  <p class="party-cannot-join">아직 댓글이 없습니다.</p>
+  {% else %}
+  <div class="party-comments-list">
+    {% for c in comments %}
+    <div class="party-comment">
+      <div class="party-comment-head">
+        <span class="party-comment-author">{{ c.author_name }}</span>
+        {% if c.source == "web" %}{{ ui.chip("웹", "accent") }}{% endif %}
+        <span class="party-comment-time">{{ c.created_at }}</span>
+        {% if c.source == "web" and c.discord_id == user.discord_id %}
+        <form method="post" action="/parties/{{ party.message_id }}/comments/{{ c.id }}/delete" class="party-comment-delete-form"
+              hx-post="/parties/{{ party.message_id }}/comments/{{ c.id }}/delete" hx-target="#party-comments" hx-swap="outerHTML"
+              hx-confirm="이 댓글을 삭제할까요? 디스코드에 올라간 글도 같이 지워집니다.">
+          <button type="submit" class="party-comment-delete-btn" title="삭제">삭제</button>
+        </form>
+        {% endif %}
+      </div>
+      <p class="party-comment-body">{{ c.content }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if party.status != "disbanded" %}
+  {# htmx로 댓글 구역만 갈아끼운다 — 페이지 전체를 다시 받으면 스크롤이 맨 위로 튀고 입력 흐름이 끊긴다 #}
+  <form method="post" action="/parties/{{ party.message_id }}/comments" class="party-comment-form"
+        hx-post="/parties/{{ party.message_id }}/comments" hx-target="#party-comments" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <textarea name="content" maxlength="500" placeholder="댓글을 입력하세요" required></textarea>
+    <button type="submit" class="leader-btn" data-busy-text="등록 중…">등록</button>
+  </form>
+  {% endif %}
+</div>

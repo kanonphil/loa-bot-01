@@ -74,6 +74,17 @@
 
   window.playNotifSound = playNotifSound;
 
+  // htmx 부분 갱신(레이드 체크 토글 등)은 페이지가 다시 그려지지 않아 .flash-data를
+  // 못 쓴다 — 서버가 X-Toast 헤더(percent-encoding)로 결과 문구를 실어 보내면 띄운다.
+  document.body.addEventListener("htmx:afterRequest", function (event) {
+    var xhr = event.detail && event.detail.xhr;
+    if (!xhr || !xhr.getResponseHeader) return;
+    var raw = xhr.getResponseHeader("X-Toast");
+    if (!raw) return;
+    var type = xhr.getResponseHeader("X-Toast-Type") || "success";
+    try { showToast(decodeURIComponent(raw), type); } catch (e) { showToast(raw, type); }
+  });
+
   document.addEventListener("DOMContentLoaded", function () {
     var flashes = document.querySelectorAll(".flash-data");
     flashes.forEach(function (el) {

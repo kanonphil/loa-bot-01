@@ -37,7 +37,12 @@
 {{ ui.empty("표시할 데이터가 없습니다", icon="📊") }}
 {% endif %}
 {% else %}
-<div class="rank-table" role="table">
+<label class="raid-search rank-search">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+  <input type="search" class="js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="랭킹 검색" autocomplete="off"
+         data-filter-target="#rank-table" data-filter-item="a.rank-row" data-filter-no-result="#rank-search-noresult">
+</label>
+<div class="rank-table" id="rank-table" role="table">
   <div class="rank-row rank-head" role="row">
     <span class="rank-col-rank">#</span>
     <span class="rank-col-name">{% if metric == "weekly_clears" %}대표 캐릭터{% else %}캐릭터{% endif %}</span>
@@ -58,6 +63,7 @@
   </a>
   {% endfor %}
 </div>
+<p class="raid-picker-noresult" id="rank-search-noresult" hidden>검색 결과가 없습니다.</p>
 {% endif %}
 </div>
 {% endblock %}

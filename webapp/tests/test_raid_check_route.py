@@ -403,7 +403,7 @@ def test_raid_select_save_calls_bot_and_redirects(client):
         )
 
     assert resp.status_code in (302, 303, 307)
-    assert resp.headers["location"] == "/raid-check"
+    assert resp.headers["location"] == "/raid-check?saved=1"  # 저장 토스트용
     assert save_route.called
 
 

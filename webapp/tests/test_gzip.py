@@ -12,6 +12,7 @@ def test_large_html_is_gzipped(client):
         log_in(client, discord_id="111")
         respx.get("http://bot-server.internal/api/internal/parties").mock(return_value=httpx.Response(200, json=[]))
         respx.get("http://bot-server.internal/api/internal/user-characters").mock(return_value=httpx.Response(200, json=[]))
+        respx.get("http://bot-server.internal/api/internal/raids").mock(return_value=httpx.Response(200, json={}))
         resp = client.get("/parties", headers={"Accept-Encoding": "gzip"})
     assert resp.status_code == 200
     assert resp.headers.get("content-encoding") == "gzip"

@@ -60,6 +60,7 @@
       <span class="ui-card-meta">{{ p.schedule.when }}</span>
       {% if p.schedule.countdown %}{{ ui.chip(p.schedule.countdown, p.schedule.tone) }}
       {% elif p.schedule.is_past %}{{ ui.chip("지난 일정", "past") }}{% endif %}
+      {% if p.period %}{{ ui.chip(p.period.label, p.period.tone) }}{% endif %}
       <span class="ui-spacer"></span>
       <span class="ui-card-meta">최소 {{ p.min_level }}</span>
     </div>

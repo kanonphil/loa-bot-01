@@ -42,6 +42,20 @@
       <span class="ui-spacer"></span>
       <span class="ui-card-meta">{{ e.scheduled_time or "일정 미정" }}</span>
     </div>
+    {% if e.memo %}<p class="party-card-memo">{{ e.memo }}</p>{% endif %}
+    {% if e.members %}
+    <details class="history-members">
+      <summary>함께한 멤버 {{ e.members | length }}{% if e.total_slots %}/{{ e.total_slots }}{% endif %}</summary>
+      <ul class="history-member-list">
+        {% for m in e.members %}
+        <li{% if m.discord_id == e.leader_id %} class="is-leader"{% endif %}>
+          <span class="history-member-name">{{ m.character_name }}</span>
+          <span class="ui-card-meta">{{ m.character_class }} &middot; {{ "서포터" if m.role == "support" else "딜러" }}{% if m.discord_id == e.leader_id %} &middot; 파티장{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
   {% endcall %}
   {% endfor %}
 </div>

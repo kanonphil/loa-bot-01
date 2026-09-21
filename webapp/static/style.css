@@ -5460,3 +5460,94 @@ a.ui-card:hover {
   /* 하단 탭에 본문 마지막 줄이 가리지 않게 */
   .main { padding-bottom: 68px; }
 }
+
+/* ── 공대 이력: 함께한 멤버 ─────────────────────────────── */
+.history-members { margin-top: var(--sp-2); }
+.history-members summary {
+  cursor: pointer;
+  font-size: var(--fs-label);
+  color: var(--text-muted);
+  user-select: none;
+}
+.history-members summary:hover { color: var(--text); }
+.history-member-list {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-1) var(--sp-3);
+}
+.history-member-list li { display: flex; flex-direction: column; gap: 1px; }
+.history-member-list li.is-leader .history-member-name { color: var(--accent); }
+.history-member-name { font-size: var(--fs-body); }
+
+/* ── 주차별 클리어 기록 ────────────────────────────────── */
+.history-week-form { display: flex; align-items: center; gap: var(--sp-2); }
+.history-clear-chips { flex-wrap: wrap; gap: var(--sp-1); }
+
+/* ── 원정대: 마지막 동기화 / 검색 ─────────────────────────── */
+.expedition-sync-form { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.expedition-sync-note { font-size: var(--fs-label); color: var(--text-muted); }
+.expedition-search { margin: var(--sp-3) 0 0; max-width: 360px; }
+.expedition-last-sync {
+  margin-left: var(--sp-2);
+  font-size: var(--fs-label);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* ── 랭킹 검색 ────────────────────────────────────────── */
+.rank-search { margin: 0 0 var(--sp-3); max-width: 360px; }
+
+/* ── 랜딩: 가이드 링크 ─────────────────────────────────── */
+.landing-guide { margin-top: var(--sp-4); font-size: var(--fs-label); }
+.landing-guide a {
+  display: inline;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  text-decoration: underline;
+  font-size: inherit;
+}
+.landing-guide a:hover { color: var(--text); background: none; }
+
+/* ── 이용 가이드 ──────────────────────────────────────── */
+.guide-page { max-width: 760px; }
+.guide-steps { list-style: none; margin: var(--sp-5) 0 0; padding: 0; display: grid; gap: var(--sp-4); }
+.guide-step {
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.guide-step-head { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.guide-step-head h2 { margin: 0; font-size: var(--fs-h3, 16px); }
+.guide-step-num {
+  flex: none;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: var(--fs-label);
+}
+.guide-step p { margin: 0 0 var(--sp-2); line-height: 1.7; color: var(--text); }
+.guide-step p:last-child { margin-bottom: 0; }
+.guide-step ul { margin: 0 0 var(--sp-2); padding-left: 1.2em; line-height: 1.7; }
+.guide-step a:not(.ui-btn) { color: var(--accent); text-decoration: underline; }
+.guide-step .ui-btn { margin-top: var(--sp-2); }
+.guide-warn {
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--warn, #d9a63a);
+  background: color-mix(in srgb, var(--warn, #d9a63a) 10%, transparent);
+  border-radius: 6px;
+}
+.guide-cmd { font-size: var(--fs-label); color: var(--text-muted); }
+.guide-cmd code { margin-right: 4px; }
+
+@media (max-width: 640px) {
+  .bottom-tabs a { font-size: 10px; }
+}

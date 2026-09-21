@@ -58,6 +58,7 @@ def test_party_list_renders_cards(client):
     with respx.mock:
         log_in(client)
         respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=[PARTY]))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         resp = client.get("/parties")
 
     assert resp.status_code == 200
@@ -71,6 +72,7 @@ def test_party_list_hides_search_box_when_empty(client):
     with respx.mock:
         log_in(client)
         respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=[]))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         resp = client.get("/parties")
 
     assert resp.status_code == 200
@@ -90,6 +92,7 @@ PARTY_CLOSED = {**PARTY, "message_id": "closed", "raid_name": "마감공대", "s
 
 def _mock_list(parties, characters=None):
     respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=parties))
+    respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
     respx.get(CHARACTERS_URL).mock(
         return_value=httpx.Response(200, json=characters if characters is not None else [])
     )

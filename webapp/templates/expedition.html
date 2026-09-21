@@ -79,12 +79,24 @@
 <form method="post" action="/expedition/sync" class="expedition-sync-form">
   {# 동기화는 캐릭터 수만큼 API를 도느라 오래 걸린다 — 눌린 티가 안 나면 계속 다시 누른다 #}
   <button type="submit" data-busy-text="동기화 중...">전체 동기화</button>
+  <span class="expedition-sync-note">아이템 레벨은 매일 04시에 자동으로 갱신됩니다.</span>
 </form>
 
+{% if characters|length > 5 %}
+<label class="raid-search expedition-search">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+  <input type="search" class="js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="캐릭터 검색" autocomplete="off"
+         data-filter-target="#expedition-groups" data-filter-item=".expedition-item" data-filter-text=".expedition-item-main"
+         data-filter-no-result="#expedition-search-noresult">
+</label>
+{% endif %}
+
+<div id="expedition-groups">
 {% for group in character_groups %}
 <div class="expedition-account-group">
-  {% if character_groups|length > 1 %}
-  <h2 class="expedition-account-title">{{ group.label }}</h2>
+  {% if character_groups|length > 1 or group.last_sync %}
+  <h2 class="expedition-account-title">{% if character_groups|length > 1 %}{{ group.label }}{% else %}내 캐릭터{% endif %}
+    {% if group.last_sync %}<span class="expedition-last-sync">마지막 동기화 {{ group.last_sync }}</span>{% endif %}</h2>
   {% endif %}
   <ul class="expedition-list">
     {% for c in group.characters %}
@@ -102,6 +114,8 @@
   </ul>
 </div>
 {% endfor %}
+</div>
+<p class="raid-picker-noresult" id="expedition-search-noresult" hidden>검색 결과가 없습니다.</p>
 {% endif %}
 </div>
 {% endblock %}

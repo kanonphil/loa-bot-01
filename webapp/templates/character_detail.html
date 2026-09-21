@@ -81,7 +81,7 @@
     <img src="{{ detail.character_image }}" alt="" class="armory-portrait">
     {% endif %}
     <h1 class="armory-name">{{ detail.character_name }}</h1>
-    <p class="armory-class">{{ detail.character_class }}{% if detail.ark_passive.title %} &middot; {{ detail.ark_passive.title }}{% endif %}</p>
+    <p class="armory-class">{{ detail.character_class }}{% if detail.ark_passive.title %} &middot; {{ detail.ark_passive.title }}{% endif %}{% if detail.server_name %} &middot; {{ detail.server_name }}{% endif %}</p>
     {% if detail.guild_name %}
     <p class="armory-guild">{{ detail.guild_name }}{% if detail.guild_member_grade %} &middot; {{ detail.guild_member_grade }}{% endif %}</p>
     {% endif %}

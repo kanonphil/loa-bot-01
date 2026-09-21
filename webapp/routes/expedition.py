@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
 from webapp.templating import templates
+from webapp.utils import time_ago
 
 router = APIRouter()
 
@@ -21,6 +22,10 @@ async def _page_context(discord_id: str) -> dict:
             seen_labels[label] = group
             groups.append(group)
         group["characters"].append(c)
+    for group in groups:
+        # 매일 04시 자동 동기화가 있다는 걸 모르면 "왜 레벨이 옛날 거냐"가 된다 — 최근 갱신 시각을 보여준다
+        latest = max((c.get("cached_at") or "" for c in group["characters"]), default="")
+        group["last_sync"] = time_ago(latest) if latest else ""
     # 캐릭터 카드 자체는 기존과 동일하게 평탄화된 목록으로도 노출 (기존 템플릿/테스트 호환)
     accounts = await bot_client.list_accounts(discord_id)
     return {"characters": characters, "character_groups": groups, "accounts": accounts}

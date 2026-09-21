@@ -130,3 +130,37 @@ def party_view(party: dict, now: datetime | None = None) -> dict:
         "status_tone": tone,
         "status_label": status_label,
     }
+
+
+def period_view(available_until: str | None, now: datetime | None = None) -> dict | None:
+    """익스트림 레이드처럼 운영 기간이 있는 레이드의 "종료까지" 표시. 기간이 없으면 None.
+    label — '운영 종료 D-3' / '오늘 종료' / '운영 종료됨', tone — 3일 안이면 warn, 지났으면 past."""
+    now = now or datetime.now(KST)
+    end = _parse(available_until)
+    if end is None:
+        return None
+    days = (end.date() - now.date()).days
+    if end < now:
+        return {"label": "운영 종료됨", "tone": "past", "days": days, "is_past": True}
+    if days <= 0:
+        return {"label": "오늘 운영 종료", "tone": "warn", "days": 0, "is_past": False}
+    return {"label": f"운영 종료 D-{days}", "tone": "warn" if days <= 3 else "", "days": days, "is_past": False}
+
+
+def invite_expiry_view(invited_at: str | None, ttl_minutes: int = 60, now: datetime | None = None) -> dict | None:
+    """초대는 봇이 invited_at(naive UTC, CURRENT_TIMESTAMP) 기준 1시간 뒤 자동 만료된다 —
+    받은 사람이 그 안에 답해야 한다는 걸 화면에서 알려주기 위한 카운트다운."""
+    if not invited_at:
+        return None
+    try:
+        sent = datetime.fromisoformat(invited_at)
+    except (TypeError, ValueError):
+        return None
+    if sent.tzinfo is None:
+        sent = sent.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    remaining = sent + timedelta(minutes=ttl_minutes) - now
+    minutes = int(remaining.total_seconds() // 60)
+    if minutes <= 0:
+        return {"label": "곧 만료", "tone": "warn", "minutes": 0}
+    return {"label": f"만료까지 {minutes}분", "tone": "warn" if minutes <= 15 else "", "minutes": minutes}

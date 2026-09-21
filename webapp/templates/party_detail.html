@@ -43,7 +43,7 @@
     {% if party.status == "recruiting" %}모집중{% elif party.status == "full" %}파티완성{% elif party.status == "closed" %}마감{% else %}종료{% endif %}
   </span>
 </div>
-<p class="party-meta">{{ party.scheduled_time }} &middot; 최소 {{ party.min_level }}{% if party.waitlist_count %} &middot; 빈자리 알림 대기 {{ party.waitlist_count }}명{% endif %}</p>
+<p class="party-meta">{{ party.scheduled_time }} &middot; 최소 {{ party.min_level }}{% if party.waitlist_count %} &middot; 빈자리 알림 대기 {{ party.waitlist_count }}명{% endif %}{% if period %} {{ ui.chip(period.label, period.tone) }}{% endif %}</p>
 {% if party.memo %}<p class="party-memo">{{ party.memo }}</p>{% endif %}
 
 {% if action_result and action_result.success and action_result.message %}
@@ -111,7 +111,7 @@
       {% endfor %}
     </select>
     {% endif %}
-    <button type="submit">참여하기</button>
+    <button type="submit" data-busy-text="참여 중…">참여하기</button>
   </form>
   <script>
     (function () {
@@ -361,38 +361,7 @@
 </script>
 {% endif %}
 
-<div class="leader-panel">
-  <h2 class="leader-panel-title">댓글</h2>
-  <p class="settings-desc">디스코드 스레드 채팅과 서로 연결돼 있습니다 — 여기 남긴 댓글은 디스코드에도 그대로 올라갑니다.</p>
-  {% if not comments %}
-  <p class="party-cannot-join">아직 댓글이 없습니다.</p>
-  {% else %}
-  <div class="party-comments-list">
-    {% for c in comments %}
-    <div class="party-comment">
-      <div class="party-comment-head">
-        <span class="party-comment-author">{{ c.author_name }}</span>
-        {% if c.source == "web" %}{{ ui.chip("웹", "accent") }}{% endif %}
-        <span class="party-comment-time">{{ c.created_at }}</span>
-        {% if c.source == "web" and c.discord_id == user.discord_id %}
-        <form method="post" action="/parties/{{ party.message_id }}/comments/{{ c.id }}/delete" class="party-comment-delete-form">
-          <button type="submit" class="party-comment-delete-btn" title="삭제">삭제</button>
-        </form>
-        {% endif %}
-      </div>
-      <p class="party-comment-body">{{ c.content }}</p>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if party.status != "disbanded" %}
-  <form method="post" action="/parties/{{ party.message_id }}/comments" class="party-comment-form">
-    <textarea name="content" maxlength="500" placeholder="댓글을 입력하세요" required></textarea>
-    <button type="submit" class="leader-btn">등록</button>
-  </form>
-  {% endif %}
-</div>
+{% include "_party_comments.html" %}
 
 <div class="party-member-popover" id="party-member-popover"></div>
 <script src="/static/party-member-card.js?v={{ static_version }}"></script>

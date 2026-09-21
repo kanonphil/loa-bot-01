@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Form, Request
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
-from webapp.format import schedule_view
+from webapp.format import invite_expiry_view, schedule_view
 from webapp.templating import templates
 
 router = APIRouter()
@@ -21,6 +21,7 @@ async def _build_invite_views(discord_id: str) -> list[dict]:
         views.append({
             **inv,
             "schedule": schedule_view(inv.get("scheduled_datetime"), inv.get("scheduled_time")),
+            "expiry": invite_expiry_view(inv.get("invited_at")),
             "qualifying": qualifying,
             "character_is_support": {q["name"]: q["class"] in support_classes for q in qualifying},
             "can_accept": bool(qualifying) and (eligibility or {}).get("can_join", False),

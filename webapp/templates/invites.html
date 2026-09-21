@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-content">
 <h1>내게 온 초대</h1>
-<p class="settings-desc">파티장이 특정 슬롯에 초대한 공대 목록입니다. 게스트(미등록 유저) 초대는 아직 디스코드에서만 응답할 수 있습니다.</p>
+<p class="settings-desc">파티장이 특정 슬롯에 초대한 공대 목록입니다. 초대는 보낸 지 1시간이 지나면 자동으로 만료됩니다. 게스트(API 미등록 유저)로 받은 초대는 디스코드 DM에서 응답합니다.</p>
 
 {% if action_result and not action_result.success %}
 <div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
@@ -14,7 +14,15 @@
 {% if not invites %}
 {{ ui.empty("받은 초대가 없습니다", "파티장이 초대하면 여기에 나타납니다.", "공대 목록 보기", "/parties", "📬") }}
 {% else %}
-<div class="ui-list">
+{% call ui.toolbar() %}
+  <label class="raid-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input type="search" class="js-list-filter" placeholder="레이드명으로 검색" aria-label="초대 검색" autocomplete="off"
+           data-filter-target="#invite-list" data-filter-item=".ui-card" data-filter-text=".ui-card-title"
+           data-filter-no-result="#invite-search-noresult">
+  </label>
+{% endcall %}
+<div class="ui-list" id="invite-list">
   {% for inv in invites %}
   {% call ui.card() %}
     <div class="ui-row">
@@ -26,6 +34,8 @@
     <div class="ui-row">
       <span class="ui-card-meta">{{ inv.schedule.when }}</span>
       {% if inv.schedule.countdown %}{{ ui.chip(inv.schedule.countdown, inv.schedule.tone) }}{% endif %}
+      <span class="ui-spacer"></span>
+      {% if inv.expiry %}{{ ui.chip(inv.expiry.label, inv.expiry.tone) }}{% endif %}
     </div>
 
     {% if inv.qualifying %}
@@ -39,7 +49,7 @@
         <option value="dps">딜러</option>
         <option value="support">서포터</option>
       </select>
-      <button type="submit">수락</button>
+      <button type="submit" data-busy-text="수락 중…">수락</button>
     </form>
     <script>
       (function () {
@@ -70,6 +80,7 @@
   {% endcall %}
   {% endfor %}
 </div>
+<p class="raid-picker-noresult" id="invite-search-noresult" hidden>검색 결과가 없습니다.</p>
 {% endif %}
 </div>
 {% endblock %}

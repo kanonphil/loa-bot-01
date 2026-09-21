@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content guide-page">
+<h1>이용 가이드</h1>
+<p class="settings-desc">디스코드 <code>/가이드</code>와 같은 내용을 웹 기준으로 정리했습니다. 처음이라면 위에서부터 순서대로 따라오면 됩니다.</p>
+
+<ol class="guide-steps">
+  <li class="guide-step">
+    <div class="guide-step-head"><span class="guide-step-num">1</span><h2>API 키 발급 · 등록</h2></div>
+    <p><a href="https://developer-lostark.game.onstove.com" target="_blank" rel="noopener">로스트아크 개발자 사이트</a>에서 로그인 → <b>내 정보</b> → <b>API Key 관리</b> → <b>생성하기</b>로 키를 발급받습니다.</p>
+    <p class="guide-warn">브라우저 자동 번역을 꼭 끄세요. 번역이 켜져 있으면 키가 한글로 바뀌어 등록에 실패합니다. 주소창 옆 번역 아이콘 → <b>영어 원문 표시</b> 후 새로고침.</p>
+    <p>디스코드에서 <code>/api등록</code>에 발급받은 키와 본인 캐릭터 이름 하나를 넣으면 등록이 끝나고, 그때부터 이 웹에 디스코드 계정으로 로그인할 수 있습니다.</p>
+    {% if not user %}<a class="ui-btn" href="/login">디스코드로 로그인</a>{% endif %}
+  </li>
+
+  <li class="guide-step">
+    <div class="guide-step-head"><span class="guide-step-num">2</span><h2>원정대 캐릭터 정리</h2></div>
+    <p><a href="/expedition">원정대 관리</a>에서 등록된 캐릭터와 아이템 레벨을 확인합니다. 빠진 캐릭터는 이름으로 추가하고, 다른 로스트아크 계정이 있으면 <b>부계정 추가</b>에 그 계정의 API 키를 넣으면 원정대가 통째로 들어옵니다.</p>
+    <p>아이템 레벨은 매일 04시에 자동으로 갱신되고, <b>전체 동기화</b>를 누르면 바로 갱신됩니다. 공대 참여 때 여기 등록된 캐릭터 중에서 고르게 됩니다.</p>
+    <p class="guide-cmd">디스코드: <code>/원정대</code> <code>/캐릭터등록</code> <code>/캐릭터삭제</code></p>
+  </li>
+
+  <li class="guide-step">
+    <div class="guide-step-head"><span class="guide-step-num">3</span><h2>공대 모집하기</h2></div>
+    <p><a href="/parties/create">공대 개설</a>에서 레이드 → 난이도 → 숙련도(숙련/반숙/트라이) → 일정 → 메모 순으로 고르면 디스코드 공대 포럼에 모집글이 자동으로 올라갑니다.</p>
+    <p>개설한 뒤에는 공대 상세 페이지의 <b>파티장 관리</b>에서 초대·강제 퇴장·파티장 위임·일정 변경·난이도 변경을 할 수 있고, API를 등록하지 않은 서버 멤버도 <b>게스트 초대</b>로 부를 수 있습니다.</p>
+    <p class="guide-cmd">디스코드: <code>/공대모집</code>, 게시물의 <b>[관리]</b> 버튼</p>
+  </li>
+
+  <li class="guide-step">
+    <div class="guide-step-head"><span class="guide-step-num">4</span><h2>공대 참여하기</h2></div>
+    <p><a href="/parties">공대 모집</a> 목록에서 <b>입장 가능</b> 필터로 내 캐릭터 레벨에 맞고 자리가 남은 공대만 볼 수 있습니다. 공대를 열고 캐릭터와 역할(딜러/서포터)을 고르면 참여 완료.</p>
+    <p>자리가 없으면 <b>빈자리 알림</b>을 켜두세요. 누가 나가면 알려줍니다. 파티장이 특정 슬롯으로 초대하면 <a href="/invites">내게 온 초대</a>에서 수락하거나 거절할 수 있습니다.</p>
+    <p class="guide-cmd">디스코드: <code>/공대확인</code> <code>/내공대</code>, 스레드의 <b>[참여하기]</b> 버튼</p>
+  </li>
+
+  <li class="guide-step">
+    <div class="guide-step-head"><span class="guide-step-num">5</span><h2>알림 설정</h2></div>
+    <p><a href="/settings">알림 설정</a>에서 세 가지를 따로 정할 수 있습니다.</p>
+    <ul>
+      <li><b>웹 알림</b> — 공대 모집 시작·클리어·게스트 합류 소식이 화면 토스트와 종 아이콘에 쌓입니다. 레이드 필터로 관심 레이드만 골라 받을 수 있어요.</li>
+      <li><b>디스코드 DM 구독</b> — 구독한 레이드의 새 공대가 열리면 디스코드 DM으로 알려줍니다. (<code>/레이드구독</code>과 같은 설정)</li>
+      <li><b>사전 알림</b> — 참여 중인 공대 시작 N시간 전에 미리 알려줍니다.</li>
+    </ul>
+    <p>초대·강제 퇴장·일정 변경처럼 나한테 온 소식은 구독과 상관없이 종 아이콘에 남습니다.</p>
+  </li>
+
+  <li class="guide-step">
+    <div class="guide-step-head"><span class="guide-step-num">6</span><h2>주간 레이드 체크</h2></div>
+    <p><a href="/raid-check">레이드 체크</a>에서 캐릭터별로 이번 주 클리어를 누르고 해제할 수 있습니다. 공대가 클리어 처리되면 자동으로 체크되고, 캐릭터마다 <b>레이드 선택</b>으로 카드에 보일 레이드를 고를 수 있어요.</p>
+    <p>매주 <b>수요일 06:00</b>에 초기화되며, 지난 주차 기록은 <a href="/raid-check/history">주차별 클리어 기록</a>에서 볼 수 있습니다.</p>
+    <p class="guide-cmd">디스코드: <code>/레이드체크</code></p>
+  </li>
+</ol>
+</div>
+{% endblock %}

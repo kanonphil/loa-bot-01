@@ -9,7 +9,7 @@ from starlette.responses import RedirectResponse
 from webapp import config
 from webapp.auth.dependencies import get_current_user, require_admin
 from webapp.clients import bot_client
-from webapp.format import party_view
+from webapp.format import party_view, period_view
 from webapp.raids import picker_groups
 from webapp.templating import templates
 
@@ -69,9 +69,10 @@ async def party_list(
 ):
     if filter not in dict(PARTY_FILTERS):
         filter = "all"
-    parties, characters = await asyncio.gather(
+    parties, characters, raids = await asyncio.gather(
         bot_client.list_parties(config.DISCORD_GUILD_ID),
         bot_client.get_user_characters(user["discord_id"]),
+        bot_client.get_raids(),
     )
     max_level = _max_item_level(characters)
     discord_id = user["discord_id"]
@@ -80,7 +81,10 @@ async def party_list(
         key: len(filter_parties(parties, key, discord_id, max_level))
         for key, _ in PARTY_FILTERS
     }
-    visible = [party_view(p) for p in filter_parties(parties, filter, discord_id, max_level)]
+    visible = [
+        {**party_view(p), "period": _party_period(p, raids)}
+        for p in filter_parties(parties, filter, discord_id, max_level)
+    ]
     # 가까운 일정부터 — 일정이 없는 공대는 뒤로.
     visible.sort(key=lambda p: (p.get("scheduled_datetime") is None, p.get("scheduled_datetime") or ""))
 
@@ -100,6 +104,14 @@ async def party_list(
 
 
 _HISTORY_PAGE_SIZE = 10
+
+
+def _party_period(party: dict, raids: dict) -> dict | None:
+    """익스트림처럼 운영 기간이 있는 레이드면 '운영 종료 D-n' 표시 정보, 아니면 None."""
+    info = raids.get(party.get("raid_name")) or {}
+    if not info.get("available_until"):
+        return None
+    return period_view(info["available_until"])
 
 
 @router.get("/parties/history")
@@ -254,6 +266,7 @@ async def _detail_context(
 
     raids = await bot_client.get_raids()
     raid_info = raids.get(party["raid_name"], {})
+    period = period_view(raid_info["available_until"]) if raid_info.get("available_until") else None
     diff_info = (raid_info.get("difficulties") or {}).get(party["difficulty"], {})
     party_split = diff_info.get("party_split")
     is_split = bool(party_split and party["total_slots"] > party_split)
@@ -322,6 +335,7 @@ async def _detail_context(
         "all_slots": all_slots,
         "difficulty_options": difficulty_options,
         "proficiency_options": proficiency_options,
+        "period": period,
     }
 
 
@@ -445,7 +459,25 @@ async def post_comment(
     result = await bot_client.post_party_comment(
         message_id, discord_id, user["username"], avatar_url, content.strip()
     )
+    if request.headers.get("HX-Request"):
+        return await _comments_partial(request, message_id, user, result, "댓글을 남기지 못했습니다.")
     return _redirect_with_result(message_id, result, "댓글을 남기지 못했습니다.")
+
+
+async def _comments_partial(request: Request, message_id: str, user: dict, result: dict, fallback: str):
+    """댓글 등록/삭제를 htmx로 했을 때 — 페이지 전체 대신 댓글 구역만 다시 그린다.
+    실패 사유는 X-Toast 헤더로(toast.js가 띄운다)."""
+    party, comments = await asyncio.gather(
+        bot_client.get_party(message_id), bot_client.get_party_comments(message_id)
+    )
+    headers = {}
+    if not result.get("success"):
+        headers = {"X-Toast": quote(result.get("reason") or fallback), "X-Toast-Type": "error"}
+    return templates.TemplateResponse(
+        request, "_party_comments.html",
+        {"user": user, "party": party or {"message_id": message_id, "status": "disbanded"}, "comments": comments},
+        headers=headers,
+    )
 
 
 @router.post("/parties/{message_id}/comments/{comment_id}/delete")
@@ -456,6 +488,8 @@ async def delete_comment(
     user: dict = Depends(get_current_user),
 ):
     result = await bot_client.delete_party_comment(message_id, comment_id, user["discord_id"])
+    if request.headers.get("HX-Request"):
+        return await _comments_partial(request, message_id, user, result, "댓글을 삭제하지 못했습니다.")
     return _redirect_with_result(message_id, result, "댓글을 삭제하지 못했습니다.")
 
 

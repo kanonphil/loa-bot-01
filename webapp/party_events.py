@@ -37,7 +37,8 @@ def _fingerprint(parties: list[dict]) -> str:
         )
         parts.append(
             f"{p['message_id']}:{p['status']}:{p.get('scheduled_datetime')}:{p.get('total_slots')}:"
-            f"{p.get('difficulty')}:{p.get('proficiency')}:{p.get('leader_id')}:{p.get('memo')}:{slots}"
+            f"{p.get('difficulty')}:{p.get('proficiency')}:{p.get('leader_id')}:{p.get('memo')}:"
+            f"{p.get('comment_count')}:{slots}"
         )
     return hashlib.sha1("|".join(parts).encode()).hexdigest()
 

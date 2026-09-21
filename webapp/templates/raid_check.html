@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-content raid-check-page">
-<h1>레이드 체크</h1>
+<div class="party-list-header">
+  <h1>레이드 체크</h1>
+  <div class="party-list-header-actions">
+    <a href="/raid-check/history" class="party-switch-btn">주차별 기록</a>
+  </div>
+</div>
+{% if saved %}
+<div class="flash-data" hidden data-type="success" data-message="레이드 선택을 저장했습니다."></div>
+{% endif %}
 
 {% if not characters %}
 <p>등록된 캐릭터가 없습니다. 디스코드에서 <code>/api등록</code>으로 캐릭터를 먼저 등록해주세요.</p>

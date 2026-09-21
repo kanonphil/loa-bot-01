@@ -41,6 +41,7 @@ def test_non_admin_does_not_see_admin_nav(client, monkeypatch):
         log_in(client, discord_id="111")
         respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(USER_CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         resp = client.get("/parties")
     assert "레이드 관리" not in resp.text
     assert "직업 관리" not in resp.text
@@ -52,6 +53,7 @@ def test_admin_sees_nav_and_page(client, monkeypatch):
         log_in(client, discord_id="111")
         respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=[]))
         respx.get(USER_CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
         nav_resp = client.get("/parties")
         _mock_reads()
         page_resp = client.get("/admin/raids")

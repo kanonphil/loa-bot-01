@@ -8,6 +8,9 @@
 입장 가능한 레이드 전체를 보여준다."""
 import asyncio
 
+from datetime import datetime, timedelta
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from starlette.responses import RedirectResponse
 
@@ -88,11 +91,47 @@ async def _page_context(discord_id: str, account: str | None) -> dict:
 
 @router.get("/raid-check")
 async def raid_check_page(
-    request: Request, account: str | None = None, user: dict = Depends(get_current_user)
+    request: Request, account: str | None = None, saved: int | None = None,
+    user: dict = Depends(get_current_user),
 ):
     ctx = await _page_context(user["discord_id"], account)
     return templates.TemplateResponse(
-        request, "raid_check.html", {"user": user, "active": "raid_check", **ctx}
+        request, "raid_check.html", {"user": user, "active": "raid_check", "saved": saved, **ctx}
+    )
+
+
+def _week_label(week_key: str) -> str:
+    """'2026-05-06' → '5/6(수) ~ 5/12(화)' — 주차 키는 수요일 06:00 리셋 기준 시작일."""
+    try:
+        start = datetime.strptime(week_key, "%Y-%m-%d")
+    except ValueError:
+        return week_key
+    end = start + timedelta(days=6)
+    days = ["월", "화", "수", "목", "금", "토", "일"]
+    return f"{start.month}/{start.day}({days[start.weekday()]}) ~ {end.month}/{end.day}({days[end.weekday()]})"
+
+
+@router.get("/raid-check/history")
+async def raid_check_history(
+    request: Request, week: str | None = None, user: dict = Depends(get_current_user)
+):
+    """지난 주차 클리어 기록 — raid_completions는 주차별로 다 쌓이는데 웹은 이번 주만 보여줬다."""
+    weeks_info = await bot_client.get_completion_weeks(user["discord_id"])
+    weeks = weeks_info["weeks"]
+    selected = week if week in weeks else weeks_info["current_week"]
+    data = await bot_client.get_week_completions(user["discord_id"], selected)
+    return templates.TemplateResponse(
+        request,
+        "raid_check_history.html",
+        {
+            "user": user,
+            "active": "raid_check",
+            "weeks": [{"key": w, "label": _week_label(w), "is_current": w == weeks_info["current_week"]} for w in weeks],
+            "selected_week": selected,
+            "selected_label": _week_label(selected),
+            "is_current": selected == weeks_info["current_week"],
+            "characters": data["characters"],
+        },
     )
 
 
@@ -112,14 +151,18 @@ async def toggle_raid_check(
             status_code=status.HTTP_403_FORBIDDEN, detail="본인 캐릭터만 체크할 수 있습니다."
         )
 
-    await bot_client.toggle_completion(user["discord_id"], character_name, raid_name, difficulty)
+    completed = await bot_client.toggle_completion(user["discord_id"], character_name, raid_name, difficulty)
 
     raids, categories = await asyncio.gather(
         bot_client.get_raids(), bot_client.get_raid_categories()
     )
     card = await _character_card(user["discord_id"], character, raids, categories)
+    short = (raids.get(raid_name) or {}).get("short_name") or raid_name
+    toast = f"{character_name} · {short} {difficulty} {'완료 체크' if completed else '체크 해제'}"
+    # htmx 부분 갱신이라 flash-data를 못 쓴다 — 헤더는 latin-1이어야 해서 percent-encoding으로 싣는다
     return templates.TemplateResponse(
-        request, "_raid_card.html", {"card": card, "card_index": card_index}
+        request, "_raid_card.html", {"card": card, "card_index": card_index},
+        headers={"X-Toast": quote(toast), "X-Toast-Type": "success" if completed else "info"},
     )
 
 
@@ -172,4 +215,4 @@ async def raid_select_save(
         )
 
     await bot_client.set_raid_selection(user["discord_id"], character_name, raid_names)
-    return RedirectResponse("/raid-check", status_code=303)
+    return RedirectResponse("/raid-check?saved=1", status_code=303)

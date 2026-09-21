@@ -45,6 +45,10 @@ PAGES = [
     "/calendar?view=week",
     "/settings",
     "/tools/auction-calculator",
+    "/guide",
+    "/raid-check/history",
+    "/invites",
+    "/parties/history",
 ]
 
 
@@ -69,6 +73,10 @@ def _mock_everything():
     respx.get(f"{B}/accounts/list").mock(return_value=httpx.Response(200, json=[]))
     respx.get(f"{B}/support-classes").mock(return_value=httpx.Response(200, json=["바드"]))
     respx.get(f"{B}/subscriptions").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(f"{B}/completions/weeks").mock(return_value=httpx.Response(200, json={"current_week": "2026-01-07", "weeks": ["2026-01-07"]}))
+    respx.get(f"{B}/completions/week").mock(return_value=httpx.Response(200, json={"week_key": "2026-01-07", "characters": []}))
+    respx.get(f"{B}/my-invites").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(f"{B}/user-party-history").mock(return_value=httpx.Response(200, json={"entries": [], "has_more": False, "total_count": 0}))
     respx.get(f"{B}/preferences").mock(return_value=httpx.Response(200, json={"pre_notify_hours": 0.0, "choices": [0.0, 1.0]}))
     respx.get(f"{B}/ranking").mock(
         return_value=httpx.Response(200, json={"metric": "combat_power", "role": "dps", "entries": []})

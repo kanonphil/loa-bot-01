@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<a href="/raid-check" class="party-back-link">&larr; 레이드 체크로</a>
+<div class="party-list-header">
+  <h1>주차별 클리어 기록</h1>
+</div>
+<p class="settings-desc">매주 수요일 06:00 초기화 기준으로 캐릭터별 클리어 기록을 주차마다 남겨둡니다. 이번 주 기록은 레이드 체크에서 바로 바꿀 수 있어요.</p>
+
+{% call ui.toolbar() %}
+  <form method="get" action="/raid-check/history" class="history-week-form">
+    <select name="week" class="settings-select js-themed-select" aria-label="주차 선택" onchange="this.form.submit()">
+      {% for w in weeks %}
+      <option value="{{ w.key }}" {% if w.key == selected_week %}selected{% endif %}>{{ w.label }}{% if w.is_current %} (이번 주){% endif %}</option>
+      {% endfor %}
+    </select>
+    <noscript><button type="submit" class="ui-btn is-ghost">보기</button></noscript>
+  </form>
+{% endcall %}
+
+{% if not characters %}
+{% if is_current %}
+{{ ui.empty("이번 주 기록이 아직 없습니다", "레이드 체크에서 완료를 누르면 여기에 남습니다.", "레이드 체크", "/raid-check", "🗓️") }}
+{% else %}
+{{ ui.empty(selected_label ~ " 주차에 남긴 기록이 없습니다", icon="🗓️") }}
+{% endif %}
+{% else %}
+<div class="ui-list" id="week-history-list">
+  {% for c in characters %}
+  {% call ui.card() %}
+    <div class="ui-row">
+      <span class="ui-card-title">{{ c.character_name }}</span>
+      {% if c.character_class %}{{ ui.chip(c.character_class) }}{% endif %}
+      <span class="ui-spacer"></span>
+      <span class="ui-card-meta">{{ c.completions | length }}개 클리어</span>
+    </div>
+    <div class="ui-row history-clear-chips">
+      {% for done in c.completions %}
+      {{ ui.chip(done.raid_name ~ " " ~ done.difficulty, "ok") }}
+      {% endfor %}
+    </div>
+  {% endcall %}
+  {% endfor %}
+</div>
+{% endif %}
+</div>
+{% endblock %}
