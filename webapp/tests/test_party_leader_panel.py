@@ -319,3 +319,60 @@ def test_visiting_unknown_party_shows_not_found_not_cancelled_message(client):
     assert resp.status_code == 200
     assert "공대를 찾을 수 없습니다" in resp.text
     assert "취소되었습니다" not in resp.text
+
+
+# ── 게스트 초대(API 미등록 서버 멤버) ─────────────────────────
+
+GUEST_CANDIDATES_URL = "http://bot-server.internal/api/internal/parties/p1/guest-candidates"
+
+
+def test_leader_sees_guest_invite_button(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
+        resp = client.get("/parties/p1")
+
+    assert 'hx-get="/parties/p1/guest-invite"' in resp.text
+
+
+def test_guest_invite_partial_lists_candidates(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        route = respx.get(GUEST_CANDIDATES_URL).mock(return_value=httpx.Response(
+            200, json={"success": True, "members": [{"discord_id": "555", "display_name": "게스트후보"}], "available_slots": [2, 3]}
+        ))
+        resp = client.get("/parties/p1/guest-invite")
+
+    assert resp.status_code == 200
+    assert "게스트후보" in resp.text
+    assert 'action="/parties/p1/invite-guest"' in resp.text
+    assert "3번 슬롯" in resp.text
+    assert route.calls[0].request.url.params["guild_id"] == "test-guild-id"
+
+
+def test_guest_invite_partial_explains_when_nobody_to_invite(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(GUEST_CANDIDATES_URL).mock(return_value=httpx.Response(200, json={"success": True, "members": [], "available_slots": [2]}))
+        resp = client.get("/parties/p1/guest-invite")
+
+    assert "초대할 수 있는 미등록 서버 멤버가 없습니다" in resp.text
+    assert "invite-guest" not in resp.text
+
+
+def test_guest_invite_submit_uses_same_invite_endpoint(client):
+    INVITE_URL = "http://bot-server.internal/api/internal/parties/p1/invite"
+    with respx.mock:
+        log_in(client, discord_id="111")
+        invite_route = respx.post(INVITE_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/parties/p1/invite-guest", data={"target_discord_id": "555", "slot_number": "2"})
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
+    import json as _json
+    assert _json.loads(invite_route.calls[0].request.content) == {"discord_id": "111", "target_discord_id": "555", "slot_number": 2}

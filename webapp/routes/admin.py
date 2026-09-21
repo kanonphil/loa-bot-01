@@ -309,13 +309,15 @@ def _closed_status_view(entry: dict) -> dict:
 
 @router.get("/admin/parties")
 async def admin_parties_page(
-    request: Request, tab: str = "open", user: dict = Depends(require_admin),
+    request: Request, tab: str = "open", forum_saved: int | None = None,
+    forum_error: str | None = None, user: dict = Depends(require_admin),
 ):
     if tab not in ("open", "closed"):
         tab = "open"
-    result, bot_status = await asyncio.gather(
+    result, bot_status, forum = await asyncio.gather(
         bot_client.admin_list_parties(config.DISCORD_GUILD_ID, user["discord_id"]),
         bot_client.admin_status(user["discord_id"]),
+        bot_client.admin_get_forum_channel(user["discord_id"], config.DISCORD_GUILD_ID),
     )
     now = datetime.now(KST)
     open_parties = [{**party_view(p), "is_problem": _is_problem_party(p, now)} for p in result["open"]]
@@ -340,8 +342,23 @@ async def admin_parties_page(
             "closed_parties": closed_parties,
             "counts": counts,
             "bot_status": bot_status,
+            "forum": forum,
+            "forum_saved": forum_saved,
+            "forum_error": forum_error,
         },
     )
+
+
+@router.post("/admin/forum-channel")
+async def admin_set_forum_channel(
+    channel_id: str = Form(...), user: dict = Depends(require_admin),
+):
+    """디스코드 /공대채널설정의 웹판 — 이게 없으면 웹 공대 개설이 "포럼 채널 미설정"으로 막혀
+    관리자가 디스코드로 가야 했다."""
+    result = await bot_client.admin_set_forum_channel(user["discord_id"], config.DISCORD_GUILD_ID, channel_id)
+    if not result.get("success"):
+        return RedirectResponse(f"/admin/parties?forum_error={quote(result.get('reason') or '저장하지 못했습니다.')}", status_code=303)
+    return RedirectResponse("/admin/parties?forum_saved=1", status_code=303)
 
 
 def _is_problem_party(party: dict, now: datetime) -> bool:

@@ -22,6 +22,32 @@
 </div>
 {% endif %}
 
+{% if forum_saved %}
+<div class="flash-data" hidden data-type="success" data-message="공대 모집 포럼 채널을 저장했습니다."></div>
+{% elif forum_error %}
+<div class="flash-data" hidden data-type="error" data-message="{{ forum_error }}"></div>
+{% endif %}
+
+<div class="settings-card admin-forum-card">
+  <h2 class="leader-panel-title">공대 모집 포럼 채널</h2>
+  <p class="settings-desc">
+    웹·디스코드에서 개설한 공대 모집글이 올라가는 포럼 채널입니다(디스코드 <code>/공대채널설정</code>과 같은 설정).
+    {% if forum.forum_channel_id %}현재: <b>#{{ forum.forum_channel_name or forum.forum_channel_id }}</b>{% else %}<b>아직 설정되지 않아 공대 개설이 막혀 있습니다.</b>{% endif %}
+  </p>
+  {% if forum.channels %}
+  <form method="post" action="/admin/forum-channel" class="settings-filter-add">
+    <select name="channel_id" class="settings-select js-themed-select" aria-label="포럼 채널">
+      {% for ch in forum.channels %}
+      <option value="{{ ch.id }}" {% if ch.id == forum.forum_channel_id %}selected{% endif %}># {{ ch.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="settings-toggle-btn">저장</button>
+  </form>
+  {% else %}
+  <p class="settings-desc">봇이 볼 수 있는 포럼 채널이 없습니다. 디스코드에서 포럼 채널을 만들고 봇에게 보기 권한을 주세요.</p>
+  {% endif %}
+</div>
+
 {% if tab == "open" %}
 <div class="admin-stat-grid">
   {{ ui.stat(counts.recruiting, "모집중") }}

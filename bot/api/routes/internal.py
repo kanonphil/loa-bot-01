@@ -1363,3 +1363,168 @@ async def admin_status(discord_id: str):
 
   _admin_or_403(discord_id)
   return await collect_status()
+
+
+# ── 디스코드 DM 레이드 구독(/레이드구독)을 웹 설정에서도 관리 ──────────────
+
+class SubscriptionBody(BaseModel):
+  discord_id: str
+  raid_name: str
+  difficulty: str  # 실제 난이도명 또는 "전체"(모든 난이도)
+
+
+def _validate_subscription(raid_name: str, difficulty: str) -> str | None:
+  from bot.data.raids import RAIDS
+
+  info = RAIDS.get(raid_name)
+  if not info:
+    return "존재하지 않는 레이드입니다."
+  if difficulty != "전체" and difficulty not in (info.get("difficulties") or {}):
+    return "존재하지 않는 난이도입니다."
+  return None
+
+
+@router.get("/subscriptions")
+async def my_subscriptions(discord_id: str):
+  return await db.get_user_subscriptions(discord_id)
+
+
+@router.post("/subscriptions")
+async def add_subscription(body: SubscriptionBody):
+  err = _validate_subscription(body.raid_name, body.difficulty)
+  if err:
+    return {"success": False, "reason": err}
+  added = await db.subscribe_raid(body.discord_id, body.raid_name, body.difficulty)
+  if not added:
+    return {"success": False, "reason": "이미 구독 중입니다."}
+  return {"success": True}
+
+
+@router.post("/subscriptions/remove")
+async def remove_subscription(body: SubscriptionBody):
+  removed = await db.unsubscribe_raid(body.discord_id, body.raid_name, body.difficulty)
+  if not removed:
+    return {"success": False, "reason": "구독 중이 아닙니다."}
+  return {"success": True}
+
+
+# ── 사전 알림(N시간 전) 설정 ──────────────────────────────────────
+
+class PreNotifyBody(BaseModel):
+  discord_id: str
+  pre_notify_hours: float
+
+
+@router.get("/preferences")
+async def my_preferences(discord_id: str):
+  return {
+    "pre_notify_hours": await db.get_pre_notify_hours(discord_id),
+    "choices": list(db.PRE_NOTIFY_HOURS_CHOICES),
+  }
+
+
+@router.post("/preferences")
+async def set_preferences(body: PreNotifyBody):
+  if body.pre_notify_hours not in db.PRE_NOTIFY_HOURS_CHOICES:
+    return {"success": False, "reason": "지원하지 않는 시간입니다."}
+  await db.set_pre_notify_hours(body.discord_id, body.pre_notify_hours)
+  return {"success": True, "pre_notify_hours": body.pre_notify_hours}
+
+
+# ── 게스트 초대용 서버 멤버 목록 ───────────────────────────────────
+
+@router.get("/parties/{message_id}/guest-candidates")
+async def guest_candidates(message_id: str, discord_id: str, guild_id: str):
+  """리더/관리자에게 보여줄 게스트(API 미등록) 초대 후보 — 디스코드 서버 멤버 중
+  봇이 아니고, /api등록을 안 했고, 이 파티에 아직 없는 사람. 디스코드의
+  GuestUserSelectView(유저 피커)에 해당하는 웹 UI의 데이터."""
+  from bot.api import bot_ref
+  from bot.ui.views import _require_leader_or_admin
+
+  party = await db.get_party(message_id)
+  err = _require_leader_or_admin(party, discord_id)
+  if err:
+    return {"success": False, "reason": err}
+
+  bot = bot_ref.get_bot()
+  guild = bot.get_guild(int(guild_id)) if bot else None
+  if guild is None:
+    return {"success": False, "reason": "봇이 아직 준비되지 않았습니다."}
+
+  slots = await db.get_party_slots(message_id)
+  reserved = await db.get_reserved_slots(message_id)
+  in_party_ids = {s["discord_id"] for s in slots} | set(reserved.values()) | {party["leader_id"]}
+  registered = set(await db.get_all_user_ids())
+  members = [
+    {"discord_id": str(m.id), "display_name": m.display_name}
+    for m in guild.members
+    if not m.bot and str(m.id) not in registered and str(m.id) not in in_party_ids
+  ]
+  members.sort(key=lambda m: m["display_name"].lower())
+  occupied = {s["slot_number"] for s in slots} | set(reserved.keys())
+  available_slots = [n for n in range(1, party["total_slots"] + 1) if n not in occupied]
+  return {"success": True, "members": members, "available_slots": available_slots}
+
+
+# ── 공대 포럼 채널 설정(/공대채널설정) 웹 관리자 폼 ─────────────────────
+
+@router.get("/admin/forum-channel")
+async def admin_forum_channel(discord_id: str, guild_id: str):
+  import discord as _discord
+  from bot.api import bot_ref
+
+  _admin_or_403(discord_id)
+  current = await db.get_forum_channel_id(guild_id)
+  bot = bot_ref.get_bot()
+  guild = bot.get_guild(int(guild_id)) if bot else None
+  channels = []
+  if guild is not None:
+    channels = [
+      {"id": str(ch.id), "name": ch.name}
+      for ch in guild.channels
+      if isinstance(ch, _discord.ForumChannel)
+    ]
+  current_name = next((c["name"] for c in channels if c["id"] == current), None)
+  return {"forum_channel_id": current, "forum_channel_name": current_name, "channels": channels}
+
+
+class ForumChannelBody(BaseModel):
+  discord_id: str
+  guild_id: str
+  channel_id: str
+
+
+@router.post("/admin/forum-channel")
+async def admin_set_forum_channel(body: ForumChannelBody):
+  import discord as _discord
+  from bot.api import bot_ref
+
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  bot = bot_ref.get_bot()
+  guild = bot.get_guild(int(body.guild_id)) if bot else None
+  if guild is None:
+    return {"success": False, "reason": "봇이 아직 준비되지 않았습니다."}
+  channel = guild.get_channel(int(body.channel_id)) if body.channel_id.isdigit() else None
+  if not isinstance(channel, _discord.ForumChannel):
+    return {"success": False, "reason": "이 서버의 포럼 채널만 지정할 수 있습니다."}
+  await db.set_forum_channel(body.guild_id, body.channel_id)
+  return {"success": True, "forum_channel_id": body.channel_id, "forum_channel_name": channel.name}
+
+
+# ── 지난 주차 클리어 기록 ──────────────────────────────────────────
+
+@router.get("/completions/weeks")
+async def completion_weeks(discord_id: str):
+  """이 유저의 기록이 있는 주차 키(최신순). 이번 주는 기록이 없어도 맨 앞에 넣는다."""
+  weeks = await db.get_user_completion_weeks(discord_id)
+  current = db.get_week_key()
+  if current not in weeks:
+    weeks.insert(0, current)
+  return {"current_week": current, "weeks": weeks}
+
+
+@router.get("/completions/week")
+async def completions_for_week(discord_id: str, week_key: str):
+  return {"week_key": week_key, "characters": await db.get_user_week_completions(discord_id, week_key)}

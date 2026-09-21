@@ -934,3 +934,106 @@ async def get_web_notifications(after_id: int | None) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ── 디스코드 DM 레이드 구독(/레이드구독) ───────────────────────────
+
+async def get_raid_subscriptions(discord_id: str) -> list[dict]:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/subscriptions",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def _subscription_post(path: str, discord_id: str, raid_name: str, difficulty: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/{path}",
+        json={"discord_id": discord_id, "raid_name": raid_name, "difficulty": difficulty},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def add_raid_subscription(discord_id: str, raid_name: str, difficulty: str) -> dict:
+    return await _subscription_post("subscriptions", discord_id, raid_name, difficulty)
+
+
+async def remove_raid_subscription(discord_id: str, raid_name: str, difficulty: str) -> dict:
+    return await _subscription_post("subscriptions/remove", discord_id, raid_name, difficulty)
+
+
+# ── 사전 알림(N시간 전) ─────────────────────────────────────────
+
+async def get_preferences(discord_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/preferences",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def set_pre_notify_hours(discord_id: str, hours: float) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/preferences",
+        json={"discord_id": discord_id, "pre_notify_hours": hours},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+# ── 게스트 초대 후보(서버 멤버 중 미등록자) ───────────────────────
+
+async def get_guest_candidates(message_id: str, discord_id: str, guild_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/guest-candidates",
+        params={"discord_id": discord_id, "guild_id": guild_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+# ── 공대 포럼 채널 설정(관리자) ─────────────────────────────────
+
+async def admin_get_forum_channel(discord_id: str, guild_id: str) -> dict:
+    return await _admin_get("forum-channel", discord_id, guild_id=guild_id)
+
+
+async def admin_set_forum_channel(discord_id: str, guild_id: str, channel_id: str) -> dict:
+    return await _admin_post("forum-channel", discord_id, guild_id=guild_id, channel_id=channel_id)
+
+
+# ── 지난 주차 클리어 기록 ───────────────────────────────────────
+
+async def get_completion_weeks(discord_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/completions/weeks",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def get_week_completions(discord_id: str, week_key: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/completions/week",
+        params={"discord_id": discord_id, "week_key": week_key},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()

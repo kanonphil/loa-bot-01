@@ -81,6 +81,18 @@ def test_list_parties_includes_slots(client, party_setup, fake_bot):
     assert len(data) == 1
     assert len(data[0]["slots"]) == 1
     assert data[0]["slots"][0]["character_name"] == "워로드캐릭"
+    assert data[0]["comment_count"] == 0
+
+
+def test_list_parties_counts_comments(client, party_setup, fake_bot):
+    """웹 파티 상세 실시간 갱신이 댓글 변화도 잡도록 목록에 댓글 수를 싣는다."""
+    message_id = party_setup if isinstance(party_setup, str) else "999"
+    resp = client.get("/api/internal/parties", params={"guild_id": "1"}, headers=HEADERS)
+    message_id = resp.json()[0]["message_id"]
+    asyncio.run(db.add_party_comment(message_id, "222", "리더", "안녕", "web"))
+    asyncio.run(db.add_party_comment(message_id, "333", "멤버", "네", "discord", "77"))
+    data = client.get("/api/internal/parties", params={"guild_id": "1"}, headers=HEADERS).json()
+    assert data[0]["comment_count"] == 2
 
 
 def test_support_classes_endpoint_includes_known_support_class(client, party_setup, fake_bot):

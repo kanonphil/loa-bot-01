@@ -120,6 +120,12 @@ def test_get_user_party_history_includes_purged_history(db_path):
         assert by_id["history-archived"]["role"] == "support"
         assert "history-other-user" not in by_id  # 내가 참여 안 한 파티는 제외
 
+        # 웹 이력 화면의 "함께한 멤버" — 살아있는 파티는 party_slots에서, purge된 파티는 스냅샷에서
+        assert by_id["history-live"]["total_slots"] == 8
+        assert [m["character_name"] for m in by_id["history-live"]["members"]] == ["워로드캐릭"]
+        assert by_id["history-archived"]["members"][0]["character_class"] == "홀리나이트"
+        assert by_id["history-archived"]["members"][0]["role"] == "support"
+
     asyncio.run(run())
 
 

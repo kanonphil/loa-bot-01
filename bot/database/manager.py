@@ -897,7 +897,7 @@ async def get_cached_characters_with_account(discord_id: str, max_age_hours: int
         cur = await db.execute(
             "SELECT uc.character_name, uc.character_class, "
             "CASE WHEN uc.cached_at >= datetime('now', ?) THEN uc.item_level ELSE NULL END AS item_level, "
-            "uc.api_key_id, k.label AS account_label "
+            "uc.api_key_id, k.label AS account_label, uc.cached_at "
             "FROM user_characters uc "
             "LEFT JOIN user_api_keys k ON k.id = uc.api_key_id "
             "WHERE uc.discord_id=? ORDER BY uc.added_at",
@@ -1811,12 +1811,21 @@ async def get_guild_parties_with_slots(guild_id: str) -> list[dict]:
             ids,
         )
         rows = await cur.fetchall()
+        comment_cur = await db.execute(
+            "SELECT party_message_id, COUNT(*) AS n FROM party_comments "
+            f"WHERE party_message_id IN ({placeholders}) GROUP BY party_message_id",
+            ids,
+        )
+        comment_counts = {r["party_message_id"]: r["n"] for r in await comment_cur.fetchall()}
     by_party: dict[str, list[dict]] = {mid: [] for mid in ids}
     for r in rows:
         row = dict(r)
         row["is_guest"] = bool(row["is_guest"])
         by_party[row["party_message_id"]].append(row)
-    return [{**p, "slots": by_party[p["message_id"]]} for p in parties]
+    return [
+        {**p, "slots": by_party[p["message_id"]], "comment_count": comment_counts.get(p["message_id"], 0)}
+        for p in parties
+    ]
 
 
 async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
@@ -2389,18 +2398,27 @@ async def get_user_party_history(
   추가해도 같은 데이터를 한 번 더 훑는 정도지 새로운 차수의 비용이 아니다."""
   async with aiosqlite.connect(DB_PATH) as db:
     db.row_factory = aiosqlite.Row
+    # slots_json: 살아있는 파티는 party_slots를 그 자리에서 JSON으로 묶고, 지난 이력은
+    # purge_party가 남긴 스냅샷을 그대로 쓴다 — 웹 이력 화면의 "함께한 멤버" 표시용.
     combined_sql = (
       "SELECT DISTINCT message_id, raid_name, difficulty, proficiency, "
-      "scheduled_time, status, character_name, role, created_at FROM ("
+      "scheduled_time, scheduled_datetime, status, character_name, role, created_at, "
+      "total_slots, memo, leader_id, slots_json FROM ("
       "  SELECT p.message_id, p.raid_name, p.difficulty, p.proficiency, "
-      "         p.scheduled_time, p.status, ps.character_name, ps.role, p.created_at "
+      "         p.scheduled_time, p.scheduled_datetime, p.status, ps.character_name, ps.role, p.created_at, "
+      "         p.total_slots, p.memo, p.leader_id, "
+      "         (SELECT json_group_array(json_object('discord_id', s2.discord_id, "
+      "                  'character_name', s2.character_name, 'character_class', s2.character_class, "
+      "                  'role', s2.role)) "
+      "          FROM (SELECT * FROM party_slots WHERE party_message_id = p.message_id ORDER BY slot_number) s2) AS slots_json "
       "  FROM parties p JOIN party_slots ps ON p.message_id = ps.party_message_id "
       "  WHERE ps.discord_id = ? "
       "  UNION ALL "
       "  SELECT h.message_id, h.raid_name, h.difficulty, h.proficiency, "
-      "         h.scheduled_time, h.status, "
+      "         h.scheduled_time, h.scheduled_datetime, h.status, "
       "         json_extract(je.value, '$.character_name'), "
-      "         json_extract(je.value, '$.role'), h.created_at "
+      "         json_extract(je.value, '$.role'), h.created_at, "
+      "         h.total_slots, h.memo, h.leader_id, h.slots_json "
       "  FROM party_history h, json_each(h.slots_json) je "
       "  WHERE json_extract(je.value, '$.discord_id') = ? "
       ") combined"
@@ -2415,7 +2433,14 @@ async def get_user_party_history(
       (discord_id, discord_id, limit, offset),
     )
     rows = await cur.fetchall()
-  entries = [dict(r) for r in rows]
+  entries = []
+  for r in rows:
+    entry = dict(r)
+    try:
+      entry["members"] = json.loads(entry.pop("slots_json") or "[]")
+    except (TypeError, ValueError):
+      entry["members"] = []
+    entries.append(entry)
   has_more = offset + len(entries) < total_count
   return entries, has_more, total_count
 
@@ -2958,3 +2983,119 @@ async def seed_game_data() -> None:
             ],
         )
         await db.commit()
+
+
+# ──────────────────────────────────────────────
+# 사전 알림(N시간 전) — 스키마(user_preferences / party_pre_notifications)만 있고
+# 봇/웹 어디에도 구현이 없던 기능. 유저별 "몇 시간 전"을 저장하고, 알림 루프가
+# 참여 중인 파티의 시작 시각이 그 안으로 들어오면 한 번만 DM을 보낸다.
+# ──────────────────────────────────────────────
+
+PRE_NOTIFY_HOURS_CHOICES = (0.0, 0.5, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0)
+
+
+async def get_pre_notify_hours(discord_id: str) -> float:
+    """행이 없으면 0(끔) — 스키마 DEFAULT 1.0은 이 기능이 구현되기 전 값이라, 아무도
+    설정한 적 없는 유저에게 갑자기 DM이 가지 않도록 '설정한 사람만' 받는다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT pre_notify_hours FROM user_preferences WHERE discord_id=?", (discord_id,)
+        )
+        row = await cur.fetchone()
+    return float(row[0]) if row else 0.0
+
+
+async def set_pre_notify_hours(discord_id: str, hours: float) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO user_preferences (discord_id, pre_notify_hours) VALUES (?, ?) "
+            "ON CONFLICT(discord_id) DO UPDATE SET pre_notify_hours=excluded.pre_notify_hours",
+            (discord_id, float(hours)),
+        )
+        await db.commit()
+
+
+async def get_due_pre_notifications(now: datetime) -> list[dict]:
+    """(파티, 참여자) 쌍 중 사전 알림을 보내야 하는 것들 — 참여자가 N시간 전 알림을 켜뒀고,
+    시작까지 남은 시간이 N시간 이내이며, 아직 시작 전이고, 이 파티에 대해 아직 안 보낸 것.
+    scheduled_datetime은 KST ISO 문자열이라 시간 비교는 파이썬에서 한다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT p.message_id, p.guild_id, p.channel_id, p.raid_name, p.difficulty, "
+            "       p.proficiency, p.scheduled_time, p.scheduled_datetime, "
+            "       ps.discord_id, up.pre_notify_hours "
+            "FROM parties p "
+            "JOIN party_slots ps ON ps.party_message_id = p.message_id "
+            "JOIN user_preferences up ON up.discord_id = ps.discord_id "
+            "LEFT JOIN party_pre_notifications pn "
+            "       ON pn.message_id = p.message_id AND pn.discord_id = ps.discord_id "
+            "WHERE p.status IN ('recruiting', 'full', 'closed') "
+            "  AND p.scheduled_datetime IS NOT NULL "
+            "  AND up.pre_notify_hours > 0 "
+            "  AND pn.discord_id IS NULL"
+        )
+        rows = await cur.fetchall()
+    due = []
+    for r in rows:
+        row = dict(r)
+        try:
+            start = datetime.fromisoformat(row["scheduled_datetime"])
+        except (TypeError, ValueError):
+            continue
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=KST)
+        remaining = start - now
+        if timedelta(0) < remaining <= timedelta(hours=float(row["pre_notify_hours"])):
+            row["remaining_minutes"] = int(remaining.total_seconds() // 60)
+            due.append(row)
+    return due
+
+
+async def mark_pre_notified(message_id: str, discord_id: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO party_pre_notifications (message_id, discord_id) VALUES (?, ?)",
+            (message_id, discord_id),
+        )
+        await db.commit()
+
+
+# ──────────────────────────────────────────────
+# 지난 주차 클리어 기록 (웹 레이드 체크 → "지난 주차")
+# ──────────────────────────────────────────────
+
+async def get_user_completion_weeks(discord_id: str, limit: int = 12) -> list[str]:
+    """이 유저의 클리어 기록이 있는 주차 키(최신순)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT DISTINCT week_key FROM raid_completions WHERE discord_id=? "
+            "ORDER BY week_key DESC LIMIT ?",
+            (discord_id, limit),
+        )
+        rows = await cur.fetchall()
+    return [r[0] for r in rows]
+
+
+async def get_user_week_completions(discord_id: str, week_key: str) -> list[dict]:
+    """주차 하나의 캐릭터별 클리어 목록. 캐릭터 직업은 지금 캐시 기준(과거 주차엔 저장 안 됨)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT c.character_name, c.raid_name, c.difficulty, uc.character_class "
+            "FROM raid_completions c "
+            "LEFT JOIN user_characters uc "
+            "       ON uc.discord_id = c.discord_id AND uc.character_name = c.character_name "
+            "WHERE c.discord_id=? AND c.week_key=? "
+            "ORDER BY c.character_name, c.raid_name, c.difficulty",
+            (discord_id, week_key),
+        )
+        rows = await cur.fetchall()
+    by_char: dict[str, dict] = {}
+    for r in rows:
+        entry = by_char.setdefault(
+            r["character_name"],
+            {"character_name": r["character_name"], "character_class": r["character_class"], "completions": []},
+        )
+        entry["completions"].append({"raid_name": r["raid_name"], "difficulty": r["difficulty"]})
+    return list(by_char.values())

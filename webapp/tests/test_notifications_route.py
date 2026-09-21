@@ -282,3 +282,96 @@ def test_stream_unsubscribes_on_close(monkeypatch):
         assert len(party_events._notification_subscribers) == 0
 
     asyncio.run(scenario())
+
+
+# ── 디스코드 DM 구독 / 사전 알림 (봇 DB 설정을 웹 설정 페이지에서) ──────────
+
+import httpx
+import respx as _respx
+
+SUBSCRIPTIONS_URL = "http://bot-server.internal/api/internal/subscriptions"
+PREFERENCES_URL = "http://bot-server.internal/api/internal/preferences"
+RAIDS_URL = "http://bot-server.internal/api/internal/raids"
+RAIDS = {
+    "아르모체(4막)": {
+        "short_name": "4막", "icon": "🗡️", "category": "카제로스", "is_extreme": False, "is_active": True,
+        "available_from": None, "available_until": None,
+        "difficulties": {"노말": {"min_level": 1700, "total_slots": 8, "party_split": 4, "gates": 2}},
+    },
+}
+
+
+def _mock_bot_settings(subscriptions=None, hours=0.0):
+    _respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+    _respx.get(SUBSCRIPTIONS_URL).mock(return_value=httpx.Response(200, json=subscriptions or []))
+    _respx.get(PREFERENCES_URL).mock(return_value=httpx.Response(200, json={"pre_notify_hours": hours, "choices": [0.0, 0.5, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0]}))
+
+
+def test_settings_page_shows_discord_subscriptions_and_pre_notify(client):
+    with _respx.mock:
+        log_in(client, discord_id="111")
+        _mock_bot_settings(subscriptions=[{"raid_name": "아르모체(4막)", "difficulty": "전체", "created_at": "2026-05-01"}], hours=2.0)
+        resp = client.get("/settings")
+
+    body = resp.text
+    assert "디스코드 DM 구독" in body
+    assert "전체 난이도" in body
+    assert 'action="/settings/discord-subscriptions/remove"' in body
+    assert "공대 시작 사전 알림" in body
+    assert 'value="2.0" selected' in body
+    assert "30분 전" in body and "받지 않음" in body
+
+
+def test_settings_page_degrades_when_bot_is_down(client):
+    with _respx.mock:
+        log_in(client, discord_id="111")
+        _respx.get(RAIDS_URL).mock(return_value=httpx.Response(500, text="boom"))
+        resp = client.get("/settings")
+
+    assert resp.status_code == 200
+    assert resp.text.count("봇 서버에 연결하지 못해") == 2
+    assert "알림 종류" in resp.text  # 웹 알림 설정은 그대로 동작
+
+
+def test_add_discord_subscription_posts_to_bot(client):
+    with _respx.mock:
+        log_in(client, discord_id="111")
+        route = _respx.post(SUBSCRIPTIONS_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/settings/discord-subscriptions/add", data={"raid_name": "아르모체(4막)", "difficulty": ""})
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/settings?saved=subscription"
+    import json as _json
+    assert _json.loads(route.calls[0].request.content) == {"discord_id": "111", "raid_name": "아르모체(4막)", "difficulty": "전체"}
+
+
+def test_add_discord_subscription_failure_shows_reason(client):
+    with _respx.mock:
+        log_in(client, discord_id="111")
+        _respx.post(SUBSCRIPTIONS_URL).mock(return_value=httpx.Response(200, json={"success": False, "reason": "이미 구독 중입니다."}))
+        resp = client.post("/settings/discord-subscriptions/add", data={"raid_name": "아르모체(4막)", "difficulty": "노말"})
+
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/settings?error=")
+
+
+def test_remove_discord_subscription(client):
+    with _respx.mock:
+        log_in(client, discord_id="111")
+        route = _respx.post(SUBSCRIPTIONS_URL + "/remove").mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/settings/discord-subscriptions/remove", data={"raid_name": "아르모체(4막)", "difficulty": "노말"})
+
+    assert resp.status_code == 303
+    assert route.called
+
+
+def test_save_pre_notify_hours(client):
+    with _respx.mock:
+        log_in(client, discord_id="111")
+        route = _respx.post(PREFERENCES_URL).mock(return_value=httpx.Response(200, json={"success": True, "pre_notify_hours": 1.0}))
+        resp = client.post("/settings/pre-notify", data={"pre_notify_hours": "1.0"})
+
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/settings?saved=pre_notify"
+    import json as _json
+    assert _json.loads(route.calls[0].request.content) == {"discord_id": "111", "pre_notify_hours": 1.0}

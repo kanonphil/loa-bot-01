@@ -41,6 +41,7 @@ def test_bot_403_explains_admin_revoked(client, monkeypatch):
         log_in(client, discord_id="111")
         respx.get(ADMIN_PARTIES_URL).mock(return_value=httpx.Response(403, json={"detail": "관리자 권한이 없습니다."}))
         respx.get("http://bot-server.internal/api/internal/admin/status").mock(return_value=httpx.Response(403, json={"detail": "관리자 권한이 없습니다."}))
+        respx.get("http://bot-server.internal/api/internal/admin/forum-channel").mock(return_value=httpx.Response(403, json={"detail": "관리자 권한이 없습니다."}))
         resp = client.get("/admin/parties")
 
     assert resp.status_code == 403

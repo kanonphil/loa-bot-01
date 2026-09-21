@@ -406,6 +406,33 @@ async def invite(
     return _redirect_with_result(message_id, result, "초대를 보내지 못했습니다.")
 
 
+@router.get("/parties/{message_id}/guest-invite")
+async def guest_invite_form(request: Request, message_id: str, user: dict = Depends(get_current_user)):
+    """게스트(API 미등록 서버 멤버) 초대 폼 — 디스코드 GuestUserSelectView의 웹판.
+    서버 멤버 전체를 훑는 조회라 상세 페이지를 열 때마다 하지 않고, 파티장이
+    "게스트 초대" 버튼을 눌렀을 때만 htmx로 불러온다."""
+    result = await bot_client.get_guest_candidates(message_id, user["discord_id"], config.DISCORD_GUILD_ID)
+    return templates.TemplateResponse(
+        request,
+        "_guest_invite_form.html",
+        {"message_id": message_id, "result": result},
+    )
+
+
+@router.post("/parties/{message_id}/invite-guest")
+async def invite_guest(
+    request: Request,
+    message_id: str,
+    target_discord_id: str = Form(...),
+    slot_number: int = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    # 초대 자체는 등록 유저 초대와 같은 경로 — 수락하는 쪽(디스코드 DM)에서 API 미등록이면
+    # 게스트 흐름(캐릭터 닉네임 입력 → 관리자 키로 조회)으로 이어진다.
+    result = await bot_client.create_invite(message_id, user["discord_id"], target_discord_id, slot_number)
+    return _redirect_with_result(message_id, result, "게스트 초대를 보내지 못했습니다.")
+
+
 @router.post("/parties/{message_id}/comments")
 async def post_comment(
     request: Request,

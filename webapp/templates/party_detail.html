@@ -242,6 +242,16 @@
   </div>
   {% endif %}
 
+  {% if party.status != "disbanded" %}
+  <div class="leader-group" id="guest-invite-group">
+    <span class="leader-group-label">게스트 초대</span>
+    <p class="settings-desc">API를 등록하지 않은 서버 멤버도 초대할 수 있어요. 초대받은 사람은 디스코드 DM에서 캐릭터 닉네임만 입력하면 참여됩니다.</p>
+    <button type="button" class="leader-btn" hx-get="/parties/{{ party.message_id }}/guest-invite"
+            hx-target="#guest-invite-form" hx-swap="innerHTML" hx-disabled-elt="this">게스트 초대 열기</button>
+    <div id="guest-invite-form"></div>
+  </div>
+  {% endif %}
+
   {% if other_members %}
   <div class="leader-group">
     <span class="leader-group-label">멤버 관리</span>

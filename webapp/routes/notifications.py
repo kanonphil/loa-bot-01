@@ -88,13 +88,22 @@ async def open_notification(notification_id: int, user: dict = Depends(get_curre
 
 
 @router.get("/settings")
-async def settings_page(request: Request, user: dict = Depends(get_current_user)):
+async def settings_page(
+    request: Request, saved: str | None = None, error: str | None = None,
+    user: dict = Depends(get_current_user),
+):
     prefs = await notification_store.get_preferences(user["discord_id"])
-    # 레이드 필터 추가용 목록 — 봇 서버가 응답 못 하면 추가 UI만 숨긴다(설정 페이지 자체는 동작)
+    # 봇 쪽 데이터(레이드 목록/디스코드 구독/사전 알림)는 봇 서버가 응답 못 하면 그 카드만
+    # 비활성으로 보여준다 — 설정 페이지 자체(웹 알림 설정)는 계속 동작해야 한다.
+    raids: dict = {}
+    discord_subscriptions: list[dict] | None = None
+    pre_notify: dict | None = None
     try:
         raids = await bot_client.get_raids()
+        discord_subscriptions = await bot_client.get_raid_subscriptions(user["discord_id"])
+        pre_notify = await bot_client.get_preferences(user["discord_id"])
     except Exception:
-        raids = {}
+        pass
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -104,6 +113,10 @@ async def settings_page(request: Request, user: dict = Depends(get_current_user)
             "subscribed": prefs["subscribed"],
             "prefs": prefs,
             "raids": raids,
+            "discord_subscriptions": discord_subscriptions,
+            "pre_notify": pre_notify,
+            "saved": saved,
+            "error": error,
         },
     )
 
@@ -147,3 +160,48 @@ async def remove_raid_filter(request: Request, user: dict = Depends(get_current_
     if raid_name:
         await notification_store.remove_raid_filter(user["discord_id"], raid_name, difficulty)
     return RedirectResponse("/settings", status_code=303)
+
+
+# ── 디스코드 DM 레이드 구독(/레이드구독) + 사전 알림 — 봇 DB에 저장되는 설정 ────
+# 웹 알림(위)과 디스코드 DM 구독은 저장소가 달라 서로 몰랐다. 여기서 같은 설정 페이지에
+# 나란히 보여주고 관리한다(저장소를 합치진 않는다 — 디스코드 명령어가 계속 그 테이블을 쓴다).
+
+@router.post("/settings/discord-subscriptions/add")
+async def add_discord_subscription(request: Request, user: dict = Depends(get_current_user)):
+    form = await request.form()
+    raid_name = (form.get("raid_name") or "").strip()
+    difficulty = (form.get("difficulty") or "").strip() or "전체"
+    if raid_name:
+        result = await bot_client.add_raid_subscription(user["discord_id"], raid_name, difficulty)
+        if not result.get("success"):
+            return RedirectResponse(f"/settings?error={_q(result.get('reason') or '구독하지 못했습니다.')}", status_code=303)
+    return RedirectResponse("/settings?saved=subscription", status_code=303)
+
+
+@router.post("/settings/discord-subscriptions/remove")
+async def remove_discord_subscription(request: Request, user: dict = Depends(get_current_user)):
+    form = await request.form()
+    raid_name = (form.get("raid_name") or "").strip()
+    difficulty = (form.get("difficulty") or "").strip() or "전체"
+    if raid_name:
+        await bot_client.remove_raid_subscription(user["discord_id"], raid_name, difficulty)
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/pre-notify")
+async def save_pre_notify(request: Request, user: dict = Depends(get_current_user)):
+    form = await request.form()
+    try:
+        hours = float(form.get("pre_notify_hours") or 0)
+    except ValueError:
+        hours = 0.0
+    result = await bot_client.set_pre_notify_hours(user["discord_id"], hours)
+    if not result.get("success"):
+        return RedirectResponse(f"/settings?error={_q(result.get('reason') or '저장하지 못했습니다.')}", status_code=303)
+    return RedirectResponse("/settings?saved=pre_notify", status_code=303)
+
+
+def _q(text: str) -> str:
+    from urllib.parse import quote
+
+    return quote(text)

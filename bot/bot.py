@@ -7,7 +7,9 @@ from datetime import datetime, time, timezone, timedelta
 import bot.database.manager as db
 import bot.api.lostark as loa
 from bot.services.expedition import sync_all_accounts_daily
-from bot.ui.views import PartyView, _refresh_party_embed_with_reserved, _send_dm, _notify_members_web
+from bot.ui.views import (
+    PartyView, _refresh_party_embed_with_reserved, _send_dm, _notify_members_web, _party_url,
+)
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
 
@@ -15,6 +17,16 @@ import asyncio
 import uvicorn
 
 KST = timezone(timedelta(hours=9))
+
+
+def _format_remaining(minutes: int) -> str:
+    """사전 알림 문구용 남은 시간 — '30분', '1시간', '1시간 30분'."""
+    hours, mins = divmod(max(int(minutes), 0), 60)
+    if hours and mins:
+        return f"{hours}시간 {mins}분"
+    if hours:
+        return f"{hours}시간"
+    return f"{max(mins, 1)}분"
 
 COGS = [
     "bot.cogs.account",
@@ -159,6 +171,22 @@ class LoABot(commands.Bot):
             except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
                 print(f"[시작 알림] 발송 실패 (message_id={party.get('message_id')}): {type(e).__name__}: {e}")
                 await db.mark_notified(party["message_id"])
+
+        # 사전 알림(N시간 전) — 참여자별로 설정한 시간 안으로 시작이 들어오면 DM 한 번.
+        # 일정 변경(update_party_schedule)은 party_pre_notifications를 비우므로 새 시각에 다시 간다.
+        for row in await db.get_due_pre_notifications(now):
+            try:
+                raid_title = f"{row['raid_name']} {row['difficulty']} {row['proficiency']}"
+                await _send_dm(
+                    self, row["discord_id"],
+                    f"⏰ **{raid_title}** 공대 시작 {_format_remaining(row['remaining_minutes'])} 전입니다.\n"
+                    f"일정: **{row['scheduled_time']}** | {_party_url(row)}",
+                    kind="party_soon", message_id=row["message_id"],
+                )
+            except Exception as e:
+                print(f"[사전 알림] 발송 실패 (message_id={row.get('message_id')}): {type(e).__name__}: {e}")
+            finally:
+                await db.mark_pre_notified(row["message_id"], row["discord_id"])
 
         # 초대(예약 슬롯) 만료 정리 — InviteResponseView의 1시간 timeout은 메모리(뷰
         # 인스턴스)에만 있어서 봇이 재시작되면 사라진다. 그러면 party_invites 행이

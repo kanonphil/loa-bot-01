@@ -86,6 +86,96 @@
   {% endif %}
 </div>
 
+{% if saved == "subscription" %}
+<div class="flash-data" hidden data-type="success" data-message="디스코드 DM 구독을 추가했습니다."></div>
+{% elif saved == "pre_notify" %}
+<div class="flash-data" hidden data-type="success" data-message="사전 알림 설정을 저장했습니다."></div>
+{% elif error %}
+<div class="flash-data" hidden data-type="error" data-message="{{ error }}"></div>
+{% endif %}
+
+<div class="settings-card">
+  <h2 class="leader-panel-title">디스코드 DM 구독</h2>
+  <p class="settings-desc">
+    디스코드 <code>/레이드구독</code>과 같은 설정입니다. 구독한 레이드의 새 공대가 열리면 디스코드 DM으로 알려줘요
+    (이미 그 레이드 공대에 참여 중이면 오지 않습니다). 위의 "레이드 필터"는 웹 알림만, 여기는 디스코드 DM만 다룹니다.
+  </p>
+  {% if discord_subscriptions is none %}
+  <p class="settings-desc">봇 서버에 연결하지 못해 지금은 표시할 수 없습니다.</p>
+  {% else %}
+  {% if discord_subscriptions %}
+  <ul class="settings-filter-list">
+    {% for s in discord_subscriptions %}
+    <li class="settings-filter-row">
+      <span class="settings-filter-name">{{ s.raid_name }} <em>{{ "전체 난이도" if s.difficulty == "전체" else s.difficulty }}</em></span>
+      <form method="post" action="/settings/discord-subscriptions/remove">
+        <input type="hidden" name="raid_name" value="{{ s.raid_name }}">
+        <input type="hidden" name="difficulty" value="{{ s.difficulty }}">
+        <button type="submit" class="settings-filter-remove">구독 취소</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="settings-desc">구독 중인 레이드가 없습니다.</p>
+  {% endif %}
+  {% if raids %}
+  <form method="post" action="/settings/discord-subscriptions/add" class="settings-filter-add">
+    <select name="raid_name" id="dm-raid-select" class="settings-select js-themed-select" required>
+      <option value="" disabled selected>레이드 선택</option>
+      {% for name, info in raids.items() %}{% if info.get("is_active", True) %}
+      <option value="{{ name }}" data-difficulties="{{ (info.get('difficulties') or {}).keys() | list | join(',') }}">{{ name }}</option>
+      {% endif %}{% endfor %}
+    </select>
+    <select name="difficulty" id="dm-diff-select" class="settings-select js-themed-select">
+      <option value="전체">전체 난이도</option>
+    </select>
+    <button type="submit" class="settings-toggle-btn">구독</button>
+  </form>
+  <script>
+    (function () {
+      var raidSelect = document.getElementById("dm-raid-select");
+      var diffSelect = document.getElementById("dm-diff-select");
+      raidSelect.addEventListener("change", function () {
+        var opt = raidSelect.options[raidSelect.selectedIndex];
+        var diffs = (opt.getAttribute("data-difficulties") || "").split(",").filter(Boolean);
+        diffSelect.innerHTML = '<option value="전체">전체 난이도</option>';
+        diffs.forEach(function (d) {
+          var o = document.createElement("option");
+          o.value = d;
+          o.textContent = d;
+          diffSelect.appendChild(o);
+        });
+        diffSelect.dispatchEvent(new Event("change"));
+      });
+    })();
+  </script>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="settings-card">
+  <h2 class="leader-panel-title">공대 시작 사전 알림</h2>
+  <p class="settings-desc">
+    참여 중인 공대의 시작 시각이 다가오면 정한 시간만큼 미리 디스코드 DM과 웹 알림으로 알려줘요.
+    시작 시각 자체의 알림(스레드 멘션)은 이 설정과 무관하게 항상 갑니다.
+  </p>
+  {% if pre_notify is none %}
+  <p class="settings-desc">봇 서버에 연결하지 못해 지금은 표시할 수 없습니다.</p>
+  {% else %}
+  <form method="post" action="/settings/pre-notify" class="settings-filter-add">
+    <select name="pre_notify_hours" class="settings-select js-themed-select">
+      {% for h in pre_notify.choices %}
+      <option value="{{ h }}" {% if h == pre_notify.pre_notify_hours %}selected{% endif %}>
+        {%- if h == 0 %}받지 않음{% elif h < 1 %}{{ (h * 60) | int }}분 전{% else %}{{ h | int }}시간 전{% endif -%}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="settings-toggle-btn">저장</button>
+  </form>
+  {% endif %}
+</div>
+
 <div class="settings-card">
   <h2 class="leader-panel-title">알림 소리</h2>
   <p class="settings-desc">알림 toast가 뜰 때 짧은 알림음을 재생합니다. 이 설정은 지금 쓰는 브라우저에만 저장돼요.</p>

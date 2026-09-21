@@ -18,6 +18,8 @@ CLOSE_URL = "http://bot-server.internal/api/internal/parties/p1/close"
 REVERT_URL = "http://bot-server.internal/api/internal/admin/parties/p1/revert-clear"
 ADMIN_PARTIES_URL = "http://bot-server.internal/api/internal/admin/parties"
 ADMIN_STATUS_URL = "http://bot-server.internal/api/internal/admin/status"
+ADMIN_FORUM_URL = "http://bot-server.internal/api/internal/admin/forum-channel"
+FORUM = {"forum_channel_id": "700", "forum_channel_name": "공대모집", "channels": [{"id": "700", "name": "공대모집"}, {"id": "701", "name": "자유포럼"}]}
 BOT_STATUS = {"is_online": True, "uptime_str": "1시간 2분 3초", "user_count": 22, "active_party_count": 3, "subscription_count": 10, "latency_ms": 41.2}
 
 RAIDS = {
@@ -188,6 +190,7 @@ def test_admin_parties_page_shows_open_and_closed_tabs(client, monkeypatch):
     with respx.mock:
         log_in(client, discord_id="999")
         respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json=FORUM))
         respx.get(ADMIN_PARTIES_URL).mock(
             return_value=httpx.Response(200, json={
                 "open": [PARTY],
@@ -211,6 +214,7 @@ def test_admin_parties_page_hides_search_when_tab_is_empty(client, monkeypatch):
     with respx.mock:
         log_in(client, discord_id="999")
         respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json=FORUM))
         respx.get(ADMIN_PARTIES_URL).mock(
             return_value=httpx.Response(200, json={"open": [], "closed": []})
         )
@@ -238,6 +242,7 @@ def test_admin_parties_page_shows_status_cards_and_flags_overdue(client, monkeyp
     with respx.mock:
         _admin_login(client, monkeypatch)
         respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json=FORUM))
         respx.get(ADMIN_PARTIES_URL).mock(
             return_value=httpx.Response(200, json={"open": [upcoming, overdue], "closed": []})
         )
@@ -252,6 +257,7 @@ def test_admin_parties_closed_tab_offers_unlock_for_live_party(client, monkeypat
     with respx.mock:
         _admin_login(client, monkeypatch)
         respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json=FORUM))
         respx.get(ADMIN_PARTIES_URL).mock(
             return_value=httpx.Response(200, json={
                 "open": [],
@@ -311,3 +317,59 @@ def test_admin_sees_admin_only_controls_in_leader_panel(client, monkeypatch):
     assert "/parties/p1/admin-notify" in body
     assert "/parties/p1/admin-unlock" in body
     assert "2명에게 DM을 보냈습니다." in body
+
+
+# ── 공대 포럼 채널 설정 ─────────────────────────────────────
+
+def test_admin_parties_page_shows_forum_channel_card(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json=FORUM))
+        respx.get(ADMIN_PARTIES_URL).mock(return_value=httpx.Response(200, json={"open": [], "closed": []}))
+        resp = client.get("/admin/parties")
+    body = resp.text
+    assert "공대 모집 포럼 채널" in body
+    assert "#공대모집" in body
+    assert 'value="701"' in body
+
+
+def test_admin_parties_page_warns_when_forum_unset(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json={**FORUM, "forum_channel_id": None, "forum_channel_name": None}))
+        respx.get(ADMIN_PARTIES_URL).mock(return_value=httpx.Response(200, json={"open": [], "closed": []}))
+        resp = client.get("/admin/parties")
+    assert "아직 설정되지 않아 공대 개설이 막혀 있습니다" in resp.text
+
+
+def test_admin_set_forum_channel_posts_to_bot_and_redirects(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        route = respx.post(ADMIN_FORUM_URL).mock(
+            return_value=httpx.Response(200, json={"success": True, "forum_channel_id": "701", "forum_channel_name": "자유포럼"})
+        )
+        resp = client.post("/admin/forum-channel", data={"channel_id": "701"})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/admin/parties?forum_saved=1"
+    sent = route.calls[0].request
+    import json as _json
+    assert _json.loads(sent.content) == {"discord_id": "999", "guild_id": "test-guild-id", "channel_id": "701"}
+
+
+def test_admin_set_forum_channel_failure_redirects_with_error(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        respx.post(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json={"success": False, "reason": "이 서버의 포럼 채널만 지정할 수 있습니다."}))
+        resp = client.post("/admin/forum-channel", data={"channel_id": "1"})
+    assert resp.status_code == 303
+    assert "forum_error=" in resp.headers["location"]
+
+
+def test_admin_set_forum_channel_requires_admin(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
+    with respx.mock:
+        log_in(client, discord_id="111")
+        resp = client.post("/admin/forum-channel", data={"channel_id": "701"})
+    assert resp.status_code == 403
