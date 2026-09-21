@@ -5,7 +5,8 @@
 <h1>레이드 관리</h1>
 <p class="settings-desc">
   디스코드 <code>/관리</code> 명령어와 같은 내용을 다룹니다. 여기서 바꾼 내용은 레이드체크·공대개설
-  등 사이트 전체와 디스코드 봇에 곧바로 반영됩니다.
+  등 사이트 전체와 디스코드 봇에 곧바로 반영됩니다. 목록은 드래그하거나 ▲▼로 순서를 바꾼 뒤
+  "순서 저장"을 눌러야 반영되며, 이 순서가 그대로 공대 모집 드롭다운 순서가 됩니다.
 </p>
 
 {% if error %}
@@ -19,14 +20,34 @@
   {% endfor %}
 {% endcall %}
 
+{% macro reorder_bar(form_id, action, hidden_fields) %}
+<form method="post" action="{{ action }}" id="{{ form_id }}" class="admin-reorder-bar" hidden>
+  {% for k, v in hidden_fields %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <input type="hidden" name="order">
+  <span class="admin-reorder-hint">순서가 바뀌었습니다 — 저장해야 반영됩니다.</span>
+  <button type="button" class="admin-toggle-link" data-reorder-reset>되돌리기</button>
+  <button type="submit" class="settings-toggle-btn">순서 저장</button>
+</form>
+{% endmacro %}
+
+{% macro move_buttons() %}
+<button type="button" class="admin-move-btn" data-move="up" title="위로">▲</button>
+<button type="button" class="admin-move-btn" data-move="down" title="아래로">▼</button>
+{% endmacro %}
+
 {% if tab == "categories" %}
 <div class="settings-card admin-card">
   {% if categories %}
-  <ul class="admin-list">
+  {{ reorder_bar("reorder-form-categories", "/admin/raids/categories/order", []) }}
+  <ul class="admin-list" data-reorder-group data-reorder-form="#reorder-form-categories">
     {% for c in categories %}
-    <li class="admin-row">
-      <span class="admin-row-name">{{ c.name }}<span class="admin-row-sub">순서 {{ c.sort_order }}</span></span>
+    <li class="admin-row" data-key="{{ c.name }}">
+      <span class="admin-row-name">
+        <span class="admin-drag-handle" data-drag-handle title="드래그해서 순서 변경">⠿</span>
+        {{ c.name }}
+      </span>
       <span class="admin-row-actions">
+        {{ move_buttons() }}
         <form method="post" action="/admin/raids/categories/extreme">
           <input type="hidden" name="name" value="{{ c.name }}">
           <input type="hidden" name="is_extreme" value="{{ 'false' if c.is_extreme else 'true' }}">
@@ -66,15 +87,19 @@
   {% for group in grouped %}
   {% if group.raids %}
   <h3 class="admin-group-title">{{ group.category.name }}</h3>
-  <ul class="admin-list">
+  {{ reorder_bar("reorder-form-raids-" ~ loop.index, "/admin/raids/order", [("category", group.category.name)]) }}
+  <ul class="admin-list" data-reorder-group data-reorder-form="#reorder-form-raids-{{ loop.index }}">
     {% for r in group.raids %}
-    <li class="admin-row">
+    <li class="admin-row" data-key="{{ r.name }}">
       <span class="admin-row-name">
+        <span class="admin-drag-handle" data-drag-handle title="드래그해서 순서 변경">⠿</span>
         {{ r.icon }} {{ r.name }} <span class="admin-row-sub">{{ r.short_name }}</span>
         {% if not r.is_active %}{{ ui.chip("비활성", "danger") }}{% endif %}
         {% if r.is_pinned %}{{ ui.chip("고정", "accent") }}{% endif %}
+        {% if r.available_until %}{{ ui.chip("~" ~ r.available_until[5:10] ~ "까지", "warn") }}{% endif %}
       </span>
       <span class="admin-row-actions">
+        {{ move_buttons() }}
         <a class="admin-toggle-link" href="/admin/raids?tab=difficulties&amp;raid={{ r.name | urlencode }}">난이도 관리</a>
         <form method="post" action="/admin/raids/pin">
           <input type="hidden" name="name" value="{{ r.name }}">
@@ -91,6 +116,35 @@
           <button type="submit" class="admin-danger-link">삭제</button>
         </form>
       </span>
+      <details class="admin-row-extra">
+        <summary>카테고리 이동 · 운영 기간</summary>
+        <div class="admin-inline-forms">
+          <form method="post" action="/admin/raids/move-category" class="admin-inline-form">
+            <input type="hidden" name="name" value="{{ r.name }}">
+            <span class="admin-inline-label">카테고리</span>
+            <select name="category" class="settings-select js-themed-select">
+              {% for c in categories %}
+              <option value="{{ c.name }}" {% if c.name == r.category %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="admin-toggle-link">이동</button>
+          </form>
+          <form method="post" action="/admin/raids/period" class="admin-inline-form">
+            <input type="hidden" name="name" value="{{ r.name }}">
+            <span class="admin-inline-label">운영 기간</span>
+            <input type="datetime-local" name="available_from" value="{{ (r.available_from or '')[:16] }}" class="settings-select" aria-label="시작">
+            <span class="admin-inline-label">~</span>
+            <input type="datetime-local" name="available_until" value="{{ (r.available_until or '')[:16] }}" class="settings-select" aria-label="종료">
+            <button type="submit" class="admin-toggle-link">기간 저장</button>
+          </form>
+          {% if r.available_from or r.available_until %}
+          <form method="post" action="/admin/raids/period" class="admin-inline-form" onsubmit="return confirm('{{ r.name }} 운영 기간을 삭제할까요?');">
+            <input type="hidden" name="name" value="{{ r.name }}">
+            <button type="submit" class="admin-danger-link">기간 삭제</button>
+          </form>
+          {% endif %}
+        </div>
+      </details>
     </li>
     {% endfor %}
   </ul>
@@ -146,14 +200,17 @@
   {% else %}
   {% set diffs = raids[selected_raid].difficulties %}
   {% if diffs %}
-  <ul class="admin-list">
+  {{ reorder_bar("reorder-form-difficulties", "/admin/raids/difficulties/order", [("raid_name", selected_raid)]) }}
+  <ul class="admin-list" data-reorder-group data-reorder-form="#reorder-form-difficulties">
     {% for name, d in diffs.items() %}
-    <li class="admin-row">
+    <li class="admin-row" data-key="{{ name }}">
       <span class="admin-row-name">
+        <span class="admin-drag-handle" data-drag-handle title="드래그해서 순서 변경">⠿</span>
         {{ name }}
         <span class="admin-row-sub">Lv.{{ d.min_level }} · {{ d.total_slots }}인{% if d.party_split %} · {{ d.party_split }}인씩 분할{% endif %} · {{ d.gates }}관문</span>
       </span>
       <span class="admin-row-actions">
+        {{ move_buttons() }}
         <form method="post" action="/admin/raids/difficulties/delete" onsubmit="return confirm('{{ name }} 난이도를 삭제할까요?');">
           <input type="hidden" name="raid_name" value="{{ selected_raid }}">
           <input type="hidden" name="difficulty" value="{{ name }}">
@@ -198,4 +255,5 @@
 </div>
 {% endif %}
 </div>
+<script src="/static/admin-reorder.js?v={{ static_version }}"></script>
 {% endblock %}

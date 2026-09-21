@@ -46,6 +46,9 @@
 <p class="party-meta">{{ party.scheduled_time }} &middot; 최소 {{ party.min_level }}</p>
 {% if party.memo %}<p class="party-memo">{{ party.memo }}</p>{% endif %}
 
+{% if action_result and action_result.success and action_result.message %}
+<div class="flash-data" hidden data-type="success" data-message="{{ action_result.message }}"></div>
+{% endif %}
 {% if action_result and not action_result.success %}
 <div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
 {% endif %}
@@ -181,6 +184,19 @@
     <form method="post" action="/parties/{{ party.message_id }}/admin-revert-clear" onsubmit="return confirm('클리어를 취소하고 파티를 되돌릴까요? 파티원들의 이번 주 완료 체크도 함께 취소됩니다.');">
       <button type="submit" class="leader-btn">클리어 되돌리기</button>
     </form>
+    <div class="leader-group">
+      <span class="leader-group-label">스레드</span>
+      <form method="post" action="/parties/{{ party.message_id }}/admin-unlock" class="leader-form">
+        <button type="submit" class="leader-btn">스레드 잠금 해제</button>
+      </form>
+    </div>
+    <div class="leader-group">
+      <span class="leader-group-label">파티원 전체 DM</span>
+      <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" onsubmit="return confirm('파티원 전원에게 DM을 보낼까요?');">
+        <input type="text" name="content" maxlength="500" placeholder="보낼 내용" required>
+        <button type="submit" class="leader-btn">DM 보내기</button>
+      </form>
+    </div>
   </div>
   {% endif %}
 {% elif is_leader %}
@@ -279,6 +295,24 @@
       <button type="button" class="leader-btn-sm" data-adjust-minutes="1440">+1일</button>
     </div>
   </div>
+
+  {% if user.is_admin and user.admin_mode %}
+  <div class="leader-group">
+    <span class="leader-group-label">관리자 전용</span>
+    <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" onsubmit="return confirm('파티원 전원에게 DM을 보낼까요?');">
+      <input type="text" name="content" maxlength="500" placeholder="파티원 전체 DM 내용" required>
+      <button type="submit" class="leader-btn">DM 보내기</button>
+    </form>
+    <div class="leader-actions-row">
+      <form method="post" action="/parties/{{ party.message_id }}/admin-unlock">
+        <button type="submit" class="leader-btn">스레드 잠금 해제</button>
+      </form>
+      <form method="post" action="/parties/{{ party.message_id }}/admin-disband" onsubmit="return confirm('파티를 종료할까요? 스레드는 남고 클리어 체크는 되지 않습니다.');">
+        <button type="submit" class="leader-btn leader-btn-danger">파티 종료 (스레드 유지)</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
   {% if not viewing_as_admin %}
   <div class="leader-group leader-group-danger">

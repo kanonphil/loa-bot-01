@@ -4,9 +4,10 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import RedirectResponse
+from starlette.responses import PlainTextResponse, RedirectResponse
 from starlette.staticfiles import StaticFiles
 
 from webapp import config, guild_info, notification_store, party_events
@@ -107,6 +108,28 @@ app.include_router(admin.router)
 @app.exception_handler(NotAuthenticated)
 async def not_authenticated_handler(request, exc):
     return RedirectResponse("/login")
+
+
+@app.exception_handler(httpx.HTTPError)
+async def bot_unreachable_handler(request, exc):
+    """bot_client의 모든 호출이 raise_for_status()라 봇 서버가 죽거나 4xx/5xx를 주면
+    모든 페이지가 원시 500으로 떨어졌다 — 한 곳에서 받아 안내 페이지로 바꾼다.
+    봇이 403을 주는 경우는 로그인 뒤 관리자 목록에서 빠진 세션(is_admin이 세션에
+    고정돼 있음)이라 재로그인을 안내한다."""
+    status, title = 502, "봇 서버와 통신하지 못했습니다"
+    desc = "잠시 후 다시 시도해주세요. 계속 반복되면 관리자에게 알려주세요."
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 403:
+        status, title = 403, "관리자 권한이 없습니다"
+        desc = "권한이 바뀌었을 수 있습니다. 로그아웃 후 다시 로그인해주세요."
+    logger.warning("봇 서버 오류: %s %s → %r", request.method, request.url.path, exc)
+    if request.headers.get("HX-Request"):
+        return PlainTextResponse(title, status_code=status)
+    user = request.session.get("user") if "session" in request.scope else None
+    return templates.TemplateResponse(
+        request, "error.html",
+        {"user": user, "active": None, "title": title, "desc": desc},
+        status_code=status,
+    )
 
 
 @app.get("/health")

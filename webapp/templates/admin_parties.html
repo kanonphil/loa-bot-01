@@ -9,6 +9,31 @@
   공대는 실수로 처리했을 때 되돌리는 기능도 거기 있습니다.
 </p>
 
+{% if bot_status %}
+<div class="admin-status-card">
+  <span class="admin-status-dot{% if bot_status.is_online %} is-online{% endif %}"></span>
+  <b>봇 {{ "온라인" if bot_status.is_online else "오프라인" }}</b>
+  <span class="admin-status-meta">업타임 {{ bot_status.uptime_str }}</span>
+  {% if bot_status.latency_ms is not none %}<span class="admin-status-meta">지연 {{ bot_status.latency_ms }}ms</span>{% endif %}
+  <span class="ui-spacer"></span>
+  {{ ui.chip("유저 " ~ bot_status.user_count) }}
+  {{ ui.chip("진행 공대 " ~ bot_status.active_party_count) }}
+  {{ ui.chip("구독 " ~ bot_status.subscription_count) }}
+</div>
+{% endif %}
+
+{% if tab == "open" %}
+<div class="admin-stat-grid">
+  {{ ui.stat(counts.recruiting, "모집중") }}
+  {{ ui.stat(counts.full, "파티완성") }}
+  {{ ui.stat(counts.closed, "마감") }}
+  {{ ui.stat(counts.problem, "문제 공대", tone="danger") }}
+</div>
+{% if counts.problem %}
+<p class="admin-problem-banner">일정이 지났는데 아직 모집중/파티완성인 공대가 {{ counts.problem }}개 있습니다. 파티장이 클리어나 취소를 안 눌렀을 수 있으니 확인해주세요.</p>
+{% endif %}
+{% endif %}
+
 {% call ui.toolbar() %}
   {{ ui.filter_link("진행 중", "/admin/parties?tab=open", tab == "open", open_parties | length) }}
   {{ ui.filter_link("종료됨", "/admin/parties?tab=closed", tab == "closed", closed_parties | length) }}
@@ -35,10 +60,11 @@
   {% else %}
   <div class="ui-list" id="admin-open-list">
     {% for p in open_parties %}
-    {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.status_tone) %}
+    {% call ui.card(href="/parties/" ~ p.message_id, stripe=("danger" if p.is_problem else p.status_tone)) %}
       <div class="ui-row">
         <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
         {{ ui.chip(p.proficiency) }}
+        {% if p.is_problem %}{{ ui.chip("일정 지남", "danger") }}{% endif %}
         <span class="ui-spacer"></span>
         {{ ui.chip(p.status_label, p.status_tone) }}
       </div>
@@ -69,7 +95,12 @@
       </span>
       <span class="admin-row-actions">
         {{ ui.chip(p.status_label, p.status_tone) }}
-        {% if p.is_live %}{{ ui.chip("되돌리기 가능", "accent") }}{% else %}{{ ui.chip("기록만 남음", "") }}{% endif %}
+        {% if p.is_live %}
+        {{ ui.chip("되돌리기 가능", "accent") }}
+        <form method="post" action="/parties/{{ p.message_id }}/admin-unlock">
+          <button type="submit" class="admin-toggle-link" title="클리어로 잠긴 디스코드 스레드를 다시 엽니다">스레드 잠금 해제</button>
+        </form>
+        {% else %}{{ ui.chip("기록만 남음", "") }}{% endif %}
       </span>
     </li>
     {% endfor %}

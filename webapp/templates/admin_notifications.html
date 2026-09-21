@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<h1>알림·구독</h1>
+<p class="settings-desc">
+  디스코드 <code>/레이드구독</code>으로 등록된 구독 현황, 새 공대 알림 DM 발송 로그, 등록 유저 전원 공지 DM을 다룹니다.
+</p>
+
+{% if error %}
+<p class="admin-error">{{ error }}</p>
+{% endif %}
+
+{% call ui.toolbar() %}
+  {% for key, label in tabs %}
+  {{ ui.filter_link(label, "/admin/notifications?tab=" ~ key, key == tab) }}
+  {% endfor %}
+{% endcall %}
+
+{% if tab == "subscriptions" %}
+<div class="settings-card admin-card-wide">
+  {% if not groups %}
+  <p class="settings-desc">등록된 구독이 없습니다.</p>
+  {% else %}
+  <p class="settings-desc">총 {{ total_subscriptions }}건 &middot; 레이드별로 묶어서 보여줍니다. "전체"는 난이도 무관 구독입니다.</p>
+  {% for g in groups %}
+  <div class="admin-sub-group">
+    <p class="admin-sub-group-title">{{ g.raid_name }} {{ g.difficulty }} <span class="admin-row-sub">{{ g.subscribers | length }}명</span></p>
+    <div class="admin-sub-chips">
+      {% for s in g.subscribers %}{{ ui.chip(s.name, "", s.discord_id) }}{% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+{% elif tab == "logs" %}
+<div class="settings-card admin-card-wide">
+  {% if logs %}
+  <label class="raid-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+    <input type="search" class="js-list-filter" placeholder="레이드명 또는 디스코드 ID로 검색" aria-label="로그 검색" autocomplete="off"
+           data-filter-target="#admin-log-table" data-filter-item="tr.admin-log-row" data-filter-no-result="#admin-log-noresult">
+  </label>
+  <div class="admin-table-wrap">
+    <table class="admin-table" id="admin-log-table">
+      <thead><tr><th>발송 시각</th><th>받은 사람</th><th>레이드</th><th>난이도</th><th>공대</th></tr></thead>
+      <tbody>
+        {% for l in logs %}
+        <tr class="admin-log-row">
+          <td>{{ l.sent_at }}</td>
+          <td>{{ l.discord_id }}</td>
+          <td>{{ l.raid_name }}</td>
+          <td>{{ l.difficulty }}</td>
+          <td><a href="/parties/{{ l.message_id }}">열기</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="raid-picker-noresult" id="admin-log-noresult" hidden>검색 결과가 없습니다.</p>
+  {% else %}
+  <p class="settings-desc">발송 로그가 없습니다.</p>
+  {% endif %}
+</div>
+
+{% else %}
+<div class="settings-card admin-card">
+  {% if sent is not none %}
+  <p class="admin-problem-banner" style="border-color: rgba(94,214,122,0.4); background: var(--ok-soft); color: var(--ok);">
+    {{ total }}명 중 {{ sent }}명에게 DM을 보냈습니다. (DM을 막아둔 유저에게는 전달되지 않습니다)
+  </p>
+  {% endif %}
+  <p class="settings-desc">API 등록 유저 <b>{{ user_count }}명</b> 전원에게 디스코드 DM으로 공지를 보냅니다. 되돌릴 수 없으니 내용을 다시 확인해주세요.</p>
+  <form method="post" action="/admin/notifications/broadcast" class="admin-form"
+        onsubmit="return confirm('등록 유저 {{ user_count }}명 전원에게 DM을 보낼까요? 되돌릴 수 없습니다.');">
+    <label class="admin-field">
+      <span class="admin-field-label">공지 내용</span>
+      <textarea name="content" rows="5" maxlength="1500" required class="settings-select" style="height:auto" placeholder="예: 이번 주 수요일 점검 이후 공대 일정이 조정됩니다."></textarea>
+    </label>
+    <div class="admin-form-actions">
+      <button type="submit" class="settings-toggle-btn" data-busy-text="발송 중…">전원에게 보내기</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+</div>
+{% endblock %}

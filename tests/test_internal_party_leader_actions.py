@@ -350,3 +350,161 @@ def test_edit_difficulty_rejected_when_party_disbanded(client, fake_bot):
     body = resp.json()
     assert body["success"] is False
     assert "종료된 파티" in body["reason"]
+
+
+# ── 난이도 수정 — 정원 변경 연쇄 결함 회귀 (A1~A4) ───────────────────
+# 아르모체(4막)에 정원이 다른 난이도를 테스트 안에서 추가해 정원 확대/축소를 재현한다.
+
+def _add_difficulty(name: str, total_slots: int, min_level: int = 1700):
+    asyncio.run(db.add_difficulty("아르모체(4막)", name, min_level, total_slots, None, 2, 99))
+    asyncio.run(raids_module.reload())
+
+
+def _insert_slot(message_id: str, slot_number: int, discord_id: str, name: str):
+    import aiosqlite
+
+    async def run():
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                "INSERT INTO party_slots (party_message_id, slot_number, discord_id, character_name, character_class, role) "
+                "VALUES (?, ?, ?, ?, '워로드', 'dps')",
+                (message_id, slot_number, discord_id, name),
+            )
+            await conn.commit()
+
+    asyncio.run(run())
+
+
+def test_edit_difficulty_reopens_full_party_when_capacity_grows(client, fake_bot):
+    """2/2 완성 파티를 더 큰 정원으로 바꾸면 'full'이 풀려 다시 참여할 수 있어야 한다."""
+    _add_difficulty("확장", total_slots=4)
+    asyncio.run(
+        db.create_party(
+            message_id="1001", channel_id="557", guild_id="1", leader_id=LEADER_ID,
+            raid_name="아르모체(4막)", difficulty="노말", proficiency="숙련",
+            scheduled_time="05/20 20:00", scheduled_datetime="2026-05-20T20:00:00+09:00",
+            total_slots=2, min_level=1700,
+        )
+    )
+    asyncio.run(db.auto_assign_slot("1001", LEADER_ID, "워로드캐릭", "워로드", "dps", 2))
+    asyncio.run(db.auto_assign_slot("1001", MEMBER_ID, "발키리", "홀리나이트", "support", 2))
+    assert (asyncio.run(db.get_party("1001")))["status"] == "full"
+
+    resp = client.post(
+        "/api/internal/parties/1001/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "확장", "proficiency": "숙련"},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    party = asyncio.run(db.get_party("1001"))
+    assert party["total_slots"] == 4
+    assert party["status"] == "recruiting"
+
+
+def test_edit_difficulty_marks_full_when_capacity_shrinks_to_member_count(client, fake_bot):
+    _add_difficulty("소형", total_slots=2)
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "소형", "proficiency": "숙련"},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    assert (asyncio.run(db.get_party("999")))["status"] == "full"
+
+
+def test_edit_difficulty_rejects_when_member_sits_outside_new_capacity(client, fake_bot):
+    """인원 수는 맞아도 슬롯 번호가 새 정원을 넘으면(화면에서 사라지므로) 거부하고 누구인지 알려준다."""
+    _add_difficulty("소형", total_slots=2)
+    asyncio.run(db.leave_slot("999", MEMBER_ID))
+    _insert_slot("999", 7, MEMBER_ID, "발키리")
+
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "소형", "proficiency": "숙련"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "7번 슬롯 발키리" in body["reason"]
+    assert (asyncio.run(db.get_party("999")))["difficulty"] == "노말"
+
+
+def test_edit_difficulty_rejects_when_pending_invite_sits_outside_new_capacity(client, fake_bot):
+    _add_difficulty("소형", total_slots=2)
+    asyncio.run(db.leave_slot("999", MEMBER_ID))
+    asyncio.run(db.create_invite("999", "444", 6))
+
+    resp = client.post(
+        "/api/internal/parties/999/edit-difficulty",
+        json={"discord_id": LEADER_ID, "difficulty": "소형", "proficiency": "숙련"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "6번 슬롯 초대 대기" in body["reason"]
+
+
+def test_invite_rejects_slot_number_outside_capacity(client, fake_bot):
+    asyncio.run(db.set_user_api_key("444", "dummy-key-3"))
+    resp = client.post(
+        "/api/internal/parties/999/invite",
+        json={"discord_id": LEADER_ID, "target_discord_id": "444", "slot_number": 99},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "슬롯 번호는 1~8" in body["reason"]
+    assert asyncio.run(db.get_reserved_slots("999")) == {}
+
+
+# ── 관리자 전용: 파티 종료(스레드 유지) / 스레드 잠금 해제 / 파티원 DM ─────
+
+@pytest.fixture()
+def admin(monkeypatch):
+    import config
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"777"})
+    return "777"
+
+
+def test_admin_disband_keeps_party_row_and_marks_disbanded(client, fake_bot, admin):
+    _, fake_channel, _, _ = fake_bot
+    resp = client.post("/api/internal/admin/parties/999/disband", json={"discord_id": admin}, headers=HEADERS)
+    assert resp.json()["success"] is True
+    party = asyncio.run(db.get_party("999"))
+    assert party is not None and party["status"] == "disbanded"
+    assert not fake_channel.delete.called  # 취소와 달리 스레드는 남긴다
+    week = db.get_week_key_for_dt("2026-05-20T20:00:00+09:00")
+    assert asyncio.run(db.get_completions(LEADER_ID, "워로드캐릭", week)) == set()  # 클리어 체크 없음
+
+
+def test_admin_disband_rejects_leader_who_is_not_admin(client, fake_bot, admin):
+    resp = client.post("/api/internal/admin/parties/999/disband", json={"discord_id": LEADER_ID}, headers=HEADERS)
+    assert resp.json()["success"] is False
+    assert (asyncio.run(db.get_party("999")))["status"] == "recruiting"
+
+
+def test_admin_unlock_reopens_thread(client, fake_bot, admin):
+    _, fake_channel, _, _ = fake_bot
+    resp = client.post("/api/internal/admin/parties/999/unlock", json={"discord_id": admin}, headers=HEADERS)
+    assert resp.json()["success"] is True
+    fake_channel.edit.assert_awaited_with(archived=False, locked=False)
+
+
+def test_admin_notify_dms_every_member(client, fake_bot, admin):
+    _, _, _, fake_user = fake_bot
+    resp = client.post(
+        "/api/internal/admin/parties/999/notify",
+        json={"discord_id": admin, "content": "오늘 8시 집합"}, headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is True
+    assert body["sent"] == 2 and body["total"] == 2
+    assert fake_user.send.await_count == 2
+
+
+def test_admin_notify_rejects_empty_content(client, fake_bot, admin):
+    resp = client.post(
+        "/api/internal/admin/parties/999/notify",
+        json={"discord_id": admin, "content": "   "}, headers=HEADERS,
+    )
+    assert resp.json()["success"] is False

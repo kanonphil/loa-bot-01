@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<h1>통계</h1>
+<p class="settings-desc">주차별 클리어 현황과 서버 활동을 봅니다. 주차는 수요일 06:00 리셋 기준 시작일입니다.</p>
+
+{% call ui.toolbar() %}
+  {% for key, label in tabs %}
+  {{ ui.filter_link(label, "/admin/stats?tab=" ~ key, key == tab) }}
+  {% endfor %}
+{% endcall %}
+
+{% if tab == "clears" %}
+<div class="settings-card admin-card-wide">
+  <form method="get" action="/admin/stats" class="admin-table-actions">
+    <input type="hidden" name="tab" value="clears">
+    <span class="admin-inline-label">주차</span>
+    <select name="week_key" class="settings-select js-themed-select" onchange="this.form.submit()">
+      {% for w in weeks %}
+      <option value="{{ w }}" {% if w == week %}selected{% endif %}>{{ w }} 주{% if loop.first %} (이번 주){% endif %}</option>
+      {% endfor %}
+    </select>
+    <a class="admin-toggle-link" href="/admin/stats/export?kind=weekly&amp;week_key={{ week }}">레이드별 CSV</a>
+    <a class="admin-toggle-link" href="/admin/stats/export?kind=characters&amp;week_key={{ week }}">캐릭터별 CSV</a>
+  </form>
+
+  <h3 class="admin-group-title">레이드별 클리어</h3>
+  {% if not weekly %}
+  <p class="settings-desc">이 주차에 클리어 기록이 없습니다.</p>
+  {% else %}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>레이드</th><th>난이도</th><th class="num">클리어 수</th></tr></thead>
+      <tbody>
+        {% for r in weekly %}
+        <tr><td>{{ r.raid_name }}</td><td>{{ r.difficulty }}</td><td class="num">{{ r.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <h3 class="admin-group-title">캐릭터별 클리어</h3>
+  {% if not characters %}
+  <p class="settings-desc">이 주차에 클리어 기록이 없습니다.</p>
+  {% else %}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>원정대(대표 캐릭터)</th><th>캐릭터</th><th class="num">클리어 수</th></tr></thead>
+      <tbody>
+        {% for r in characters %}
+        <tr>
+          <td>{{ r.representative or r.discord_id }}</td>
+          <td><a href="/characters/{{ r.character_name | urlencode }}?discord_id={{ r.discord_id }}">{{ r.character_name }}</a></td>
+          <td class="num">{{ r.clears }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% else %}
+<div class="settings-card admin-card-wide">
+  <div class="admin-stat-grid">
+    {{ ui.stat(active_users, "파티 참여 유저") }}
+    {{ ui.stat((popular_raids[0].raid_name ~ " " ~ popular_raids[0].difficulty) if popular_raids else "-", "인기 레이드 1위") }}
+    {{ ui.stat(weekly_parties | sum(attribute="count"), "공대 생성 (최근 12주)") }}
+  </div>
+
+  <div class="admin-table-actions">
+    <span class="admin-inline-label">주차별 공대 생성 수</span>
+    <a class="admin-toggle-link" href="/admin/stats/export?kind=weekly_parties">CSV</a>
+  </div>
+  {% if not weekly_parties %}
+  <p class="settings-desc">아직 생성된 공대가 없습니다.</p>
+  {% else %}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>주차</th><th class="num">공대 수</th></tr></thead>
+      <tbody>
+        {% for r in weekly_parties %}<tr><td>{{ r.week }}</td><td class="num">{{ r.count }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="admin-table-actions">
+    <span class="admin-inline-label">인기 레이드 Top 10 (전체 기간)</span>
+    <a class="admin-toggle-link" href="/admin/stats/export?kind=popular_raids">CSV</a>
+  </div>
+  {% if not popular_raids %}
+  <p class="settings-desc">아직 생성된 공대가 없습니다.</p>
+  {% else %}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>#</th><th>레이드</th><th>난이도</th><th class="num">공대 수</th></tr></thead>
+      <tbody>
+        {% for r in popular_raids %}
+        <tr><td>{{ loop.index }}</td><td>{{ r.raid_name }}</td><td>{{ r.difficulty }}</td><td class="num">{{ r.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+</div>
+{% endblock %}

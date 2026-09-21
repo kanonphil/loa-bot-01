@@ -1,0 +1,22 @@
+<div class="admin-completion-grid" id="completion-grid">
+  <p class="settings-desc"><b>{{ grid.character_name }}</b> &middot; {{ grid.week_key }} 주 — 난이도를 눌러 완료/취소를 바꿉니다. 바로 저장됩니다.</p>
+  {% for r in grid.rows %}
+  <div class="admin-completion-row">
+    <span class="admin-completion-raid">{{ r.short_name }}</span>
+    <div class="admin-completion-diffs">
+      {% for d in r.difficulties %}
+      {% set is_done = (r.raid_name ~ "_" ~ d) in grid.done %}
+      <form hx-post="/admin/completions/toggle" hx-target="#completion-grid" hx-swap="outerHTML">
+        <input type="hidden" name="target_discord_id" value="{{ grid.target_discord_id }}">
+        <input type="hidden" name="character_name" value="{{ grid.character_name }}">
+        <input type="hidden" name="week_key" value="{{ grid.week_key }}">
+        <input type="hidden" name="raid_name" value="{{ r.raid_name }}">
+        <input type="hidden" name="difficulty" value="{{ d }}">
+        <input type="hidden" name="done" value="{{ '0' if is_done else '1' }}">
+        <button type="submit" class="raid-card-diff-toggle{% if is_done %} done{% endif %}">{{ d }}</button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>

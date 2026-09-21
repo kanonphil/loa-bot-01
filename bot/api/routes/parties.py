@@ -118,27 +118,17 @@ async def clear_party(message_id: str):
 
 @router.patch("/{message_id}/unlock")
 async def unlock_thread(message_id: str):
-  import discord as _discord
   from bot.api import bot_ref
+  from bot.ui.views import _unlock_party_thread
 
   party = await db.get_party(message_id)
   if not party:
     return {"success": False, "reason": "파티를 찾을 수 없습니다."}
-
   bot = bot_ref.get_bot()
   if not bot:
     return {"success": False, "reason": "봇이 준비되지 않았습니다."}
-
-  try:
-    channel = bot.get_channel(int(party["channel_id"]))
-    if channel is None:
-      channel = await bot.fetch_channel(int(party["channel_id"]))
-    await channel.edit(archived=False, locked=False)
-    return {"success": True}
-  except (_discord.NotFound, _discord.Forbidden):
-    return {"success": False, "reason": "채널을 찾을 수 없거나 권한이 없습니다."}
-  except _discord.HTTPException as e:
-    return {"success": False, "reason": str(e)}
+  ok, reason = await _unlock_party_thread(bot, party)
+  return {"success": ok, "reason": reason}
 
 
 # ── 파티 취소 (완전 삭제) ─────────────────────────────────

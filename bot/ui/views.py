@@ -200,6 +200,11 @@ async def _create_invite_core(
     if party["status"] == "disbanded":
         return {"success": False, "reason": "이미 종료된 파티입니다."}
 
+    # 웹 폼이 난이도 변경 전 상태로 남아 있거나 직접 POST하면 정원 밖 번호가 올 수 있다 —
+    # 정원 밖 슬롯에 들어간 사람은 임베드/웹 어디에도 안 그려지므로 여기서 막는다.
+    if not (1 <= slot_number <= party["total_slots"]):
+        return {"success": False, "reason": f"슬롯 번호는 1~{party['total_slots']} 사이여야 합니다."}
+
     slots = await db.get_party_slots(message_id)
     reserved = await db.get_reserved_slots(message_id)
     occupied = {s["slot_number"] for s in slots}
@@ -471,6 +476,80 @@ async def _clear_party_core(bot: discord.Client, message_id: str, discord_id: st
     return {"success": True, "reason": None, "cleared_count": count}
 
 
+async def _unlock_party_thread(bot: discord.Client, party: dict) -> tuple[bool, str | None]:
+    """클리어 처리로 잠긴/아카이브된 스레드를 다시 연다 — 관리자 API(parties.py)와 공유."""
+    try:
+        channel = bot.get_channel(int(party["channel_id"])) or await bot.fetch_channel(int(party["channel_id"]))
+        await channel.edit(archived=False, locked=False)
+        return True, None
+    except (discord.NotFound, discord.Forbidden):
+        return False, "채널을 찾을 수 없거나 권한이 없습니다."
+    except discord.HTTPException as e:
+        return False, str(e)
+
+
+async def _unlock_party_thread_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+    """스레드 잠금 해제 — 관리자 전용(관리자 앱의 🔓 잠금 해제). 클리어된 공대의
+    스레드를 파티장이 다시 쓸 수 있게 열어준다."""
+    err = _require_admin(discord_id)
+    if err:
+        return {"success": False, "reason": err}
+    party = await db.get_party(message_id)
+    if not party:
+        return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+    if not bot:
+        return {"success": False, "reason": "봇이 준비되지 않았습니다."}
+    ok, reason = await _unlock_party_thread(bot, party)
+    return {"success": ok, "reason": reason}
+
+
+async def _admin_disband_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+    """파티 종료(스레드 유지) — 관리자 전용(관리자 앱의 ⚫ 파티 종료). 취소(purge,
+    스레드 삭제)와 달리 상태만 '종료됨'으로 바꾸고 기록과 스레드는 남긴다."""
+    err = _require_admin(discord_id)
+    if err:
+        return {"success": False, "reason": err}
+    party = await db.get_party(message_id)
+    if not party:
+        return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+    if party["status"] == "disbanded":
+        return {"success": False, "reason": "이미 종료된 파티입니다."}
+
+    await db.disband_party(message_id)
+    updated = await db.get_party(message_id)
+    if bot and updated:
+        await _refresh_party_embed_with_reserved(bot, updated)
+        try:
+            channel = bot.get_channel(int(updated["channel_id"])) or await bot.fetch_channel(int(updated["channel_id"]))
+            await channel.send("⚫ 관리자가 이 파티를 종료했습니다.")
+        except Exception:
+            pass
+    return {"success": True}
+
+
+async def _admin_notify_party_core(
+    bot: discord.Client, message_id: str, discord_id: str, content: str,
+) -> dict:
+    """파티원 전체에게 수동 DM — 관리자 전용(관리자 앱의 📨 공지 DM)."""
+    from bot.services.broadcast import dm_party_members
+
+    err = _require_admin(discord_id)
+    if err:
+        return {"success": False, "reason": err}
+    content = (content or "").strip()
+    if not content:
+        return {"success": False, "reason": "보낼 내용을 입력해주세요."}
+    party = await db.get_party(message_id)
+    if not party:
+        return {"success": False, "reason": "파티를 찾을 수 없습니다."}
+    if not bot:
+        return {"success": False, "reason": "봇이 준비되지 않았습니다."}
+    sent, total = await dm_party_members(bot, message_id, content)
+    if total == 0:
+        return {"success": False, "reason": "파티원이 없습니다."}
+    return {"success": True, "sent": sent, "total": total}
+
+
 async def _admin_revert_clear_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
     """클리어 취소(되돌리기) — 관리자 전용. 실수로 클리어를 눌렀을 때 상태를 파티완성/
     모집중으로 되돌리고, 같이 기록된 파티원 전체의 레이드 완료 체크도 취소한다
@@ -672,6 +751,23 @@ async def _edit_party_difficulty_core(
         return {
             "success": False,
             "reason": f"현재 참여 인원({len(filled)}명)이 새 난이도의 정원({new_total_slots}명)보다 많습니다.",
+        }
+    # 인원 수가 맞아도 슬롯 "번호"가 새 정원을 넘으면 임베드/웹이 그 슬롯을 그리지 않아
+    # 참여자가 화면에서 사라진다(둘 다 1..total_slots만 그림). 재배치는 분할 파티(1파티/
+    # 2파티) 그룹 규칙과 충돌할 수 있어 하지 않고, 누가 몇 번인지 알려주며 거부한다.
+    slots = await db.get_party_slots(message_id)
+    reserved = await db.get_reserved_slots(message_id)
+    out_of_range = [
+        f"{s['slot_number']}번 슬롯 {s['character_name']}" for s in slots if s["slot_number"] > new_total_slots
+    ]
+    out_of_range += [f"{n}번 슬롯 초대 대기" for n in sorted(reserved) if n > new_total_slots]
+    if out_of_range:
+        return {
+            "success": False,
+            "reason": (
+                f"새 난이도의 정원({new_total_slots}명)을 벗어난 슬롯이 있습니다: {', '.join(out_of_range)} — "
+                "먼저 퇴장/이동시키거나 초대가 만료된 뒤 다시 시도해주세요."
+            ),
         }
     under_level = [f["character_name"] for f in filled if f["item_level"] is None or f["item_level"] < new_min_level]
     if under_level:
@@ -2270,10 +2366,15 @@ class PartyView(View):
         if not party or party["status"] == "disbanded":
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
-        if party["leader_id"] != str(interaction.user.id):
-            await interaction.response.send_message("파티장만 사용할 수 있습니다.", ephemeral=True)
+        # 패널 안의 모든 액션이 _require_leader_or_admin이라 진입도 같은 기준으로 —
+        # 이전엔 진입만 파티장 전용이라 관리자가 웹에서는 되고 디스코드에서는 안 됐다.
+        err = _require_leader_or_admin(party, str(interaction.user.id))
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
             return
-        view = ManageView(party, interaction.message, self.total_slots)
+        # self.total_slots는 봇 재시작 후 재등록된 영속 뷰에서는 기본값(8)이라 믿을 수 없다 —
+        # 항상 DB의 현재 정원을 쓴다(난이도 변경으로 정원이 바뀌었을 수도 있음).
+        view = ManageView(party, interaction.message, party["total_slots"])
         await interaction.response.send_message("⚙️ **공대 관리**", view=view, ephemeral=True)
         view._manage_interaction = interaction
 
@@ -2838,7 +2939,7 @@ class DifficultyEditView(View):
         if self.original_message:
             post_party = await db.get_party(self.party["message_id"])
             if post_party and post_party["status"] != "disbanded":
-                manage_view = ManageView(post_party, self.original_message, self.total_slots)
+                manage_view = ManageView(post_party, self.original_message, post_party["total_slots"])
                 await interaction.edit_original_response(
                     content=f"✅ 난이도/숙련도가 **{label}**로 변경되었습니다.", view=manage_view,
                 )
@@ -2890,7 +2991,7 @@ class KickSelectView(View):
         if self.original_message:
             post_party = await db.get_party(self.message_id)
             if post_party and post_party["status"] != "disbanded":
-                manage_view = ManageView(post_party, self.original_message, self.total_slots)
+                manage_view = ManageView(post_party, self.original_message, post_party["total_slots"])
                 await interaction.edit_original_response(
                     content=f"✅ **{char_name}**을(를) 강제 퇴장시켰습니다.",
                     view=manage_view,

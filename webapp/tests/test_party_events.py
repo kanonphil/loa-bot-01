@@ -45,6 +45,20 @@ def test_fingerprint_changes_when_slot_count_changes():
     assert fp1 != fp2
 
 
+def test_fingerprint_changes_when_schedule_or_difficulty_changes():
+    """인원수가 그대로여도 일정/난이도/메모/파티장이 바뀌면 열린 탭이 갱신돼야 한다."""
+    base = {**PARTY_A, "scheduled_datetime": "2026-05-20T20:00:00+09:00", "difficulty": "하드", "memo": None}
+    assert party_events._fingerprint([base]) != party_events._fingerprint([{**base, "scheduled_datetime": "2026-05-21T20:00:00+09:00"}])
+    assert party_events._fingerprint([base]) != party_events._fingerprint([{**base, "difficulty": "노말"}])
+    assert party_events._fingerprint([base]) != party_events._fingerprint([{**base, "memo": "음성 필수"}])
+    assert party_events._fingerprint([base]) != party_events._fingerprint([{**base, "leader_id": "222"}])
+
+
+def test_fingerprint_changes_on_one_in_one_out():
+    swapped = {**PARTY_A, "slots": [{"discord_id": "333", "is_guest": False}]}
+    assert party_events._fingerprint([PARTY_A]) != party_events._fingerprint([swapped])
+
+
 def test_fingerprint_stable_for_identical_input():
     assert party_events._fingerprint([PARTY_A, PARTY_B]) == party_events._fingerprint([PARTY_A, PARTY_B])
 

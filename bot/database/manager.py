@@ -500,6 +500,31 @@ async def get_user_api_key(discord_id: str) -> Optional[str]:
     return decrypt_api_key(row[0]) if row else None
 
 
+async def get_all_user_ids() -> list[str]:
+    """API 등록 유저 전원의 discord_id — 관리자 전체 공지 DM 대상."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT discord_id FROM users ORDER BY registered_at")
+        rows = await cur.fetchall()
+    return [r[0] for r in rows]
+
+
+async def get_stale_users(days: int = 14) -> list[dict]:
+    """캐릭터 동기화가 N일 이상 안 된 유저 — API 키 만료 의심 목록. 매일 04시
+    자동 동기화(account_sync_task)가 도는데도 cached_at이 안 움직이면 키가 죽은 것."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT u.discord_id, u.registered_at, MAX(uc.cached_at) AS last_sync "
+            "FROM users u LEFT JOIN user_characters uc ON u.discord_id = uc.discord_id "
+            "GROUP BY u.discord_id "
+            "HAVING last_sync IS NULL OR last_sync < datetime('now', ?) "
+            "ORDER BY last_sync ASC",
+            (f"-{days} days",),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def user_exists(discord_id: str) -> bool:
     """discord_id가 /api등록을 마쳐 users 테이블에 있는지만 확인 (복호화 없이 가볍게)."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -1650,11 +1675,23 @@ async def update_party_difficulty(
     message_id: str, difficulty: str, proficiency: str, total_slots: int, min_level: int
 ) -> None:
     """난이도/숙련도 변경 — 정원/레벨 요건도 새 난이도 기준으로 함께 갱신된다.
-    기존 슬롯 번호는 건드리지 않는다(재배치는 별도)."""
+    기존 슬롯 번호는 건드리지 않는다(범위를 벗어나는 슬롯은 호출부에서 미리 거부).
+    정원이 바뀌면 full/recruiting 상태도 같은 트랜잭션에서 다시 계산한다 — 안 그러면
+    8/8 완성 파티를 16인 난이도로 바꿔도 'full'이 남아 아무도 참여할 수 없었다
+    (상태를 full로 바꾸는 곳이 auto_assign_slot뿐이고 되돌리는 곳이 없었음)."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE parties SET difficulty=?, proficiency=?, total_slots=?, min_level=? WHERE message_id=?",
             (difficulty, proficiency, total_slots, min_level, message_id),
+        )
+        cur = await db.execute(
+            "SELECT COUNT(*) FROM party_slots WHERE party_message_id=?", (message_id,)
+        )
+        filled = (await cur.fetchone())[0]
+        new_status = "full" if filled >= total_slots else "recruiting"
+        await db.execute(
+            "UPDATE parties SET status=? WHERE message_id=? AND status IN ('recruiting', 'full')",
+            (new_status, message_id),
         )
         await db.commit()
 
@@ -1742,6 +1779,33 @@ async def get_guild_parties(guild_id: str) -> list[dict]:
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
+
+
+async def get_guild_parties_with_slots(guild_id: str) -> list[dict]:
+    """get_guild_parties + 각 파티의 슬롯을 쿼리 2번으로 가져온다. 파티마다
+    get_party_slots를 부르면 N+1인데, 이 목록은 웹앱이 10초마다 폴링하는 가장
+    뜨거운 경로라 파티 수만큼 쿼리가 늘어나는 걸 막는다."""
+    parties = await get_guild_parties(guild_id)
+    if not parties:
+        return []
+    ids = [p["message_id"] for p in parties]
+    placeholders = ",".join("?" * len(ids))
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT ps.*, (u.discord_id IS NULL) AS is_guest FROM party_slots ps "
+            "LEFT JOIN users u ON u.discord_id = ps.discord_id "
+            f"WHERE ps.party_message_id IN ({placeholders}) "
+            "ORDER BY ps.party_message_id, ps.slot_number",
+            ids,
+        )
+        rows = await cur.fetchall()
+    by_party: dict[str, list[dict]] = {mid: [] for mid in ids}
+    for r in rows:
+        row = dict(r)
+        row["is_guest"] = bool(row["is_guest"])
+        by_party[row["party_message_id"]].append(row)
+    return [{**p, "slots": by_party[p["message_id"]]} for p in parties]
 
 
 async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
@@ -1900,6 +1964,64 @@ async def remove_completion(
         )
         await db.commit()
         return cur.rowcount > 0
+
+
+async def get_weekly_clear_stats(week_key: str | None = None) -> list[dict]:
+    """주차별 레이드×난이도 클리어 수 — 관리자 통계(관리자 API·웹 공용)."""
+    week = week_key or get_week_key()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT raid_name, difficulty, COUNT(*) AS count "
+            "FROM raid_completions WHERE week_key=? "
+            "GROUP BY raid_name, difficulty ORDER BY count DESC",
+            (week,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_character_clear_stats(week_key: str | None = None) -> list[dict]:
+    """주차별 캐릭터별 클리어 수 — 관리자 통계(관리자 API·웹 공용)."""
+    week = week_key or get_week_key()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT discord_id, character_name, COUNT(*) AS clears "
+            "FROM raid_completions WHERE week_key=? "
+            "GROUP BY discord_id, character_name ORDER BY clears DESC",
+            (week,),
+        )
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+async def get_available_weeks(limit: int = 12) -> list[str]:
+    """클리어 기록이 있는 주차 키(최신순)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT DISTINCT week_key FROM raid_completions ORDER BY week_key DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cur.fetchall()
+    return [r[0] for r in rows]
+
+
+async def get_representative_names(discord_ids: list[str]) -> dict[str, str | None]:
+    """discord_id → 대표 캐릭터명. 관리자 화면(구독 현황/통계)에서 ID 대신 이름을 보여줄 때."""
+    ids = list(dict.fromkeys(discord_ids))
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "SELECT u.discord_id, "
+            f"{_REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative "
+            f"FROM users u WHERE u.discord_id IN ({placeholders})",
+            ids,
+        )
+        rows = await cur.fetchall()
+    return {r[0]: r[1] for r in rows}
 
 
 async def get_weekly_activity(guild_id: str) -> list[dict]:

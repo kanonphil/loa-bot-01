@@ -46,21 +46,8 @@ async def get_characters(discord_id: str):
 
 @router.get("/stale")
 async def get_stale_users(days: int = 28):
-  """캐릭터 동기화가 N일 이상 안 된 유저 (API 키 만료 의심)."""
-  async with aiosqlite.connect(db.DB_PATH) as conn:
-    conn.row_factory = aiosqlite.Row
-    cur = await conn.execute(
-      "SELECT u.discord_id, u.registered_at, "
-      "MAX(uc.cached_at) AS last_sync "
-      "FROM users u "
-      "LEFT JOIN user_characters uc ON u.discord_id = uc.discord_id "
-      "GROUP BY u.discord_id "
-      "HAVING last_sync IS NULL OR last_sync < datetime('now', ? ) "
-      "ORDER BY last_sync ASC",
-      (f"-{days} days",),
-    )
-    rows = await cur.fetchall()
-  return [dict(r) for r in rows]
+  """캐릭터 동기화가 N일 이상 안 된 유저 (API 키 만료 의심) — 웹 관리자 유저 목록과 같은 쿼리."""
+  return await db.get_stale_users(days)
 
 
 @router.get("/{discord_id}/history")

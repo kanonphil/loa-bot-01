@@ -331,6 +331,7 @@ async def party_detail(
     message_id: str,
     join_error: str | None = None,
     cancelled: bool = False,
+    notice_sent: int | None = None,
     user: dict = Depends(get_current_user),
 ):
     ctx = await _detail_context(
@@ -341,6 +342,8 @@ async def party_detail(
         action_result = {"success": False, "reason": join_error}
     elif cancelled:
         action_result = {"success": True}
+    elif notice_sent is not None:
+        action_result = {"success": True, "message": f"{notice_sent}명에게 DM을 보냈습니다."}
     else:
         action_result = None
     return templates.TemplateResponse(
@@ -569,3 +572,26 @@ async def admin_revert_clear(
     이 경로만 따로 막는다(다른 파티 액션들은 관리자·파티장 겸용이라 get_current_user)."""
     result = await bot_client.admin_revert_clear(message_id, user["discord_id"])
     return _redirect_with_result(message_id, result, "되돌리지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/admin-disband")
+async def admin_disband(request: Request, message_id: str, user: dict = Depends(require_admin)):
+    """파티 종료(스레드 유지) — 취소(스레드 삭제)와 구분되는 관리자 전용 액션."""
+    result = await bot_client.admin_disband_party(message_id, user["discord_id"])
+    return _redirect_with_result(message_id, result, "파티를 종료하지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/admin-unlock")
+async def admin_unlock(request: Request, message_id: str, user: dict = Depends(require_admin)):
+    result = await bot_client.admin_unlock_party(message_id, user["discord_id"])
+    return _redirect_with_result(message_id, result, "스레드 잠금을 해제하지 못했습니다.")
+
+
+@router.post("/parties/{message_id}/admin-notify")
+async def admin_notify(
+    request: Request, message_id: str, content: str = Form(...), user: dict = Depends(require_admin),
+):
+    result = await bot_client.admin_notify_party(message_id, user["discord_id"], content.strip())
+    if result.get("success"):
+        return RedirectResponse(f"/parties/{message_id}?notice_sent={result.get('sent', 0)}", status_code=303)
+    return _redirect_with_result(message_id, result, "DM을 보내지 못했습니다.")

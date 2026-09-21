@@ -24,10 +24,20 @@ _last_snapshot: dict[str, dict] | None = None
 
 
 def _fingerprint(parties: list[dict]) -> str:
-    key = "|".join(
-        f"{p['message_id']}:{p['status']}:{len(p.get('slots', []))}" for p in parties
-    )
-    return hashlib.sha1(key.encode()).hexdigest()
+    """상태·인원수만 보면 일정/난이도/메모/파티장/캐릭터 변경이 열린 탭에 반영되지
+    않았다(한 명 나가고 한 명 들어오면 인원수도 그대로). 화면에 보이는 필드와 슬롯
+    구성 전체를 지문에 넣는다."""
+    parts = []
+    for p in parties:
+        slots = ",".join(
+            f"{s.get('slot_number')}/{s.get('discord_id')}/{s.get('character_name')}/{s.get('role')}"
+            for s in p.get("slots", [])
+        )
+        parts.append(
+            f"{p['message_id']}:{p['status']}:{p.get('scheduled_datetime')}:{p.get('total_slots')}:"
+            f"{p.get('difficulty')}:{p.get('proficiency')}:{p.get('leader_id')}:{p.get('memo')}:{slots}"
+        )
+    return hashlib.sha1("|".join(parts).encode()).hexdigest()
 
 
 def _detect_notification_events(prev: dict[str, dict], current: dict[str, dict]) -> list[dict]:

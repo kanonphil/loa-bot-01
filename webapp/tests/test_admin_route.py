@@ -115,3 +115,107 @@ def test_add_category_failure_redirects_with_error(client, monkeypatch):
         )
     assert resp.status_code == 303
     assert "error=" in resp.headers["location"]
+
+
+# ── 순서 변경 / 카테고리 이동 / 운영 기간 ─────────────────────────────
+
+REORDER_CATEGORIES_URL = "http://bot-server.internal/api/internal/admin/categories/order"
+REORDER_RAIDS_URL = "http://bot-server.internal/api/internal/admin/raids/order"
+REORDER_DIFFICULTIES_URL = "http://bot-server.internal/api/internal/admin/difficulties/order"
+MOVE_CATEGORY_URL = "http://bot-server.internal/api/internal/admin/raids/move-category"
+PERIOD_URL = "http://bot-server.internal/api/internal/admin/raids/period"
+
+
+def _payload(route):
+    import json as _json
+    return _json.loads(route.calls[0].request.content)
+
+
+def _admin(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    log_in(client, discord_id="111")
+
+
+def test_raids_page_renders_reorder_controls(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        _mock_reads()
+        cats = client.get("/admin/raids?tab=categories")
+        raids = client.get("/admin/raids?tab=raids")
+    assert "data-reorder-group" in cats.text
+    assert 'action="/admin/raids/categories/order"' in cats.text
+    assert 'data-key="카제로스"' in cats.text
+    assert 'action="/admin/raids/order"' in raids.text
+    assert 'action="/admin/raids/move-category"' in raids.text
+    assert 'action="/admin/raids/period"' in raids.text
+    assert "admin-reorder.js" in raids.text
+
+
+def test_reorder_categories_posts_whole_array(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        route = respx.post(REORDER_CATEGORIES_URL).mock(return_value=httpx.Response(200, json={"success": True, "count": 2}))
+        resp = client.post("/admin/raids/categories/order", data={"order": '["군단장", "카제로스"]'})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/admin/raids?tab=categories"
+    assert _payload(route) == {"discord_id": "111", "order": ["군단장", "카제로스"]}
+
+
+def test_reorder_raids_posts_category_and_array(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        route = respx.post(REORDER_RAIDS_URL).mock(return_value=httpx.Response(200, json={"success": True, "count": 2}))
+        resp = client.post("/admin/raids/order", data={"category": "카제로스", "order": '["에기르", "아르모체(4막)"]'})
+    assert resp.status_code == 303
+    assert _payload(route) == {"discord_id": "111", "category": "카제로스", "order": ["에기르", "아르모체(4막)"]}
+
+
+def test_reorder_difficulties_redirects_back_to_raid(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        route = respx.post(REORDER_DIFFICULTIES_URL).mock(return_value=httpx.Response(200, json={"success": True, "count": 2}))
+        resp = client.post("/admin/raids/difficulties/order", data={"raid_name": "아르모체(4막)", "order": '["하드", "노말"]'})
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/admin/raids?tab=difficulties&raid=")
+    assert _payload(route)["order"] == ["하드", "노말"]
+
+
+def test_reorder_with_bad_json_sends_empty_array(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        route = respx.post(REORDER_CATEGORIES_URL).mock(return_value=httpx.Response(200, json={"success": False}))
+        resp = client.post("/admin/raids/categories/order", data={"order": "not json"})
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert _payload(route)["order"] == []
+
+
+def test_move_raid_category_forwards(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        route = respx.post(MOVE_CATEGORY_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/admin/raids/move-category", data={"name": "아르모체(4막)", "category": "군단장"})
+    assert resp.status_code == 303
+    assert _payload(route) == {"discord_id": "111", "name": "아르모체(4막)", "category": "군단장"}
+
+
+def test_set_raid_period_converts_datetime_local_to_kst_iso(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        route = respx.post(PERIOD_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/admin/raids/period",
+                           data={"name": "아르모체(4막)", "available_from": "2026-09-01T06:00", "available_until": "2026-09-30T06:00"})
+    assert resp.status_code == 303
+    body = _payload(route)
+    assert body["available_from"] == "2026-09-01T06:00:00+09:00"
+    assert body["available_until"] == "2026-09-30T06:00:00+09:00"
+
+
+def test_clear_raid_period_sends_nulls(client, monkeypatch):
+    with respx.mock:
+        _admin(client, monkeypatch)
+        route = respx.post(PERIOD_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/admin/raids/period", data={"name": "아르모체(4막)"})
+    assert resp.status_code == 303
+    body = _payload(route)
+    assert body["available_from"] is None and body["available_until"] is None

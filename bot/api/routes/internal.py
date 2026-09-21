@@ -284,12 +284,8 @@ async def create_party(body: CreatePartyBody):
 
 @router.get("/parties")
 async def parties(guild_id: str):
-  result = await db.get_guild_parties(guild_id)
-  out = []
-  for party in result:
-    slots = await db.get_party_slots(party["message_id"])
-    out.append({**party, "slots": slots})
-  return out
+  # 웹앱이 10초마다 폴링하는 경로 — 파티마다 슬롯을 따로 조회하던 N+1을 없앴다.
+  return await db.get_guild_parties_with_slots(guild_id)
 
 
 @router.get("/parties/calendar")
@@ -845,6 +841,96 @@ async def admin_set_category_extreme(body: AdminCategoryExtremeBody):
   return {"success": updated}
 
 
+# 순서 변경은 "최종 배열 통째로" 저장한다 — 드래그 정렬 UI는 최종 배열을 만들기 때문에
+# 항목마다 숫자를 따로 보내면 중간 상태가 저장돼 순서가 깨진다(관리자 API의 PUT
+# /api/raids/order와 같은 설계, 같은 db 함수).
+
+class AdminOrderBody(BaseModel):
+  discord_id: str
+  order: list[str]
+
+
+@router.post("/admin/categories/order")
+async def admin_reorder_categories(body: AdminOrderBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  count = await db.reorder_categories(body.order)
+  await raids_module.reload()
+  return {"success": count > 0, "count": count}
+
+
+class AdminRaidOrderBody(BaseModel):
+  discord_id: str
+  category: str
+  order: list[str]
+
+
+@router.post("/admin/raids/order")
+async def admin_reorder_raids(body: AdminRaidOrderBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  count = await db.reorder_raids(body.category, body.order)
+  await raids_module.reload()
+  return {"success": count > 0, "count": count}
+
+
+class AdminDifficultyOrderBody(BaseModel):
+  discord_id: str
+  raid_name: str
+  order: list[str]
+
+
+@router.post("/admin/difficulties/order")
+async def admin_reorder_difficulties(body: AdminDifficultyOrderBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  count = await db.reorder_difficulties(body.raid_name, body.order)
+  await raids_module.reload()
+  return {"success": count > 0, "count": count}
+
+
+class AdminRaidCategoryBody(BaseModel):
+  discord_id: str
+  name: str
+  category: str
+
+
+@router.post("/admin/raids/move-category")
+async def admin_move_raid_category(body: AdminRaidCategoryBody):
+  """레이드를 다른 카테고리로 이동(그 카테고리 맨 뒤에 붙는다)."""
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  cats = {c["name"] for c in await db.get_categories()}
+  if body.category not in cats:
+    return {"success": False, "reason": f"{body.category} 카테고리가 없습니다."}
+  updated = await db.move_raid_category(body.name, body.category)
+  await raids_module.reload()
+  return {"success": updated}
+
+
+class AdminRaidPeriodBody(BaseModel):
+  discord_id: str
+  name: str
+  available_from: str | None = None
+  available_until: str | None = None
+
+
+@router.post("/admin/raids/period")
+async def admin_set_raid_period(body: AdminRaidPeriodBody):
+  """익스트림 레이드 운영 기간 — 둘 다 비우면 기간 삭제. 디스코드 /관리 레이드기간설정과
+  같은 db 함수라 저장 형식(KST 오프셋 붙은 ISO)도 호출부(웹앱)에서 맞춰 보낸다."""
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  updated = await db.set_raid_period(body.name, body.available_from or None, body.available_until or None)
+  await raids_module.reload()
+  return {"success": updated}
+
+
 class AdminRaidBody(BaseModel):
   discord_id: str
   name: str
@@ -1003,11 +1089,7 @@ async def admin_list_parties(guild_id: str, discord_id: str):
   if err:
     raise HTTPException(status_code=403, detail=err)
 
-  open_parties = await db.get_guild_parties(guild_id)
-  open_out = []
-  for p in open_parties:
-    slots = await db.get_party_slots(p["message_id"])
-    open_out.append({**p, "slots": slots})
+  open_out = await db.get_guild_parties_with_slots(guild_id)
 
   closed_parties = await db.get_disbanded_parties(guild_id, limit=100)
   closed_out = []
@@ -1035,6 +1117,36 @@ async def admin_revert_clear(message_id: str, body: AdminPartyActionBody):
   return await _admin_revert_clear_core(bot_ref.get_bot(), message_id, body.discord_id)
 
 
+@router.post("/admin/parties/{message_id}/disband")
+async def admin_disband_party(message_id: str, body: AdminPartyActionBody):
+  """파티 종료(스레드 유지) — 취소(purge)와 구분되는 관리자 앱의 ⚫ 파티 종료."""
+  from bot.api import bot_ref
+  from bot.ui.views import _admin_disband_party_core
+
+  return await _admin_disband_party_core(bot_ref.get_bot(), message_id, body.discord_id)
+
+
+@router.post("/admin/parties/{message_id}/unlock")
+async def admin_unlock_party(message_id: str, body: AdminPartyActionBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _unlock_party_thread_core
+
+  return await _unlock_party_thread_core(bot_ref.get_bot(), message_id, body.discord_id)
+
+
+class AdminNotifyPartyBody(BaseModel):
+  discord_id: str
+  content: str
+
+
+@router.post("/admin/parties/{message_id}/notify")
+async def admin_notify_party(message_id: str, body: AdminNotifyPartyBody):
+  from bot.api import bot_ref
+  from bot.ui.views import _admin_notify_party_core
+
+  return await _admin_notify_party_core(bot_ref.get_bot(), message_id, body.discord_id, body.content)
+
+
 # ── 유저 관리 (Electron 관리자 앱 전용이던 기능을 웹에도 노출) ────────
 # 관리자 API(/api/users, ADMIN_API_KEY)와 데이터/로직은 같지만, 웹앱에는 그 키를
 # 주지 않으므로 X-Webapp-Key + _require_admin 재검증으로 별도 노출한다.
@@ -1051,7 +1163,8 @@ async def admin_list_users(discord_id: str, guild_id: str | None = None, q: str 
     conn.row_factory = aiosqlite.Row
     cur = await conn.execute(
       "SELECT u.discord_id, u.registered_at, "
-      f"{db._REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative "
+      f"{db._REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative, "
+      "(SELECT MAX(uc.cached_at) FROM user_characters uc WHERE uc.discord_id=u.discord_id) AS last_sync "
       "FROM users u ORDER BY u.registered_at DESC"
     )
     users = [dict(r) for r in await cur.fetchall()]
@@ -1105,3 +1218,132 @@ async def admin_delete_user(target_discord_id: str, body: AdminDeleteUserBody):
     return {"success": False, "reason": err}
   await db.delete_user(target_discord_id)
   return {"success": True}
+
+
+# ── 관리자: 통계 / 구독·알림 / 클리어 편집 / 봇 상태 (관리자 앱에만 있던 화면) ─────
+# 조회는 관리자가 아니면 403, 쓰기는 {"success": False, "reason": ...} — 이 파일의
+# 다른 관리자 라우트와 같은 규칙.
+
+def _admin_or_403(discord_id: str) -> None:
+  err = _require_admin(discord_id)
+  if err:
+    raise HTTPException(status_code=403, detail=err)
+
+
+@router.get("/admin/stats/weekly")
+async def admin_stats_weekly(discord_id: str, week_key: str | None = None):
+  _admin_or_403(discord_id)
+  week = week_key or db.get_week_key()
+  return {"week_key": week, "data": await db.get_weekly_clear_stats(week)}
+
+
+@router.get("/admin/stats/characters")
+async def admin_stats_characters(discord_id: str, week_key: str | None = None):
+  _admin_or_403(discord_id)
+  week = week_key or db.get_week_key()
+  rows = await db.get_character_clear_stats(week)
+  names = await db.get_representative_names([r["discord_id"] for r in rows])
+  for r in rows:
+    r["representative"] = names.get(r["discord_id"])
+  return {"week_key": week, "data": rows}
+
+
+@router.get("/admin/stats/weeks")
+async def admin_stats_weeks(discord_id: str):
+  _admin_or_403(discord_id)
+  weeks = await db.get_available_weeks()
+  current = db.get_week_key()
+  if current not in weeks:
+    weeks.insert(0, current)
+  return {"current": current, "weeks": weeks}
+
+
+@router.get("/admin/stats/activity")
+async def admin_stats_activity(discord_id: str, guild_id: str):
+  _admin_or_403(discord_id)
+  return {
+    "weekly_parties": await db.get_weekly_activity(guild_id),
+    "popular_raids":  await db.get_popular_raids(guild_id),
+    "active_users":   await db.get_active_users(guild_id),
+  }
+
+
+@router.get("/admin/subscriptions")
+async def admin_subscriptions(discord_id: str):
+  _admin_or_403(discord_id)
+  subs = await db.get_all_subscriptions()
+  names = await db.get_representative_names([s["discord_id"] for s in subs])
+  for s in subs:
+    s["representative"] = names.get(s["discord_id"])
+  return subs
+
+
+@router.get("/admin/notification-logs")
+async def admin_notification_logs(discord_id: str, limit: int = 200):
+  _admin_or_403(discord_id)
+  return await db.get_notification_logs(limit)
+
+
+class AdminBroadcastBody(BaseModel):
+  discord_id: str
+  content: str
+
+
+@router.post("/admin/notify-all")
+async def admin_notify_all(body: AdminBroadcastBody):
+  """등록 유저 전원 공지 DM — 관리자 앱의 📢 전체 공지."""
+  from bot.api import bot_ref
+  from bot.services.broadcast import dm_all_users
+
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  content = body.content.strip()
+  if not content:
+    return {"success": False, "reason": "보낼 내용을 입력해주세요."}
+  bot = bot_ref.get_bot()
+  if not bot:
+    return {"success": False, "reason": "봇이 준비되지 않았습니다."}
+  sent, total = await dm_all_users(bot, content)
+  return {"success": True, "sent": sent, "total": total}
+
+
+@router.get("/admin/completions")
+async def admin_completions(discord_id: str, target_discord_id: str, character_name: str, week_key: str | None = None):
+  """다른 유저의 특정 주차 클리어 목록 — 셀프서비스 /completions는 이번 주만 보고
+  관리자 검증도 없어서, 과거 주차까지 편집하는 관리자 화면용으로 따로 둔다."""
+  _admin_or_403(discord_id)
+  week = week_key or db.get_week_key()
+  done = await db.get_completions(target_discord_id, character_name, week)
+  return {"week_key": week, "completions": sorted(done)}
+
+
+class AdminSetCompletionBody(BaseModel):
+  discord_id: str
+  target_discord_id: str
+  character_name: str
+  raid_name: str
+  difficulty: str
+  week_key: str
+  done: bool
+
+
+@router.post("/admin/completions/set")
+async def admin_set_completion(body: AdminSetCompletionBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  if body.done:
+    await db.add_completion(body.target_discord_id, body.character_name, body.raid_name, body.difficulty, body.week_key)
+  else:
+    await db.remove_completion(body.target_discord_id, body.character_name, body.raid_name, body.difficulty, body.week_key)
+  return {"success": True, "done": body.done}
+
+
+@router.get("/admin/status")
+async def admin_status(discord_id: str):
+  """봇 온라인/업타임/지연/유저·공대·구독 수 — 재시작은 의도적으로 노출하지 않는다."""
+  from bot.api.status_info import collect_status
+
+  _admin_or_403(discord_id)
+  return await collect_status()

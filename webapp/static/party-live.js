@@ -1,6 +1,6 @@
 (function () {
   var path = window.location.pathname;
-  var isRelevant = path === "/main" || path === "/parties" || path === "/calendar";
+  var isRelevant = path === "/main" || path === "/parties" || path === "/calendar" || path === "/admin/parties";
   if (!isRelevant) return;
 
   var source = new EventSource("/events/parties");

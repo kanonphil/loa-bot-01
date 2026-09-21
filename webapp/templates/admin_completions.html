@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block content %}
+<div class="page-content">
+<h1>클리어 관리</h1>
+<p class="settings-desc">
+  다른 유저의 레이드 클리어 체크를 대신 고칩니다. 과거 주차도 고를 수 있습니다 — 파티장이 클리어를 안 눌렀거나 잘못 눌렀을 때 쓰세요.
+</p>
+
+<div class="settings-card admin-card-wide">
+  <form method="get" action="/admin/completions" class="admin-form-grid">
+    <label class="admin-field">
+      <span class="admin-field-label">유저</span>
+      <select name="target_discord_id" class="settings-select js-themed-select" onchange="this.form.submit()">
+        <option value="">유저 선택…</option>
+        {% for u in users %}
+        <option value="{{ u.discord_id }}" {% if u.discord_id == target_discord_id %}selected{% endif %}>{{ u.representative or u.discord_nick or u.discord_id }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if target_discord_id %}
+    <label class="admin-field">
+      <span class="admin-field-label">캐릭터</span>
+      <select name="character_name" class="settings-select js-themed-select" onchange="this.form.submit()">
+        <option value="">캐릭터 선택…</option>
+        {% for c in characters %}
+        <option value="{{ c.character_name }}" {% if c.character_name == character_name %}selected{% endif %}>{{ c.character_name }} ({{ c.character_class or "?" }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="admin-field">
+      <span class="admin-field-label">주차</span>
+      <select name="week_key" class="settings-select js-themed-select" onchange="this.form.submit()">
+        {% for w in weeks %}
+        <option value="{{ w }}" {% if w == week %}selected{% endif %}>{{ w }} 주{% if loop.first %} (이번 주){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+  </form>
+
+  {% if grid %}
+  {% include "_admin_completion_grid.html" %}
+  {% elif target_discord_id %}
+  {% if characters %}
+  <p class="settings-desc">캐릭터를 선택해주세요.</p>
+  {% else %}
+  <p class="settings-desc">이 유저는 등록된 캐릭터가 없습니다.</p>
+  {% endif %}
+  {% else %}
+  <p class="settings-desc">먼저 유저를 선택해주세요.</p>
+  {% endif %}
+</div>
+</div>
+{% endblock %}

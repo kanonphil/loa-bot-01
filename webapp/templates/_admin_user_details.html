@@ -7,7 +7,7 @@
     {% else %}
     <ul class="admin-user-char-list">
       {% for c in characters %}
-      <li>{{ c.character_name }} <span class="admin-row-sub">{{ c.character_class or "?" }} &middot; {{ c.item_level or "?" }}</span></li>
+      <li>{{ c.character_name }} <span class="admin-row-sub">{{ c.character_class or "?" }} &middot; {% if c.item_level %}{{ c.item_level }}{% else %}미동기화{% endif %}</span></li>
       {% endfor %}
     </ul>
     {% endif %}

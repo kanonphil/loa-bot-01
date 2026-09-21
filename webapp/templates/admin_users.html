@@ -8,6 +8,8 @@
 </p>
 
 {% call ui.toolbar() %}
+  {{ ui.filter_link("전체", "/admin/users", filter == "all", total_count) }}
+  {{ ui.filter_link("API 만료 의심", "/admin/users?filter=stale", filter == "stale", stale_count) }}
   {% if users %}
   <label class="raid-search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
@@ -20,7 +22,11 @@
 
 <div class="settings-card admin-card">
 {% if not users %}
+{% if filter == "stale" %}
+{{ ui.empty("동기화가 " ~ stale_days ~ "일 이상 멈춘 유저가 없습니다", icon="👤") }}
+{% else %}
 {{ ui.empty("등록된 유저가 없습니다", icon="👤") }}
+{% endif %}
 {% else %}
 <ul class="admin-list" id="admin-users-list">
   {% for u in users %}
@@ -29,7 +35,13 @@
       {{ u.representative or u.discord_nick or u.discord_id }}
       <span class="admin-row-sub">
         {% if u.discord_nick and u.discord_nick != u.representative %}{{ u.discord_nick }} &middot; {% endif %}{{ u.discord_id }}
+        {% if u.registered_at %} &middot; 가입 {{ u.registered_at[:10] }}{% endif %}
       </span>
+      {% if u.sync_age_days is none %}
+      {{ ui.chip("동기화 기록 없음", "danger") }}
+      {% elif u.is_stale %}
+      {{ ui.chip(u.sync_age_days ~ "일 동기화 안 됨", "warn") }}
+      {% endif %}
     </span>
     <span class="admin-row-actions">
       <button type="button" class="admin-toggle-link"

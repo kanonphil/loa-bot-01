@@ -104,3 +104,39 @@ def test_admin_delete_user_shows_error_on_failure(client, monkeypatch):
 
     assert resp.status_code == 303
     assert "error=" in resp.headers["location"]
+
+
+# ── 가입일 / API 만료 의심 ──────────────────────────────────────
+
+def test_admin_user_list_shows_registered_date_and_stale_chip(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    users = [
+        {"discord_id": "222", "registered_at": "2026-05-01T00:00:00", "representative": "메인캐릭", "last_sync": "2026-05-02 04:00:00"},
+        {"discord_id": "333", "registered_at": "2026-05-02T00:00:00", "representative": "최신캐릭", "last_sync": None},
+    ]
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(USERS_URL).mock(return_value=httpx.Response(200, json=users))
+        resp = client.get("/admin/users")
+        stale = client.get("/admin/users?filter=stale")
+    assert "가입 2026-05-01" in resp.text
+    assert "일 동기화 안 됨" in resp.text
+    assert "동기화 기록 없음" in resp.text
+    assert "API 만료 의심" in resp.text
+    assert "메인캐릭" in stale.text and "최신캐릭" in stale.text
+
+
+def test_admin_user_stale_filter_hides_fresh_users(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    from datetime import datetime, timezone
+    fresh = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    users = [
+        {"discord_id": "222", "registered_at": "2026-05-01T00:00:00", "representative": "방금동기화", "last_sync": fresh},
+        {"discord_id": "333", "registered_at": "2026-05-02T00:00:00", "representative": "오래됨", "last_sync": "2026-01-01 00:00:00"},
+    ]
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(USERS_URL).mock(return_value=httpx.Response(200, json=users))
+        resp = client.get("/admin/users?filter=stale")
+    assert "오래됨" in resp.text
+    assert "방금동기화" not in resp.text

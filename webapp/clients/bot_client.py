@@ -716,6 +716,31 @@ async def admin_delete_difficulty(discord_id: str, raid_name: str, difficulty: s
     return await _admin_post("difficulties/delete", discord_id, raid_name=raid_name, difficulty=difficulty)
 
 
+async def admin_reorder_categories(discord_id: str, order: list[str]) -> dict:
+    return await _admin_post("categories/order", discord_id, order=order)
+
+
+async def admin_reorder_raids(discord_id: str, category: str, order: list[str]) -> dict:
+    return await _admin_post("raids/order", discord_id, category=category, order=order)
+
+
+async def admin_reorder_difficulties(discord_id: str, raid_name: str, order: list[str]) -> dict:
+    return await _admin_post("difficulties/order", discord_id, raid_name=raid_name, order=order)
+
+
+async def admin_move_raid_category(discord_id: str, name: str, category: str) -> dict:
+    return await _admin_post("raids/move-category", discord_id, name=name, category=category)
+
+
+async def admin_set_raid_period(
+    discord_id: str, name: str, available_from: str | None, available_until: str | None,
+) -> dict:
+    return await _admin_post(
+        "raids/period", discord_id, name=name,
+        available_from=available_from, available_until=available_until,
+    )
+
+
 async def admin_add_class(discord_id: str, name: str, is_support: bool) -> dict:
     return await _admin_post("classes/add", discord_id, name=name, is_support=is_support)
 
@@ -750,6 +775,29 @@ async def admin_revert_clear(message_id: str, discord_id: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+async def _admin_party_post(message_id: str, action: str, discord_id: str, **extra) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/parties/{message_id}/{action}",
+        json={"discord_id": discord_id, **extra},
+        headers=_headers(),
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_disband_party(message_id: str, discord_id: str) -> dict:
+    return await _admin_party_post(message_id, "disband", discord_id)
+
+
+async def admin_unlock_party(message_id: str, discord_id: str) -> dict:
+    return await _admin_party_post(message_id, "unlock", discord_id)
+
+
+async def admin_notify_party(message_id: str, discord_id: str, content: str) -> dict:
+    return await _admin_party_post(message_id, "notify", discord_id, content=content)
 
 
 # ── 관리자 (유저 관리 — Electron 관리자 앱에만 있던 기능을 웹에도 노출) ───
@@ -796,3 +844,80 @@ async def admin_delete_user(discord_id: str, target_discord_id: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ── 관리자 (통계 / 구독·알림 / 클리어 편집 / 봇 상태) ─────────────────
+
+async def _admin_get(path: str, discord_id: str, **params) -> object:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/{path}",
+        params={"discord_id": discord_id, **{k: v for k, v in params.items() if v is not None}},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_stats_weekly(discord_id: str, week_key: str | None = None) -> dict:
+    return await _admin_get("stats/weekly", discord_id, week_key=week_key)
+
+
+async def admin_stats_characters(discord_id: str, week_key: str | None = None) -> dict:
+    return await _admin_get("stats/characters", discord_id, week_key=week_key)
+
+
+async def admin_stats_weeks(discord_id: str) -> dict:
+    return await _admin_get("stats/weeks", discord_id)
+
+
+async def admin_stats_activity(discord_id: str, guild_id: str) -> dict:
+    return await _admin_get("stats/activity", discord_id, guild_id=guild_id)
+
+
+async def admin_subscriptions(discord_id: str) -> list[dict]:
+    return await _admin_get("subscriptions", discord_id)
+
+
+async def admin_notification_logs(discord_id: str, limit: int = 200) -> list[dict]:
+    return await _admin_get("notification-logs", discord_id, limit=limit)
+
+
+async def admin_notify_all(discord_id: str, content: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/notify-all",
+        json={"discord_id": discord_id, "content": content},
+        headers=_headers(),
+        timeout=60,  # 유저 수만큼 DM을 보내므로 다른 호출보다 오래 걸린다
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_completions(discord_id: str, target_discord_id: str, character_name: str, week_key: str | None) -> dict:
+    return await _admin_get(
+        "completions", discord_id,
+        target_discord_id=target_discord_id, character_name=character_name, week_key=week_key,
+    )
+
+
+async def admin_set_completion(
+    discord_id: str, target_discord_id: str, character_name: str,
+    raid_name: str, difficulty: str, week_key: str, done: bool,
+) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/completions/set",
+        json={
+            "discord_id": discord_id, "target_discord_id": target_discord_id,
+            "character_name": character_name, "raid_name": raid_name,
+            "difficulty": difficulty, "week_key": week_key, "done": done,
+        },
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def admin_status(discord_id: str) -> dict:
+    return await _admin_get("status", discord_id)

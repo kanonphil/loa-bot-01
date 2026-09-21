@@ -17,6 +17,8 @@ INVITABLE_USERS_URL = "http://bot-server.internal/api/internal/parties/p1/invita
 CLOSE_URL = "http://bot-server.internal/api/internal/parties/p1/close"
 REVERT_URL = "http://bot-server.internal/api/internal/admin/parties/p1/revert-clear"
 ADMIN_PARTIES_URL = "http://bot-server.internal/api/internal/admin/parties"
+ADMIN_STATUS_URL = "http://bot-server.internal/api/internal/admin/status"
+BOT_STATUS = {"is_online": True, "uptime_str": "1시간 2분 3초", "user_count": 22, "active_party_count": 3, "subscription_count": 10, "latency_ms": 41.2}
 
 RAIDS = {
     "아르모체(4막)": {
@@ -185,6 +187,7 @@ def test_admin_parties_page_shows_open_and_closed_tabs(client, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
     with respx.mock:
         log_in(client, discord_id="999")
+        respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
         respx.get(ADMIN_PARTIES_URL).mock(
             return_value=httpx.Response(200, json={
                 "open": [PARTY],
@@ -207,9 +210,104 @@ def test_admin_parties_page_hides_search_when_tab_is_empty(client, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
     with respx.mock:
         log_in(client, discord_id="999")
+        respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
         respx.get(ADMIN_PARTIES_URL).mock(
             return_value=httpx.Response(200, json={"open": [], "closed": []})
         )
         resp = client.get("/admin/parties")
 
     assert "js-list-filter" not in resp.text
+
+
+# ── 상태 카드 / 문제 공대 / 종료 / 잠금 해제 / 파티원 DM ──────────────
+
+DISBAND_URL = "http://bot-server.internal/api/internal/admin/parties/p1/disband"
+UNLOCK_URL = "http://bot-server.internal/api/internal/admin/parties/p1/unlock"
+NOTIFY_URL = "http://bot-server.internal/api/internal/admin/parties/p1/notify"
+
+
+def _admin_login(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
+    log_in(client, discord_id="999")
+    client.post("/admin/toggle-mode")
+
+
+def test_admin_parties_page_shows_status_cards_and_flags_overdue(client, monkeypatch):
+    upcoming = {**PARTY, "scheduled_datetime": "2099-05-20T20:00:00+09:00"}
+    overdue = {**PARTY, "message_id": "p2", "scheduled_datetime": "2020-01-01T20:00:00+09:00", "status": "full"}
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_PARTIES_URL).mock(
+            return_value=httpx.Response(200, json={"open": [upcoming, overdue], "closed": []})
+        )
+        resp = client.get("/admin/parties")
+    body = resp.text
+    assert "문제 공대" in body
+    assert "일정 지남" in body
+    assert "일정이 지났는데 아직 모집중/파티완성인 공대가 1개" in body
+
+
+def test_admin_parties_closed_tab_offers_unlock_for_live_party(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        respx.get(ADMIN_STATUS_URL).mock(return_value=httpx.Response(200, json=BOT_STATUS))
+        respx.get(ADMIN_PARTIES_URL).mock(
+            return_value=httpx.Response(200, json={
+                "open": [],
+                "closed": [
+                    {**DISBANDED_PARTY, "slots": PARTY["slots"], "is_live": True, "created_at": "2026-05-20T10:00:00"},
+                    {**DISBANDED_PARTY, "message_id": "old", "slots": [], "is_live": False, "created_at": "2026-05-10T10:00:00"},
+                ],
+            })
+        )
+        resp = client.get("/admin/parties?tab=closed")
+    assert resp.text.count("/admin-unlock") == 1  # 살아있는 파티에만
+
+
+def test_admin_disband_route_forwards_and_redirects(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        route = respx.post(DISBAND_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        resp = client.post("/parties/p1/admin-disband")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1"
+    import json as _json
+    assert _json.loads(route.calls[0].request.content) == {"discord_id": "999"}
+
+
+def test_admin_unlock_route_requires_admin(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"999"})
+    with respx.mock:
+        log_in(client, discord_id="111")
+        resp = client.post("/parties/p1/admin-unlock")
+    assert resp.status_code == 403
+
+
+def test_admin_notify_route_reports_sent_count(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        route = respx.post(NOTIFY_URL).mock(return_value=httpx.Response(200, json={"success": True, "sent": 3, "total": 3}))
+        resp = client.post("/parties/p1/admin-notify", data={"content": "오늘 8시 집합"})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/parties/p1?notice_sent=3"
+    import json as _json
+    assert _json.loads(route.calls[0].request.content) == {"discord_id": "999", "content": "오늘 8시 집합"}
+
+
+def test_admin_sees_admin_only_controls_in_leader_panel(client, monkeypatch):
+    with respx.mock:
+        _admin_login(client, monkeypatch)
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json=PARTY))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
+        respx.get(ELIGIBILITY_URL).mock(return_value=httpx.Response(200, json={"can_join": False, "reason": "이미 마감된 공대입니다."}))
+        respx.get(WAITLIST_STATUS_URL).mock(return_value=httpx.Response(200, json={"on_waitlist": False}))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
+        resp = client.get("/parties/p1?notice_sent=2")
+    body = resp.text
+    assert "/parties/p1/admin-disband" in body
+    assert "/parties/p1/admin-notify" in body
+    assert "/parties/p1/admin-unlock" in body
+    assert "2명에게 DM을 보냈습니다." in body

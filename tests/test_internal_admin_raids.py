@@ -149,3 +149,118 @@ def test_webapp_key_still_required(client):
         json={"discord_id": ADMIN_ID, "name": "x", "sort_order": 0},
     )
     assert resp.status_code == 401
+
+
+# ── 순서 변경 / 카테고리 이동 / 운영 기간 (관리자 앱에만 있던 기능) ─────────
+
+def _cat_names():
+    return [c["name"] for c in asyncio.run(db.get_categories())]
+
+
+def test_reorder_categories_applies_whole_array(client):
+    asyncio.run(db.add_category("익스트림", 5))
+    asyncio.run(db.add_category("군단장", 9))
+    before = _cat_names()
+    assert before[-2:] == ["익스트림", "군단장"]
+
+    new_order = list(reversed(before))
+    resp = client.post(
+        "/api/internal/admin/categories/order",
+        json={"discord_id": ADMIN_ID, "order": new_order},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    assert _cat_names() == new_order
+
+
+def test_reorder_categories_rejects_non_admin(client):
+    before = _cat_names()
+    resp = client.post(
+        "/api/internal/admin/categories/order",
+        json={"discord_id": NON_ADMIN_ID, "order": list(reversed(before))},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is False
+    assert _cat_names() == before
+
+
+def test_reorder_raids_within_category(client):
+    asyncio.run(db.add_raid("에기르", "에기르", "⚔️", "카제로스"))
+    resp = client.post(
+        "/api/internal/admin/raids/order",
+        json={"discord_id": ADMIN_ID, "category": "카제로스", "order": ["에기르", "카양겔"]},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    raids = asyncio.run(db.get_raids_dict())
+    ordered = sorted((n for n, r in raids.items() if r["category"] == "카제로스"), key=lambda n: raids[n]["sort_order"])
+    # init_db()가 심어둔 기본 레이드(아르모체 등)는 배열에 없어 원래 순서를 유지하고,
+    # 배열에 넣은 둘이 앞으로 온다.
+    assert ordered[:2] == ["에기르", "카양겔"]
+
+
+def test_reorder_difficulties(client):
+    asyncio.run(db.add_difficulty("카양겔", "노말", 1600, 4, None, 3, 0))
+    asyncio.run(db.add_difficulty("카양겔", "하드", 1650, 4, None, 3, 1))
+    resp = client.post(
+        "/api/internal/admin/difficulties/order",
+        json={"discord_id": ADMIN_ID, "raid_name": "카양겔", "order": ["하드", "노말"]},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    diffs = asyncio.run(db.get_raids_dict())["카양겔"]["difficulties"]
+    assert list(diffs.keys()) == ["하드", "노말"]
+
+
+def test_move_raid_category(client):
+    asyncio.run(db.add_category("군단장", 1))
+    resp = client.post(
+        "/api/internal/admin/raids/move-category",
+        json={"discord_id": ADMIN_ID, "name": "카양겔", "category": "군단장"},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    assert asyncio.run(db.get_raids_dict())["카양겔"]["category"] == "군단장"
+
+
+def test_move_raid_to_unknown_category_rejected(client):
+    resp = client.post(
+        "/api/internal/admin/raids/move-category",
+        json={"discord_id": ADMIN_ID, "name": "카양겔", "category": "없는카테고리"},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is False
+    assert "카테고리가 없습니다" in body["reason"]
+
+
+def test_set_and_clear_raid_period(client):
+    resp = client.post(
+        "/api/internal/admin/raids/period",
+        json={"discord_id": ADMIN_ID, "name": "카양겔",
+              "available_from": "2026-09-01T06:00:00+09:00", "available_until": "2026-09-30T06:00:00+09:00"},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    raid = asyncio.run(db.get_raids_dict())["카양겔"]
+    assert raid["available_from"].startswith("2026-09-01")
+    assert raid["available_until"].startswith("2026-09-30")
+
+    resp = client.post(
+        "/api/internal/admin/raids/period",
+        json={"discord_id": ADMIN_ID, "name": "카양겔", "available_from": "", "available_until": ""},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    raid = asyncio.run(db.get_raids_dict())["카양겔"]
+    assert raid["available_from"] is None and raid["available_until"] is None
+
+
+def test_set_raid_period_rejects_non_admin(client):
+    resp = client.post(
+        "/api/internal/admin/raids/period",
+        json={"discord_id": NON_ADMIN_ID, "name": "카양겔", "available_until": "2026-09-30T06:00:00+09:00"},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is False
+    assert asyncio.run(db.get_raids_dict())["카양겔"]["available_until"] is None

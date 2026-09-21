@@ -139,3 +139,30 @@ def test_delete_user_rejects_non_admin(client):
     body = resp.json()
     assert body["success"] is False
     assert asyncio.run(db.user_exists(TARGET_ID)) is True
+
+
+# ── API 만료 의심(last_sync) ─────────────────────────────────
+
+def test_list_users_includes_last_sync(client):
+    resp = client.get("/api/internal/admin/users", params={"discord_id": ADMIN_ID}, headers=HEADERS)
+    target = next(u for u in resp.json() if u["discord_id"] == TARGET_ID)
+    assert target["last_sync"] is not None  # update_character_cache가 cached_at을 찍는다
+
+
+def test_get_stale_users_flags_never_synced_and_old(client):
+    import aiosqlite
+
+    async def setup():
+        await db.set_user_api_key("555", "dummy-key-5")  # 캐릭터 없음 → 동기화 기록 없음
+        await db.set_user_api_key("666", "dummy-key-6")
+        await db.add_character("666", "오래된캐릭")
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE user_characters SET cached_at=datetime('now', '-40 days') WHERE discord_id='666'"
+            )
+            await conn.commit()
+
+    asyncio.run(setup())
+    stale = {u["discord_id"] for u in asyncio.run(db.get_stale_users(14))}
+    assert "555" in stale and "666" in stale
+    assert TARGET_ID not in stale  # 방금 동기화됨
