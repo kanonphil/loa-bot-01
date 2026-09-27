@@ -213,6 +213,8 @@ async def raid_progress(discord_id: str):
     "characters": per_character,
     "done":       sum(c["done_count"] for c in per_character),
     "total":      sum(c["total_slots"] for c in per_character),
+    # 익스트림은 캐릭터 총합에서 빠지고(원정대당 주 1회라 캐릭터 칸에 안 맞음) 원정대 단위로 따로
+    "extreme":    await _extreme_status_payload(discord_id, week_key),
   }
 
 
@@ -836,6 +838,9 @@ async def admin_delete_category(body: AdminCategoryNameBody):
   err = _require_admin(body.discord_id)
   if err:
     return {"success": False, "reason": err}
+  n = await db.count_raids_in_category(body.name)
+  if n:
+    return {"success": False, "reason": f"소속 레이드가 {n}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_category(body.name)
   await raids_module.reload()
   return {"success": removed}
@@ -1025,6 +1030,9 @@ class AdminDifficultyBody(BaseModel):
 @router.post("/admin/difficulties/add")
 async def admin_add_difficulty(body: AdminDifficultyBody):
   err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  err = _difficulty_validation_error(body.min_level, body.total_slots, body.party_split, body.gates)
   if err:
     return {"success": False, "reason": err}
   next_sort = await db.get_next_difficulty_sort_order(body.raid_name)
@@ -1528,3 +1536,212 @@ async def completion_weeks(discord_id: str):
 @router.get("/completions/week")
 async def completions_for_week(discord_id: str, week_key: str):
   return {"week_key": week_key, "characters": await db.get_user_week_completions(discord_id, week_key)}
+
+
+# ── 레이드/카테고리/난이도 수정 — 이전엔 토글·순서·기간만 있고 이름/약칭/아이콘/수치는
+# 삭제 후 재등록해야 했다. 이름 변경은 참조 테이블을 한 트랜잭션으로 연쇄 갱신한다(db.rename_*).
+
+def _clean_name(value: str | None) -> str:
+  return (value or "").strip()
+
+
+def _difficulty_validation_error(min_level: int, total_slots: int, party_split: int | None, gates: int) -> str | None:
+  if min_level <= 0:
+    return "입장 레벨은 1 이상이어야 합니다."
+  if total_slots <= 0:
+    return "인원은 1 이상이어야 합니다."
+  if gates < 1:
+    return "관문 수는 1 이상이어야 합니다."
+  if party_split is not None and (party_split <= 0 or party_split > total_slots or total_slots % party_split != 0):
+    return "분할 인원은 전체 인원을 나눌 수 있는 수여야 합니다."
+  return None
+
+
+class AdminRaidUpdateBody(BaseModel):
+  discord_id: str
+  name: str
+  short_name: str
+  icon: str = "⚔️"
+
+
+@router.post("/admin/raids/update")
+async def admin_update_raid(body: AdminRaidUpdateBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  short = _clean_name(body.short_name)
+  if not short:
+    return {"success": False, "reason": "약칭을 입력해주세요."}
+  if not await db.raid_exists(body.name):
+    return {"success": False, "reason": "레이드를 찾을 수 없습니다."}
+  await db.update_raid(body.name, short, _clean_name(body.icon) or "⚔️")
+  await raids_module.reload()
+  return {"success": True}
+
+
+class AdminRenameBody(BaseModel):
+  discord_id: str
+  old_name: str
+  new_name: str
+
+
+@router.post("/admin/raids/rename")
+async def admin_rename_raid(body: AdminRenameBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  new = _clean_name(body.new_name)
+  if not new:
+    return {"success": False, "reason": "새 이름을 입력해주세요."}
+  if new == body.old_name:
+    return {"success": True, "unchanged": True}
+  if not await db.raid_exists(body.old_name):
+    return {"success": False, "reason": "레이드를 찾을 수 없습니다."}
+  if await db.raid_exists(new):
+    return {"success": False, "reason": "이미 같은 이름의 레이드가 있습니다."}
+  await db.rename_raid(body.old_name, new)
+  await raids_module.reload()
+  return {"success": True}
+
+
+@router.get("/admin/raids/references")
+async def admin_raid_references(discord_id: str, name: str, difficulty: str | None = None):
+  """이름 변경 확인 창용 — 이 레이드(또는 난이도)를 참조하는 기록 수."""
+  _admin_or_403(discord_id)
+  return await db.count_raid_references(name, difficulty or None)
+
+
+@router.post("/admin/categories/rename")
+async def admin_rename_category(body: AdminRenameBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  new = _clean_name(body.new_name)
+  if not new:
+    return {"success": False, "reason": "새 이름을 입력해주세요."}
+  if new == body.old_name:
+    return {"success": True, "unchanged": True}
+  names = {c["name"] for c in await db.get_categories()}
+  if body.old_name not in names:
+    return {"success": False, "reason": "카테고리를 찾을 수 없습니다."}
+  if new in names:
+    return {"success": False, "reason": "이미 같은 이름의 카테고리가 있습니다."}
+  await db.rename_category(body.old_name, new)
+  await raids_module.reload()
+  return {"success": True}
+
+
+class AdminDifficultyUpdateBody(BaseModel):
+  discord_id: str
+  raid_name: str
+  difficulty: str
+  min_level: int
+  total_slots: int
+  party_split: int | None = None
+  gates: int = 1
+
+
+@router.post("/admin/difficulties/update")
+async def admin_update_difficulty(body: AdminDifficultyUpdateBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  err = _difficulty_validation_error(body.min_level, body.total_slots, body.party_split, body.gates)
+  if err:
+    return {"success": False, "reason": err}
+  updated = await db.update_difficulty(
+    body.raid_name, body.difficulty, body.min_level, body.total_slots, body.party_split, body.gates,
+  )
+  if not updated:
+    return {"success": False, "reason": "난이도를 찾을 수 없습니다."}
+  await raids_module.reload()
+  return {"success": True}
+
+
+class AdminDifficultyRenameBody(BaseModel):
+  discord_id: str
+  raid_name: str
+  old_difficulty: str
+  new_difficulty: str
+
+
+@router.post("/admin/difficulties/rename")
+async def admin_rename_difficulty(body: AdminDifficultyRenameBody):
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  new = _clean_name(body.new_difficulty)
+  if not new:
+    return {"success": False, "reason": "새 난이도명을 입력해주세요."}
+  if new == body.old_difficulty:
+    return {"success": True, "unchanged": True}
+  diffs = (raids_module.RAIDS.get(body.raid_name) or {}).get("difficulties") or {}
+  if body.old_difficulty not in diffs:
+    return {"success": False, "reason": "난이도를 찾을 수 없습니다."}
+  if new in diffs:
+    return {"success": False, "reason": "이미 같은 이름의 난이도가 있습니다."}
+  await db.rename_difficulty(body.raid_name, body.old_difficulty, new)
+  await raids_module.reload()
+  return {"success": True}
+
+
+# ── 익스트림 레이드 — 원정대(계정) 단위 주 1회 클리어 ─────────────────────
+
+async def _extreme_status_payload(discord_id: str, week_key: str) -> list[dict]:
+  """운영 중인 익스트림 레이드마다 원정대 클리어 상태. 레이드 체크 상단 섹션·메인 진행 카드·
+  디스코드 /레이드체크 필드가 같은 모양을 쓴다."""
+  from bot.data.raids import active_extreme_raids
+
+  status = await db.get_expedition_extreme_status(discord_id, week_key)
+  result = []
+  for name, info in active_extreme_raids():
+    done = status.get(name)
+    result.append({
+      "raid_name": name,
+      "short_name": info.get("short_name") or name,
+      "icon": info.get("icon"),
+      "available_from": info.get("available_from"),
+      "available_until": info.get("available_until"),
+      "difficulties": info.get("difficulties") or {},
+      "cleared": done is not None,
+      "character_name": done["character_name"] if done else None,
+      "difficulty": done["difficulty"] if done else None,
+    })
+  return result
+
+
+@router.get("/completions/extreme")
+async def extreme_completions(discord_id: str):
+  week_key = db.get_week_key()
+  return {"week_key": week_key, "raids": await _extreme_status_payload(discord_id, week_key)}
+
+
+class ExtremeSetBody(BaseModel):
+  discord_id: str
+  raid_name: str
+  difficulty: str
+  character_name: str
+
+
+@router.post("/completions/extreme/set")
+async def set_extreme_completion(body: ExtremeSetBody):
+  info = raids_module.RAIDS.get(body.raid_name)
+  if not info or not info.get("is_extreme"):
+    return {"success": False, "reason": "익스트림 레이드가 아닙니다."}
+  if body.difficulty not in (info.get("difficulties") or {}):
+    return {"success": False, "reason": "존재하지 않는 난이도입니다."}
+  if body.character_name not in await db.get_user_characters(body.discord_id):
+    return {"success": False, "reason": "본인 캐릭터만 체크할 수 있습니다."}
+  await db.set_extreme_completion(body.discord_id, body.raid_name, body.difficulty, body.character_name)
+  return {"success": True, "character_name": body.character_name, "difficulty": body.difficulty}
+
+
+class ExtremeClearBody(BaseModel):
+  discord_id: str
+  raid_name: str
+
+
+@router.post("/completions/extreme/clear")
+async def clear_extreme_completion(body: ExtremeClearBody):
+  removed = await db.clear_extreme_completion(body.discord_id, body.raid_name)
+  return {"success": True, "removed": removed}

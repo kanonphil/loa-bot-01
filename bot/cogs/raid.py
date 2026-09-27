@@ -9,6 +9,13 @@ from bot.ui.embeds import raid_checklist_embed
 from bot.ui.views import RaidChecklistView
 
 
+async def _extreme_status(discord_id: str) -> list[dict]:
+    """원정대 단위 익스트림 클리어 상태 — 웹 /completions/extreme와 같은 payload 빌더를 쓴다."""
+    from bot.api.routes.internal import _extreme_status_payload
+
+    return await _extreme_status_payload(discord_id, db.get_week_key())
+
+
 async def _resolve_api_key_for_character(discord_id: str, char_name: str, fallback_key: str) -> str:
     """캐릭터가 연결된 계정(api_key_id)의 키를 우선 사용 — 부계정 캐릭터도 올바른 키로 조회.
     api_key_id가 없는(레거시) 캐릭터는 fallback_key(레거시 단일 키)를 그대로 사용."""
@@ -58,8 +65,9 @@ async def _show_checklist(
             await db.update_character_cache(discord_id, name, item_level, char_class)
 
     completions = await db.get_completions(discord_id, name)
-    embed = raid_checklist_embed(name, item_level, completions)
-    view  = RaidChecklistView(discord_id, name, item_level, completions)
+    extreme = await _extreme_status(discord_id)
+    embed = raid_checklist_embed(name, item_level, completions, extreme)
+    view  = RaidChecklistView(discord_id, name, item_level, completions, extreme)
 
     if followup:
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -144,6 +152,7 @@ class Raid(commands.Cog):
         # (_show_checklist)와 동일하게, 캐시된 아이템레벨이 있으면 그대로 쓰고
         # 캐시가 없는 캐릭터만 실시간으로 보충 조회한다.
         cached = {c["character_name"]: c for c in await db.get_cached_characters(discord_id)}
+        extreme = await _extreme_status(discord_id)
 
         embeds: list[discord.Embed] = []
         for name in char_names:
@@ -163,7 +172,8 @@ class Raid(commands.Cog):
                 if item_level > 0:
                     await db.update_character_cache(discord_id, name, item_level, char_class)
             completions = await db.get_completions(discord_id, name)
-            embeds.append(raid_checklist_embed(name, item_level, completions))
+            # 익스트림은 원정대 상태라 첫 임베드에만 붙인다
+            embeds.append(raid_checklist_embed(name, item_level, completions, extreme if not embeds else None))
 
         if not embeds:
             await interaction.followup.send("캐릭터 정보를 불러올 수 없습니다.", ephemeral=True)

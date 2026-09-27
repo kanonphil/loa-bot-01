@@ -1430,12 +1430,17 @@ async def _refresh_expedition(
 # ─────────────────────────────────────────────────────
 
 class RaidChecklistView(View):
-    def __init__(self, discord_id: str, char: str, item_level: float, completions: set[str]) -> None:
+    def __init__(
+        self, discord_id: str, char: str, item_level: float, completions: set[str],
+        extreme_status: list[dict] | None = None,
+    ) -> None:
         super().__init__(timeout=300)
         self.discord_id = discord_id
         self.char = char
         self.item_level = item_level
         self.completions = completions
+        # 원정대 단위 익스트림 상태 — 표시만(토글은 웹/공대 클리어). 버튼은 캐릭터 레이드만.
+        self.extreme_status = extreme_status
         self._build()
 
     def _build(self) -> None:
@@ -1482,7 +1487,7 @@ class RaidChecklistView(View):
             self._build()
             from bot.ui.embeds import raid_checklist_embed
             await interaction.response.edit_message(
-                embed=raid_checklist_embed(self.char, self.item_level, self.completions),
+                embed=raid_checklist_embed(self.char, self.item_level, self.completions, self.extreme_status),
                 view=self,
             )
         return cb

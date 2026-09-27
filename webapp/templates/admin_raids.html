@@ -54,11 +54,23 @@
           {{ ui.chip("익스트림" if c.is_extreme else "일반 카테고리", "accent" if c.is_extreme else "") }}
           <button type="submit" class="admin-toggle-link">전환</button>
         </form>
-        <form method="post" action="/admin/raids/categories/delete" onsubmit="return confirm('{{ c.name }} 카테고리를 삭제할까요? 소속 레이드가 있으면 실패합니다.');">
+        <form method="post" action="/admin/raids/categories/delete" onsubmit="return confirm('{{ c.name }} 카테고리를 삭제할까요? 소속 레이드가 있으면 삭제되지 않습니다.');">
           <input type="hidden" name="name" value="{{ c.name }}">
           <button type="submit" class="admin-danger-link">삭제</button>
         </form>
       </span>
+      <details class="admin-row-extra">
+        <summary>수정</summary>
+        <div class="admin-inline-forms">
+          <form method="post" action="/admin/raids/categories/rename" class="admin-inline-form"
+                onsubmit="return this.new_name.value.trim() === {{ c.name | tojson }} || confirm({{ c.name | tojson }} + ' → ' + this.new_name.value.trim() + ' 으로 바꿀까요? 소속 레이드의 카테고리도 함께 바뀝니다.');">
+            <input type="hidden" name="old_name" value="{{ c.name }}">
+            <span class="admin-inline-label">이름</span>
+            <input type="text" name="new_name" value="{{ c.name }}" required class="settings-select" aria-label="카테고리 이름">
+            <button type="submit" class="admin-toggle-link">이름 변경</button>
+          </form>
+        </div>
+      </details>
     </li>
     {% endfor %}
   </ul>
@@ -116,6 +128,29 @@
           <button type="submit" class="admin-danger-link">삭제</button>
         </form>
       </span>
+      <details class="admin-row-extra">
+        <summary>수정 (이름 · 약칭 · 아이콘)</summary>
+        <div class="admin-inline-forms">
+          <form method="post" action="/admin/raids/update" class="admin-inline-form">
+            <input type="hidden" name="name" value="{{ r.name }}">
+            <span class="admin-inline-label">약칭</span>
+            <input type="text" name="short_name" value="{{ r.short_name }}" required class="settings-select" aria-label="약칭">
+            <span class="admin-inline-label">아이콘</span>
+            <input type="text" name="icon" value="{{ r.icon }}" class="settings-select admin-input-narrow" aria-label="아이콘">
+            <button type="submit" class="admin-toggle-link">저장</button>
+          </form>
+          <form method="post" action="/admin/raids/rename" class="admin-inline-form"
+                onsubmit="return this.new_name.value.trim() === {{ r.name | tojson }} || confirm({{ r.name | tojson }} + ' → ' + this.new_name.value.trim() + ' 으로 바꿀까요?\n' + (this.parentNode.querySelector('.admin-refs').textContent || '') + '\n관련 기록이 모두 새 이름으로 바뀝니다. 이미 올라간 디스코드 게시글 제목은 그대로 남습니다.');">
+            <input type="hidden" name="old_name" value="{{ r.name }}">
+            <span class="admin-inline-label">이름</span>
+            <input type="text" name="new_name" value="{{ r.name }}" required class="settings-select" aria-label="레이드 이름">
+            <button type="submit" class="admin-toggle-link">이름 변경</button>
+          </form>
+          <span class="admin-inline-label admin-refs"
+                hx-get="/admin/raids/references?name={{ r.name | urlencode }}"
+                hx-trigger="toggle once from:closest details" hx-swap="innerHTML">참조 수 확인 중…</span>
+        </div>
+      </details>
       <details class="admin-row-extra">
         <summary>카테고리 이동 · 운영 기간</summary>
         <div class="admin-inline-forms">
@@ -217,6 +252,36 @@
           <button type="submit" class="admin-danger-link">삭제</button>
         </form>
       </span>
+      <details class="admin-row-extra">
+        <summary>수정</summary>
+        <div class="admin-inline-forms">
+          <form method="post" action="/admin/raids/difficulties/update" class="admin-inline-form">
+            <input type="hidden" name="raid_name" value="{{ selected_raid }}">
+            <input type="hidden" name="difficulty" value="{{ name }}">
+            <span class="admin-inline-label">입장 레벨</span>
+            <input type="number" name="min_level" value="{{ d.min_level }}" min="1" required class="settings-select admin-input-narrow" aria-label="입장 레벨">
+            <span class="admin-inline-label">인원</span>
+            <input type="number" name="total_slots" value="{{ d.total_slots }}" min="1" required class="settings-select admin-input-narrow" aria-label="인원">
+            <span class="admin-inline-label">분할</span>
+            <input type="number" name="party_split" value="{{ d.party_split or '' }}" min="1" placeholder="없음" class="settings-select admin-input-narrow" aria-label="분할 인원">
+            <span class="admin-inline-label">관문</span>
+            <input type="number" name="gates" value="{{ d.gates }}" min="1" required class="settings-select admin-input-narrow" aria-label="관문 수">
+            <button type="submit" class="admin-toggle-link">저장</button>
+            <span class="admin-inline-label">이미 개설된 공대에는 적용되지 않습니다.</span>
+          </form>
+          <form method="post" action="/admin/raids/difficulties/rename" class="admin-inline-form"
+                onsubmit="return this.new_difficulty.value.trim() === {{ name | tojson }} || confirm({{ name | tojson }} + ' → ' + this.new_difficulty.value.trim() + ' 으로 바꿀까요?\n' + (this.parentNode.querySelector('.admin-refs').textContent || '') + '\n관련 기록이 모두 새 이름으로 바뀝니다.');">
+            <input type="hidden" name="raid_name" value="{{ selected_raid }}">
+            <input type="hidden" name="old_difficulty" value="{{ name }}">
+            <span class="admin-inline-label">난이도명</span>
+            <input type="text" name="new_difficulty" value="{{ name }}" required class="settings-select" aria-label="난이도명">
+            <button type="submit" class="admin-toggle-link">이름 변경</button>
+          </form>
+          <span class="admin-inline-label admin-refs"
+                hx-get="/admin/raids/references?name={{ selected_raid | urlencode }}&difficulty={{ name | urlencode }}"
+                hx-trigger="toggle once from:closest details" hx-swap="innerHTML">참조 수 확인 중…</span>
+        </div>
+      </details>
     </li>
     {% endfor %}
   </ul>

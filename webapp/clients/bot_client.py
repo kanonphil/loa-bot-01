@@ -1037,3 +1037,73 @@ async def get_week_completions(discord_id: str, week_key: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ── 레이드 관리: 수정/이름 변경 ─────────────────────────────────
+
+async def admin_update_raid(discord_id: str, name: str, short_name: str, icon: str) -> dict:
+    return await _admin_post("raids/update", discord_id, name=name, short_name=short_name, icon=icon)
+
+
+async def admin_rename_raid(discord_id: str, old_name: str, new_name: str) -> dict:
+    return await _admin_post("raids/rename", discord_id, old_name=old_name, new_name=new_name)
+
+
+async def admin_rename_category(discord_id: str, old_name: str, new_name: str) -> dict:
+    return await _admin_post("categories/rename", discord_id, old_name=old_name, new_name=new_name)
+
+
+async def admin_update_difficulty(
+    discord_id: str, raid_name: str, difficulty: str, min_level: int,
+    total_slots: int, party_split: int | None, gates: int,
+) -> dict:
+    return await _admin_post(
+        "difficulties/update", discord_id, raid_name=raid_name, difficulty=difficulty,
+        min_level=min_level, total_slots=total_slots, party_split=party_split, gates=gates,
+    )
+
+
+async def admin_rename_difficulty(discord_id: str, raid_name: str, old_difficulty: str, new_difficulty: str) -> dict:
+    return await _admin_post(
+        "difficulties/rename", discord_id, raid_name=raid_name,
+        old_difficulty=old_difficulty, new_difficulty=new_difficulty,
+    )
+
+
+async def admin_raid_references(discord_id: str, name: str, difficulty: str | None = None) -> dict:
+    return await _admin_get("raids/references", discord_id, name=name, difficulty=difficulty)
+
+
+# ── 익스트림 레이드 (원정대 단위 주 1회) ─────────────────────────
+
+async def get_extreme_status(discord_id: str) -> dict:
+    resp = await _get_client().get(
+        f"{config.BOT_API_BASE_URL}/api/internal/completions/extreme",
+        params={"discord_id": discord_id},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def set_extreme_completion(discord_id: str, raid_name: str, difficulty: str, character_name: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/completions/extreme/set",
+        json={"discord_id": discord_id, "raid_name": raid_name, "difficulty": difficulty, "character_name": character_name},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def clear_extreme_completion(discord_id: str, raid_name: str) -> dict:
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/completions/extreme/clear",
+        json={"discord_id": discord_id, "raid_name": raid_name},
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()

@@ -1315,6 +1315,16 @@ async def get_party_join_eligibility(message_id: str, discord_id: str) -> dict:
                     f"이미 참여 중입니다.\n원정대당 1캐릭터만 참여할 수 있습니다."
                 ),
             }
+        # 진행 중 공대만 보면 클리어(disbanded) 뒤엔 같은 주에 또 들어갈 수 있었다 — 클리어 기록도 본다
+        cleared = await get_expedition_extreme_completion(discord_id, party["raid_name"], party_week_key)
+        if cleared:
+            return {
+                "can_join": False,
+                "reason": (
+                    f"이번 주 익스트림 레이드는 이미 **{cleared['character_name']}**(캐릭터)로 클리어했습니다.\n"
+                    f"원정대당 주 1회만 클리어할 수 있습니다."
+                ),
+            }
 
     api_key = await get_user_api_key(discord_id)
     if not api_key:
@@ -1415,6 +1425,15 @@ async def get_party_switch_eligibility(message_id: str, discord_id: str) -> dict
         if party.get("scheduled_datetime")
         else get_week_key()
     )
+
+    from bot.data.raids import RAIDS as _RAIDS
+    if _RAIDS.get(party["raid_name"], {}).get("is_extreme"):
+        cleared = await get_expedition_extreme_completion(discord_id, party["raid_name"], party_week_key)
+        if cleared:
+            return {
+                "can_switch": False,
+                "reason": f"이번 주 익스트림 레이드는 이미 **{cleared['character_name']}**(캐릭터)로 클리어했습니다.",
+            }
 
     registered = await get_user_characters(discord_id)
     min_level: int = party["min_level"]
@@ -1584,9 +1603,17 @@ async def complete_raid_for_party(message_id: str) -> int:
         week = get_week_key()
     raid_name  = party["raid_name"]
     difficulty = party["difficulty"]
+    from bot.data.raids import RAIDS
+    is_extreme = bool(RAIDS.get(raid_name, {}).get("is_extreme"))
     count = 0
     async with aiosqlite.connect(DB_PATH) as db:
         for slot in slots:
+            if is_extreme:
+                # 익스트림은 원정대당 주 1줄 — 웹에서 다른 캐릭터로 미리 체크해둔 게 있으면 공대 기록이 대체한다
+                await db.execute(
+                    "DELETE FROM raid_completions WHERE discord_id=? AND raid_name=? AND week_key=?",
+                    (slot["discord_id"], raid_name, week),
+                )
             cur = await db.execute(
                 "INSERT OR IGNORE INTO raid_completions "
                 "(discord_id, character_name, raid_name, difficulty, week_key) "
@@ -3099,3 +3126,205 @@ async def get_user_week_completions(discord_id: str, week_key: str) -> list[dict
         )
         entry["completions"].append({"raid_name": r["raid_name"], "difficulty": r["difficulty"]})
     return list(by_char.values())
+
+
+# ──────────────────────────────────────────────
+# 레이드/카테고리/난이도 "수정" — 이전엔 토글·순서·기간만 있고 이름/약칭/아이콘/수치는
+# 삭제 후 재등록해야 했다(그러면 구독·레이드 선택·클리어 기록이 고아로 남는다).
+# 이름 변경은 그 문자열을 키처럼 들고 있는 테이블 전부를 한 트랜잭션으로 함께 갱신한다.
+# ──────────────────────────────────────────────
+
+async def update_raid(name: str, short_name: str, icon: str) -> bool:
+    """약칭·아이콘만 바꾼다(이름은 rename_raid). 정렬/카테고리/기간/고정은 그대로."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raids_data SET short_name=?, icon=? WHERE name=?",
+            (short_name, icon, name),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def update_difficulty(
+    raid_name: str, difficulty: str, min_level: int, total_slots: int,
+    party_split: int | None, gates: int,
+) -> bool:
+    """난이도 수치 변경. parties.total_slots/min_level은 개설 시점 스냅샷이라 여기서
+    건드리지 않는다 — 이미 올라간 공대는 자기 값을 유지하고, 개별 공대는
+    update_party_difficulty로 따로 바꾼다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "UPDATE raid_difficulties SET min_level=?, total_slots=?, party_split=?, gates=? "
+            "WHERE raid_name=? AND difficulty=?",
+            (min_level, total_slots, party_split, gates, raid_name, difficulty),
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+# raid_name을 키(PK 일부)로 갖는 테이블은 UPDATE OR REPLACE — 옛날에 같은 이름으로
+# 존재했다 삭제된 레이드의 잔존 행(구독/선택/클리어 기록)과 PK가 충돌하면 IntegrityError
+# 대신 새 이름 쪽으로 덮어쓴다. 그 외 테이블은 그냥 UPDATE.
+_RAID_NAME_REFS_REPLACE = ("raid_difficulties", "raid_completions", "character_raid_selection", "raid_subscriptions")
+_RAID_NAME_REFS_PLAIN = ("parties", "party_history", "notification_logs")
+
+
+async def rename_raid(old: str, new: str) -> bool:
+    """레이드 이름 변경 + 참조 테이블 전부 연쇄 갱신(한 트랜잭션). old가 없으면 False."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            cur = await db.execute("UPDATE raids_data SET name=? WHERE name=?", (new, old))
+            if cur.rowcount == 0:
+                await db.rollback()
+                return False
+            for table in _RAID_NAME_REFS_REPLACE:
+                await db.execute(f"UPDATE OR REPLACE {table} SET raid_name=? WHERE raid_name=?", (new, old))
+            for table in _RAID_NAME_REFS_PLAIN:
+                await db.execute(f"UPDATE {table} SET raid_name=? WHERE raid_name=?", (new, old))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+    return True
+
+
+async def rename_category(old: str, new: str) -> bool:
+    """카테고리 이름 변경 — raids_data.category만 따라간다(카테고리를 참조하는 곳은 그것뿐)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            cur = await db.execute("UPDATE raid_categories SET name=? WHERE name=?", (new, old))
+            if cur.rowcount == 0:
+                await db.rollback()
+                return False
+            await db.execute("UPDATE raids_data SET category=? WHERE category=?", (new, old))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+    return True
+
+
+async def rename_difficulty(raid_name: str, old: str, new: str) -> bool:
+    """난이도 이름 변경 — (레이드, 난이도) 쌍을 참조하는 테이블을 연쇄 갱신.
+    raid_subscriptions의 '전체' 와일드카드 행은 difficulty=old에 안 걸리므로 그대로 남는다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            cur = await db.execute(
+                "UPDATE OR REPLACE raid_difficulties SET difficulty=? WHERE raid_name=? AND difficulty=?",
+                (new, raid_name, old),
+            )
+            if cur.rowcount == 0:
+                await db.rollback()
+                return False
+            for table in ("raid_completions", "raid_subscriptions"):
+                await db.execute(
+                    f"UPDATE OR REPLACE {table} SET difficulty=? WHERE raid_name=? AND difficulty=?",
+                    (new, raid_name, old),
+                )
+            for table in ("parties", "party_history", "notification_logs"):
+                await db.execute(
+                    f"UPDATE {table} SET difficulty=? WHERE raid_name=? AND difficulty=?",
+                    (new, raid_name, old),
+                )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+    return True
+
+
+async def count_raid_references(name: str, difficulty: str | None = None) -> dict:
+    """이름 변경 확인 창에 보여줄 참조 건수. difficulty를 주면 (레이드, 난이도) 쌍 기준
+    (character_raid_selection은 난이도가 없어 레이드 기준 그대로)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async def count(table: str, extra: str = "", with_diff: bool = True) -> int:
+            sql = f"SELECT COUNT(*) FROM {table} WHERE raid_name=?"
+            params: list = [name]
+            if difficulty is not None and with_diff:
+                sql += " AND difficulty=?"
+                params.append(difficulty)
+            cur = await db.execute(sql + extra, params)
+            return (await cur.fetchone())[0]
+
+        return {
+            "parties_live": await count("parties", " AND status IN ('recruiting', 'full', 'closed')"),
+            "parties_all": await count("parties"),
+            "party_history": await count("party_history"),
+            "raid_completions": await count("raid_completions"),
+            "raid_subscriptions": await count("raid_subscriptions"),
+            "character_raid_selection": await count("character_raid_selection", with_diff=False),
+            "notification_logs": await count("notification_logs"),
+        }
+
+
+async def count_raids_in_category(name: str) -> int:
+    """카테고리 삭제 가드용 — get_raids_dict는 카테고리와 inner JOIN이라 고아를 못 보니 직접 센다."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM raids_data WHERE category=?", (name,))
+        return (await cur.fetchone())[0]
+
+
+# ──────────────────────────────────────────────
+# 익스트림 레이드 — 원정대(discord_id) 단위 주 1회.
+# 저장은 그대로 raid_completions의 "어느 캐릭터가" 한 줄이고, 원정대 상태는 거기서 파생한다
+# (주차별 기록·랭킹·관리자 클리어 편집이 같은 테이블을 그대로 쓸 수 있도록).
+# ──────────────────────────────────────────────
+
+_EXTREME_COMPLETION_JOIN = (
+    "FROM raid_completions c "
+    "JOIN raids_data r ON r.name = c.raid_name "
+    "JOIN raid_categories cat ON cat.name = r.category "
+)
+
+
+async def get_expedition_extreme_status(discord_id: str, week_key: str | None = None) -> dict[str, dict]:
+    """주차의 익스트림 클리어 상태 — {raid_name: {"difficulty", "character_name"}}. 없으면 빈 dict."""
+    week = week_key or get_week_key()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT c.raid_name, c.difficulty, c.character_name "
+            + _EXTREME_COMPLETION_JOIN +
+            "WHERE c.discord_id=? AND c.week_key=? AND cat.is_extreme=1 "
+            "ORDER BY c.completed_at DESC, c.rowid DESC",
+            (discord_id, week),
+        )
+        rows = await cur.fetchall()
+    status: dict[str, dict] = {}
+    for r in rows:
+        status.setdefault(r["raid_name"], {"difficulty": r["difficulty"], "character_name": r["character_name"]})
+    return status
+
+
+async def get_expedition_extreme_completion(discord_id: str, raid_name: str, week_key: str) -> dict | None:
+    """특정 익스트림 레이드를 이 원정대가 그 주에 클리어했는지 — 참여 차단 규칙용."""
+    return (await get_expedition_extreme_status(discord_id, week_key)).get(raid_name)
+
+
+async def set_extreme_completion(
+    discord_id: str, raid_name: str, difficulty: str, character_name: str, week_key: str | None = None,
+) -> None:
+    """원정대 단위 체크 — 같은 주 그 레이드의 기존 줄(캐릭터·난이도 무관)을 지우고 한 줄만 남긴다."""
+    week = week_key or get_week_key()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM raid_completions WHERE discord_id=? AND raid_name=? AND week_key=?",
+            (discord_id, raid_name, week),
+        )
+        await db.execute(
+            "INSERT INTO raid_completions (discord_id, character_name, raid_name, difficulty, week_key) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (discord_id, character_name, raid_name, difficulty, week),
+        )
+        await db.commit()
+
+
+async def clear_extreme_completion(discord_id: str, raid_name: str, week_key: str | None = None) -> int:
+    week = week_key or get_week_key()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "DELETE FROM raid_completions WHERE discord_id=? AND raid_name=? AND week_key=?",
+            (discord_id, raid_name, week),
+        )
+        await db.commit()
+        return cur.rowcount

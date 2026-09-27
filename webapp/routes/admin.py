@@ -18,7 +18,7 @@ from urllib.parse import quote, urlparse
 from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse, Response
 
-from webapp import config
+from webapp import config, notification_store
 from webapp.auth.dependencies import require_admin
 from webapp.clients import bot_client
 from webapp.format import party_view
@@ -215,6 +215,77 @@ async def delete_difficulty(
     return _redirect(
         "난이도를 삭제하지 못했습니다.", result, f"/admin/raids?tab=difficulties&raid={quote(raid_name)}",
     )
+
+
+# ── 레이드 관리: 수정 / 이름 변경 ─────────────────────────────
+# 이전엔 이름·약칭·아이콘·난이도 수치 전부 삭제 후 재등록해야 했다. 이름 변경은 봇이 참조 테이블을
+# 연쇄 갱신하고, 웹앱 자체 DB(알림 필터)는 여기서 따로 맞춘다.
+
+@router.post("/admin/raids/update")
+async def update_raid(
+    name: str = Form(...), short_name: str = Form(...), icon: str = Form("⚔️"),
+    user: dict = Depends(require_admin),
+):
+    result = await bot_client.admin_update_raid(user["discord_id"], name, short_name.strip(), icon.strip() or "⚔️")
+    return _redirect("레이드를 수정하지 못했습니다.", result, "/admin/raids?tab=raids")
+
+
+@router.post("/admin/raids/rename")
+async def rename_raid(
+    old_name: str = Form(...), new_name: str = Form(...), user: dict = Depends(require_admin),
+):
+    new_name = new_name.strip()
+    result = await bot_client.admin_rename_raid(user["discord_id"], old_name, new_name)
+    if result.get("success") and not result.get("unchanged"):
+        await notification_store.rename_raid(old_name, new_name)
+    return _redirect("이름을 바꾸지 못했습니다.", result, "/admin/raids?tab=raids")
+
+
+@router.post("/admin/raids/categories/rename")
+async def rename_category(
+    old_name: str = Form(...), new_name: str = Form(...), user: dict = Depends(require_admin),
+):
+    result = await bot_client.admin_rename_category(user["discord_id"], old_name, new_name.strip())
+    return _redirect("이름을 바꾸지 못했습니다.", result, "/admin/raids?tab=categories")
+
+
+@router.post("/admin/raids/difficulties/update")
+async def update_difficulty(
+    raid_name: str = Form(...), difficulty: str = Form(...),
+    min_level: int = Form(...), total_slots: int = Form(...),
+    party_split: str = Form(""), gates: int = Form(1),
+    user: dict = Depends(require_admin),
+):
+    split = int(party_split) if party_split.strip() else None
+    result = await bot_client.admin_update_difficulty(
+        user["discord_id"], raid_name, difficulty, min_level, total_slots, split, gates,
+    )
+    return _redirect(
+        "난이도를 수정하지 못했습니다.", result, f"/admin/raids?tab=difficulties&raid={quote(raid_name)}",
+    )
+
+
+@router.post("/admin/raids/difficulties/rename")
+async def rename_difficulty(
+    raid_name: str = Form(...), old_difficulty: str = Form(...), new_difficulty: str = Form(...),
+    user: dict = Depends(require_admin),
+):
+    new_difficulty = new_difficulty.strip()
+    result = await bot_client.admin_rename_difficulty(user["discord_id"], raid_name, old_difficulty, new_difficulty)
+    if result.get("success") and not result.get("unchanged"):
+        await notification_store.rename_difficulty(raid_name, old_difficulty, new_difficulty)
+    return _redirect(
+        "이름을 바꾸지 못했습니다.", result, f"/admin/raids?tab=difficulties&raid={quote(raid_name)}",
+    )
+
+
+@router.get("/admin/raids/references")
+async def raid_references(
+    request: Request, name: str, difficulty: str | None = None, user: dict = Depends(require_admin),
+):
+    """이름 변경 폼을 펼칠 때만 htmx로 조회(목록 렌더 때 레이드마다 세지 않는다)."""
+    refs = await bot_client.admin_raid_references(user["discord_id"], name, difficulty or None)
+    return templates.TemplateResponse(request, "_admin_raid_references.html", {"refs": refs, "difficulty": difficulty})
 
 
 # ── 레이드 관리: 순서 변경 / 카테고리 이동 / 운영 기간 (관리자 앱에만 있던 기능) ──

@@ -376,3 +376,26 @@ async def delete_expired(retention_days: int) -> int:
             )
             await db.commit()
     return len(expired_ids)
+
+
+# ── 관리자가 레이드/난이도 이름을 바꿨을 때 — 봇 DB는 봇이 연쇄 갱신하지만 이 DB는 웹앱 소유라
+# 여기서 따로 맞춘다. 안 하면 유저의 레이드 필터가 옛 이름을 들고 조용히 매치되지 않는다.
+
+async def rename_raid(old: str, new: str) -> None:
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        await db.execute("UPDATE notifications SET raid_name=? WHERE raid_name=?", (new, old))
+        await db.execute("UPDATE OR REPLACE notification_raid_filters SET raid_name=? WHERE raid_name=?", (new, old))
+        await db.commit()
+
+
+async def rename_difficulty(raid_name: str, old: str, new: str) -> None:
+    """NULL 난이도(모든 난이도) 필터는 difficulty=old에 안 걸려 그대로 남는다."""
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        await db.execute(
+            "UPDATE notifications SET difficulty=? WHERE raid_name=? AND difficulty=?", (new, raid_name, old)
+        )
+        await db.execute(
+            "UPDATE OR REPLACE notification_raid_filters SET difficulty=? WHERE raid_name=? AND difficulty=?",
+            (new, raid_name, old),
+        )
+        await db.commit()

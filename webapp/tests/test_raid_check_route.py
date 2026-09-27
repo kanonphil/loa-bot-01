@@ -58,6 +58,9 @@ def _mock_common(completions=None):
         )
     )
     _mock_not_customized()
+    respx.get("http://bot-server.internal/api/internal/completions/extreme").mock(
+        return_value=httpx.Response(200, json={"week_key": "2026-01-07", "raids": []})
+    )
 
 
 def test_no_characters_shows_registration_notice(client):

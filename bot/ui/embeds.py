@@ -186,9 +186,34 @@ def no_characters_embed(user: discord.User | discord.Member) -> discord.Embed:
 # 레이드 체크리스트
 # ─────────────────────────────────────────────────────
 
+def _extreme_field_value(extreme_status: list[dict]) -> str:
+    """원정대 단위 익스트림 상태 한 줄씩 — 캐릭터 체크리스트와 달리 '누가 갔는지'가 핵심."""
+    if not extreme_status:
+        return "_진행 중인 익스트림 레이드가 없습니다_"
+    lines = []
+    for x in extreme_status:
+        icon = x.get("icon") or "⚡"
+        until = x.get("available_until")
+        until_text = ""
+        if until:
+            try:
+                dt = datetime.fromisoformat(until)
+                until_text = f" _(~{dt.month}/{dt.day}까지)_"
+            except (TypeError, ValueError):
+                pass
+        if x.get("cleared"):
+            lines.append(f"✅ {icon} **{x['raid_name']} {x['difficulty']}** — {x['character_name']}")
+        else:
+            lines.append(f"⬜ {icon} {x['raid_name']} — 미클리어{until_text}")
+    return "\n".join(lines)
+
+
 def raid_checklist_embed(
-    character_name: str, item_level: float, completions: set[str]
+    character_name: str, item_level: float, completions: set[str],
+    extreme_status: list[dict] | None = None,
 ) -> discord.Embed:
+    """캐릭터 체크리스트. 익스트림은 원정대당 주 1회라 캐릭터 목록에서 빼고(get_applicable_raids
+    기본 제외), extreme_status가 주어지면 원정대 단위 필드로 따로 붙인다."""
     applicable  = get_applicable_raids(item_level)
     raid_names  = dict.fromkeys(r for r, _, _ in applicable)  # 순서 유지 unique
     total       = len(raid_names)
@@ -222,6 +247,13 @@ def raid_checklist_embed(
             status    = "✅" if done else "⬜"
             lines.append(f"{status} {icon} {name_text}  _최소 {diff_info['min_level']}_")
         embed.add_field(name=f"◈ {cat}", value="\n".join(lines), inline=False)
+
+    if extreme_status is not None:
+        embed.add_field(
+            name="⚡ 익스트림 (원정대 주 1회)",
+            value=_extreme_field_value(extreme_status),
+            inline=False,
+        )
 
     embed.set_footer(text=f"{FOOTER} • 매주 수요일 06:00 KST 초기화")
     embed.timestamp = _ts()

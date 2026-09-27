@@ -7,25 +7,68 @@ from datetime import datetime, timedelta, timezone
 KST = timezone(timedelta(hours=9))
 
 
-def applicable_raids(raids: dict, item_level: float) -> list[tuple[str, str, dict]]:
-    """캐릭터 아이템레벨 기준으로 입장 가능한 (레이드명, 난이도명, 난이도정보) 목록."""
+def _parse_aware(value: str | None) -> datetime | None:
+    """운영 기간 문자열 → aware datetime. naive면 KST로 간주(aware와 비교하다 TypeError 나지 않게)."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return dt.replace(tzinfo=KST) if dt.tzinfo is None else dt
+
+
+def is_extreme_available(raid_info: dict, now: datetime | None = None) -> bool:
+    """익스트림 운영 중인지 — 활성 + available_from ≤ now ≤ available_until (각 경계는 없을 수 있음)."""
+    if not raid_info.get("is_active", True):
+        return False
+    now = now or datetime.now(KST)
+    start = _parse_aware(raid_info.get("available_from"))
+    end = _parse_aware(raid_info.get("available_until"))
+    if start and now < start:
+        return False
+    if end and end < now:
+        return False
+    return True
+
+
+def applicable_raids(raids: dict, item_level: float, include_extreme: bool = False) -> list[tuple[str, str, dict]]:
+    """캐릭터 아이템레벨 기준으로 입장 가능한 (레이드명, 난이도명, 난이도정보) 목록.
+    익스트림은 원정대당 주 1회라 캐릭터 카드에 맞지 않아 기본 제외 — extreme_raids()가 따로 다룬다."""
     now = datetime.now(KST)
     result = []
     for raid_name, raid_info in raids.items():
         if not raid_info.get("is_active", True):
             continue
         if raid_info.get("is_extreme"):
-            until = raid_info.get("available_until")
-            if until:
-                try:
-                    if datetime.fromisoformat(until) < now:
-                        continue
-                except ValueError:
-                    pass
+            if not include_extreme or not is_extreme_available(raid_info, now):
+                continue
         for diff_name, diff_info in raid_info["difficulties"].items():
             if item_level >= diff_info["min_level"]:
                 result.append((raid_name, diff_name, diff_info))
     return result
+
+
+def extreme_raids(raids: dict, now: datetime | None = None) -> list[dict]:
+    """지금 운영 중인 익스트림 레이드(레이드 선택과 무관) — 원정대 섹션 카드 재료."""
+    now = now or datetime.now(KST)
+    return [
+        {
+            "raid_name": name,
+            "short_name": info.get("short_name") or name,
+            "icon": info.get("icon"),
+            "available_from": info.get("available_from"),
+            "available_until": info.get("available_until"),
+            "difficulties": list((info.get("difficulties") or {}).items()),
+        }
+        for name, info in raids.items()
+        if info.get("is_extreme") and is_extreme_available(info, now)
+    ]
+
+
+def eligible_characters(characters: list[dict], min_level: float) -> list[dict]:
+    """입장 레벨 이상인 캐릭터만 — 익스트림 체크 폼의 캐릭터 선택지."""
+    return [c for c in characters if (c.get("item_level") or 0) >= min_level]
 
 
 def filter_groups_by_selection(groups: list[dict], selection: dict) -> list[dict]:

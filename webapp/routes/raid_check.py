@@ -16,7 +16,10 @@ from starlette.responses import RedirectResponse
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
-from webapp.raid_check import applicable_raids, filter_groups_by_selection, group_by_category
+from webapp.format import period_view
+from webapp.raid_check import (
+    applicable_raids, eligible_characters, extreme_raids, filter_groups_by_selection, group_by_category,
+)
 from webapp.templating import templates
 
 router = APIRouter()
@@ -61,10 +64,35 @@ async def _character_card(discord_id: str, character: dict, raids: dict, categor
     }
 
 
+async def _extreme_section(discord_id: str, characters: list[dict], raids: dict) -> dict:
+    """익스트림 = 원정대당 주 1회. 캐릭터 카드 밖의 원정대 단위 섹션 — 계정 필터·레이드 선택과 무관하게
+    전체 캐릭터 기준. 봇의 상태(어느 캐릭터로 클리어했는지)와 운영 기간을 카드로 묶는다."""
+    live = extreme_raids(raids)
+    if not live:
+        return {"cards": []}
+    status = await bot_client.get_extreme_status(discord_id)
+    by_name = {r["raid_name"]: r for r in status.get("raids", [])}
+    cards = []
+    for raid in live:
+        st = by_name.get(raid["raid_name"], {})
+        cards.append({
+            **raid,
+            "period": period_view(raid["available_until"]) if raid["available_until"] else None,
+            "cleared": bool(st.get("cleared")),
+            "character_name": st.get("character_name"),
+            "difficulty": st.get("difficulty"),
+            "difficulties": [
+                {"name": name, "min_level": info["min_level"], "eligible": eligible_characters(characters, info["min_level"])}
+                for name, info in raid["difficulties"]
+            ],
+        })
+    return {"cards": cards}
+
+
 async def _page_context(discord_id: str, account: str | None) -> dict:
     characters = await bot_client.get_user_characters_grouped(discord_id)
     if not characters:
-        return {"characters": [], "cards": [], "account_labels": [], "selected_account": None}
+        return {"characters": [], "cards": [], "account_labels": [], "selected_account": None, "extreme": {"cards": []}}
 
     account_labels: list[str] = []
     for c in characters:
@@ -78,15 +106,54 @@ async def _page_context(discord_id: str, account: str | None) -> dict:
     raids, categories = await asyncio.gather(
         bot_client.get_raids(), bot_client.get_raid_categories()
     )
-    cards = await asyncio.gather(
-        *[_character_card(discord_id, c, raids, categories) for c in visible]
+    *cards, extreme = await asyncio.gather(
+        *[_character_card(discord_id, c, raids, categories) for c in visible],
+        _extreme_section(discord_id, characters, raids),
     )
     return {
         "characters": characters,
         "cards": list(cards),
         "account_labels": account_labels,
         "selected_account": selected_account,
+        "extreme": extreme,
     }
+
+
+async def _render_extreme(request: Request, discord_id: str, toast: str | None = None, toast_type: str = "success"):
+    characters, raids = await asyncio.gather(
+        bot_client.get_user_characters_grouped(discord_id), bot_client.get_raids()
+    )
+    extreme = await _extreme_section(discord_id, characters, raids)
+    headers = {"X-Toast": quote(toast), "X-Toast-Type": toast_type} if toast else {}
+    return templates.TemplateResponse(request, "_extreme_section.html", {"extreme": extreme}, headers=headers)
+
+
+@router.post("/raid-check/extreme/set")
+async def set_extreme(
+    request: Request,
+    raid_name: str = Form(...),
+    difficulty: str = Form(...),
+    character_name: str = Form(...),
+    user: dict = Depends(get_current_user),
+):
+    if await _find_own_character(user["discord_id"], character_name) is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인 캐릭터만 체크할 수 있습니다.")
+    result = await bot_client.set_extreme_completion(user["discord_id"], raid_name, difficulty, character_name)
+    if not result.get("success"):
+        return await _render_extreme(request, user["discord_id"], result.get("reason") or "체크하지 못했습니다.", "error")
+    raids = await bot_client.get_raids()
+    short = (raids.get(raid_name) or {}).get("short_name") or raid_name
+    return await _render_extreme(request, user["discord_id"], f"{short} {difficulty} 원정대 클리어 — {character_name}")
+
+
+@router.post("/raid-check/extreme/clear")
+async def clear_extreme(
+    request: Request, raid_name: str = Form(...), user: dict = Depends(get_current_user),
+):
+    await bot_client.clear_extreme_completion(user["discord_id"], raid_name)
+    raids = await bot_client.get_raids()
+    short = (raids.get(raid_name) or {}).get("short_name") or raid_name
+    return await _render_extreme(request, user["discord_id"], f"{short} 클리어 기록을 해제했습니다.", "info")
 
 
 @router.get("/raid-check")

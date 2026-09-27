@@ -93,9 +93,11 @@ def test_extreme_raid_included_before_available_until():
             "difficulties": {"노말": {"min_level": 1, "total_slots": 8, "party_split": None, "gates": 1}},
         },
     }
-    result = applicable_raids(raids, item_level=9999.0)
+    result = applicable_raids(raids, item_level=9999.0, include_extreme=True)
     names = {r for r, _, _ in result}
     assert "익스트림" in names
+    # 기본값은 제외 — 익스트림은 원정대당 주 1회라 캐릭터 카드에 넣지 않는다
+    assert "익스트림" not in {r for r, _, _ in applicable_raids(raids, item_level=9999.0)}
 
 
 def test_group_by_category_groups_and_orders():
@@ -114,3 +116,26 @@ def test_group_by_category_skips_category_with_nothing_applicable():
     low_level_raids = {"아르모체(4막)": RAIDS["아르모체(4막)"]}
     groups = group_by_category(low_level_raids, CATEGORIES, applicable_raids(low_level_raids, item_level=1.0))
     assert groups == []
+
+
+def test_extreme_raids_helper_respects_period_and_selection_independence():
+    from webapp.raid_check import eligible_characters, extreme_raids, is_extreme_available
+
+    live = {
+        "short_name": "익스", "icon": "⚡", "category": "익스트림", "is_extreme": True, "is_active": True,
+        "available_from": (datetime.now(KST) - timedelta(days=1)).isoformat(),
+        "available_until": (datetime.now(KST) + timedelta(days=5)).isoformat(),
+        "difficulties": {"노말": {"min_level": 1700, "total_slots": 8, "party_split": 4, "gates": 1}},
+    }
+    future = {**live, "available_from": (datetime.now(KST) + timedelta(days=1)).isoformat()}
+    naive_expired = {**live, "available_until": "2020-01-01T00:00:00"}
+    raids = {**RAIDS, "라이브": live, "예정": future, "만료": naive_expired, "비활성익스": {**live, "is_active": False}}
+
+    names = [r["raid_name"] for r in extreme_raids(raids)]
+    assert names == ["라이브"]
+    assert is_extreme_available(future) is False
+    assert is_extreme_available(naive_expired) is False  # naive 문자열도 TypeError 없이 판정
+    assert extreme_raids(raids)[0]["difficulties"][0][0] == "노말"
+
+    chars = [{"character_name": "고렙", "item_level": 1720.0}, {"character_name": "저렙", "item_level": 1650.0}, {"character_name": "미동기화"}]
+    assert [c["character_name"] for c in eligible_characters(chars, 1700)] == ["고렙"]

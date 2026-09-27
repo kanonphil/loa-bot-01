@@ -69,6 +69,15 @@
       {% else %}
       <p class="ui-card-meta">이번 주 레이드를 전부 끝냈습니다.</p>
       {% endif %}
+      {% if progress.extreme %}
+      <div class="ui-row dash-extreme-row">
+        <span class="ui-card-meta">익스트림 · 원정대 주 1회</span>
+        {% for x in progress.extreme %}
+        {% if x.cleared %}{{ ui.chip(x.short_name ~ " · " ~ x.character_name ~ " · " ~ x.difficulty, "ok") }}
+        {% else %}{{ ui.chip(x.short_name ~ " · 미클리어", "warn") }}{% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
     {% endcall %}
   </section>
 

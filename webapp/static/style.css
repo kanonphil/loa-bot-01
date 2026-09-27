@@ -5551,3 +5551,29 @@ a.ui-card:hover {
 @media (max-width: 640px) {
   .bottom-tabs a { font-size: 10px; }
 }
+
+/* ── 골드 칩 (익스트림 '원정대 주 1회' 등 보조 신호) ──────────── */
+.ui-chip.is-gold { border-color: var(--gold); color: var(--gold); background: var(--gold-soft); }
+
+/* ── 레이드 체크: 익스트림(원정대 단위) 섹션 ───────────────── */
+.extreme-section:not(:empty) { margin-bottom: 20px; }
+.extreme-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+.extreme-title { margin: 0; font-size: var(--fs-card); }
+.extreme-hint { font-size: var(--fs-meta); color: var(--text-muted); }
+.extreme-card { position: relative; overflow: hidden; padding-left: 21px; }
+.extreme-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--warn); }
+.extreme-card.is-cleared::before { background: var(--ok); }
+.extreme-state { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+.extreme-state form { margin-left: auto; }
+.extreme-who { font-size: var(--fs-body); }
+.extreme-diffs { display: flex; flex-direction: column; gap: var(--sp-2); }
+.extreme-diff-form { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.extreme-diff-form .settings-select { flex: 1 1 160px; min-width: 0; height: 30px; font-size: var(--fs-meta); }
+.extreme-diff-name { font-size: var(--fs-body); font-weight: 500; min-width: 88px; }
+
+/* ── 관리자 인라인 수정 폼 ─────────────────────────────── */
+.admin-input-narrow { max-width: 96px; }
+.admin-refs { flex-basis: 100%; }
+
+/* ── 메인: 익스트림 줄 ───────────────────────────────── */
+.dash-extreme-row { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px dashed var(--border); }

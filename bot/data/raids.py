@@ -7,9 +7,13 @@ reload() 가 in-place 로 갱신하면 재임포트 없이 최신 상태가 유�
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 # ── 모듈 레벨 캐시 (in-place 갱신 필수) ──────────────────
 RAIDS: dict = {}
 SUPPORT_CLASSES: set = set()
+
+KST = timezone(timedelta(hours=9))
 
 # ── 정적 데이터 ──────────────────────────────────────────
 PROFICIENCY: dict[str, str] = {
@@ -49,19 +53,42 @@ def get_difficulty_info(raid_name: str, difficulty: str) -> dict | None:
     return None
 
 
+def _parse_aware(value: str | None) -> datetime | None:
+    """운영 기간 문자열 → aware datetime. 비어 있거나 파싱 불가면 None.
+    naive로 저장된 값(관리자 앱 구버전 등)은 KST로 간주 — aware와 비교하다 TypeError로
+    500이 나지 않게 한다."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return dt.replace(tzinfo=KST) if dt.tzinfo is None else dt
+
+
+def is_extreme_available(raid_info: dict, now: datetime | None = None) -> bool:
+    """익스트림 레이드가 지금 운영 중인지 — 활성 + available_from ≤ now ≤ available_until
+    (양쪽 경계는 각각 없을 수 있다)."""
+    if not raid_info.get("is_active", True):
+        return False
+    now = now or datetime.now(KST)
+    start = _parse_aware(raid_info.get("available_from"))
+    end = _parse_aware(raid_info.get("available_until"))
+    if start and now < start:
+        return False
+    if end and end < now:
+        return False
+    return True
+
+
 def is_recruitable(raid_info: dict) -> bool:
     """모집 목록에 띄울 레이드인지 — 비활성이거나 익스트림 기간이 지났으면 뺀다."""
-    from datetime import datetime, timezone, timedelta
     if not raid_info.get("is_active", True):
         return False
     if raid_info.get("is_extreme"):
-        until = raid_info.get("available_until")
-        if until:
-            try:
-                if datetime.fromisoformat(until) < datetime.now(timezone(timedelta(hours=9))):
-                    return False
-            except ValueError:
-                pass
+        end = _parse_aware(raid_info.get("available_until"))
+        if end and end < datetime.now(KST):
+            return False
     return True
 
 
@@ -79,22 +106,29 @@ def recruit_order(raids: dict | None = None) -> list[tuple[str, dict]]:
     )
 
 
-def get_applicable_raids(item_level: float) -> list[tuple[str, str, dict]]:
-    from datetime import datetime, timezone, timedelta
-    now = datetime.now(timezone(timedelta(hours=9)))
+def get_applicable_raids(item_level: float, include_extreme: bool = False) -> list[tuple[str, str, dict]]:
+    """캐릭터가 입장 가능한 (레이드, 난이도, 난이도정보) 목록 — 캐릭터 단위 레이드 체크용.
+
+    익스트림은 원정대당 주 1회라 캐릭터 카드에 넣으면 캐릭터 수만큼 못 채우는 칸이
+    생기므로 기본 제외한다(원정대 단위 상태는 active_extreme_raids로 따로 다룬다)."""
+    now = datetime.now(KST)
     result = []
     for raid_name, raid_info in RAIDS.items():
         if not raid_info.get("is_active", True):
             continue
         if raid_info.get("is_extreme"):
-            until = raid_info.get("available_until")
-            if until:
-                try:
-                    if datetime.fromisoformat(until) < now:
-                        continue
-                except ValueError:
-                    pass
+            if not include_extreme or not is_extreme_available(raid_info, now):
+                continue
         for diff_name, diff_info in raid_info["difficulties"].items():
             if item_level >= diff_info["min_level"]:
                 result.append((raid_name, diff_name, diff_info))
     return result
+
+
+def active_extreme_raids(now: datetime | None = None) -> list[tuple[str, dict]]:
+    """지금 운영 중인 익스트림 레이드 — RAIDS 순서 유지."""
+    now = now or datetime.now(KST)
+    return [
+        (name, info) for name, info in RAIDS.items()
+        if info.get("is_extreme") and is_extreme_available(info, now)
+    ]

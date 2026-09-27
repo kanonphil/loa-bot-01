@@ -1,0 +1,60 @@
+{% import "_ui.html" as ui %}
+<section id="extreme-section" class="extreme-section">
+  {% if extreme.cards %}
+  <div class="extreme-head">
+    <h2 class="extreme-title">익스트림</h2>
+    {{ ui.chip("원정대 주 1회", "gold") }}
+    <span class="extreme-hint">캐릭터가 아니라 원정대 기준으로 한 번만 체크됩니다. 공대가 클리어 처리되면 자동으로 채워져요.</span>
+  </div>
+  <div class="raid-card-grid">
+    {% for card in extreme.cards %}
+    <div class="raid-card extreme-card{% if card.cleared %} is-cleared{% endif %}">
+      <div class="raid-card-header">
+        <div class="raid-card-header-top">
+          <span class="raid-card-name">{{ card.short_name }}</span>
+          {% if card.period %}{{ ui.chip(card.period.label, card.period.tone) }}{% endif %}
+        </div>
+        <span class="raid-card-meta">{{ card.raid_name }}{% if card.available_from %} · {{ card.available_from[5:10] }} ~ {{ (card.available_until or '')[5:10] }}{% endif %}</span>
+      </div>
+
+      {% if card.cleared %}
+      <div class="extreme-state">
+        {{ ui.chip("클리어", "ok") }}
+        <b class="extreme-who">{{ card.character_name }}</b>
+        <span class="raid-card-meta">· {{ card.difficulty }}</span>
+        <span class="ui-spacer"></span>
+        <form hx-post="/raid-check/extreme/clear" hx-target="#extreme-section" hx-swap="outerHTML"
+              hx-confirm="{{ card.short_name }} 클리어 기록을 해제할까요? 이번 주 다른 캐릭터로 다시 체크할 수 있게 됩니다.">
+          <input type="hidden" name="raid_name" value="{{ card.raid_name }}">
+          <button type="submit" class="raid-card-diff-toggle done">해제</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="extreme-state">{{ ui.chip("미클리어", "warn") }}<span class="raid-card-meta">이번 주 아직 안 갔어요.</span></div>
+      <div class="extreme-diffs">
+        {% for d in card.difficulties %}
+        <form class="extreme-diff-form" hx-post="/raid-check/extreme/set" hx-target="#extreme-section" hx-swap="outerHTML"
+              hx-confirm="{{ card.short_name }} {{ d.name }}을(를) 원정대 클리어로 기록할까요? 이번 주 다른 캐릭터는 이 레이드에 참여할 수 없게 됩니다.">
+          <input type="hidden" name="raid_name" value="{{ card.raid_name }}">
+          <input type="hidden" name="difficulty" value="{{ d.name }}">
+          <span class="extreme-diff-name">{{ d.name }} <span class="raid-card-meta">Lv.{{ d.min_level }}</span></span>
+          {% if d.eligible %}
+          <select name="character_name" class="settings-select js-themed-select" aria-label="{{ d.name }} 클리어 캐릭터">
+            {% for c in d.eligible %}
+            <option value="{{ c.character_name }}">{{ c.character_name }} ({{ c.character_class }}, {{ c.item_level }})</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="raid-card-diff-toggle">체크</button>
+          {% else %}
+          <span class="raid-card-meta">입장 가능한 캐릭터 없음</span>
+          {% endif %}
+        </form>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <script>if (window.initThemedSelects) window.initThemedSelects();</script>
+  {% endif %}
+</section>

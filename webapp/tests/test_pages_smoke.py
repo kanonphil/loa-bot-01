@@ -73,6 +73,7 @@ def _mock_everything():
     respx.get(f"{B}/accounts/list").mock(return_value=httpx.Response(200, json=[]))
     respx.get(f"{B}/support-classes").mock(return_value=httpx.Response(200, json=["바드"]))
     respx.get(f"{B}/subscriptions").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(f"{B}/completions/extreme").mock(return_value=httpx.Response(200, json={"week_key": "2026-01-07", "raids": []}))
     respx.get(f"{B}/completions/weeks").mock(return_value=httpx.Response(200, json={"current_week": "2026-01-07", "weeks": ["2026-01-07"]}))
     respx.get(f"{B}/completions/week").mock(return_value=httpx.Response(200, json={"week_key": "2026-01-07", "characters": []}))
     respx.get(f"{B}/my-invites").mock(return_value=httpx.Response(200, json=[]))

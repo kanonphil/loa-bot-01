@@ -117,7 +117,7 @@ def test_no_characters(client):
         "/api/internal/raid-progress", params={"discord_id": "없는유저"}, headers=HEADERS
     )
     assert resp.json() == {
-        "week_key": db.get_week_key(), "characters": [], "done": 0, "total": 0
+        "week_key": db.get_week_key(), "characters": [], "done": 0, "total": 0, "extreme": [],
     }
 
 
