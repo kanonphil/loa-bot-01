@@ -44,6 +44,7 @@
         <option value="support">서포터</option>
       </select>
       <button type="submit" data-busy-text="수락 중…">수락</button>
+      <button type="submit" class="party-leave-btn" form="decline-{{ inv.message_id }}">거절</button>
     </form>
     <script>
       (function () {
@@ -65,13 +66,16 @@
       })();
     </script>
     {% else %}
-    <p class="party-cannot-join">{{ inv.cannot_accept_reason or "참여 가능한 캐릭터가 없습니다." }}</p>
+    <div class="ui-row">
+      <p class="party-cannot-join">{{ inv.cannot_accept_reason or "참여 가능한 캐릭터가 없습니다." }}</p>
+      <span class="ui-spacer"></span>
+      <button type="submit" class="party-leave-btn" form="decline-{{ inv.message_id }}">거절</button>
+    </div>
     {% endif %}
 
-    <form method="post" action="/invites/{{ inv.message_id }}/decline"
-          onsubmit="return confirm('{{ inv.raid_name }} {{ inv.difficulty }} 초대를 거절할까요? 거절한 초대는 되돌릴 수 없습니다.');">
-      <button type="submit" class="party-leave-btn">거절</button>
-    </form>
+    {# 거절은 수락 줄에 나란히 — 별도 폼이라 줄이 바뀌던 것을 form= 속성으로 연결 #}
+    <form id="decline-{{ inv.message_id }}" method="post" action="/invites/{{ inv.message_id }}/decline" hidden
+          onsubmit="return confirm('{{ inv.raid_name }} {{ inv.difficulty }} 초대를 거절할까요? 거절한 초대는 되돌릴 수 없습니다.');"></form>
   {% endcall %}
   {% endfor %}
 </div>

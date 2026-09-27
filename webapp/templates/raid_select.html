@@ -5,8 +5,13 @@
   <h1>{{ character_name }} · 레이드 선택</h1>
   <p class="expedition-section-desc">체크한 레이드만 카드에 표시됩니다. 입장 가능한 레이드만 고를 수 있어요.</p>
 
-  <form method="post" action="/raid-check/select/{{ character_name }}" class="raid-select-form">
+  <form method="post" action="/raid-check/select/{{ character_name }}" class="raid-select-form" id="raid-select-form">
     <input type="hidden" name="account" value="{{ account }}">
+    <div class="raid-select-bulk">
+      <button type="button" class="leader-btn-sm" data-bulk="all">전체 선택</button>
+      <button type="button" class="leader-btn-sm" data-bulk="none">전체 해제</button>
+      <span class="raid-select-count" id="raid-select-count" aria-live="polite"></span>
+    </div>
     {% for group in groups %}
     <div class="raid-select-category">
       <h3>{{ group.category }}</h3>
@@ -20,7 +25,33 @@
     </div>
     {% endfor %}
 
+    <p class="raid-select-empty-hint" id="raid-select-empty-hint" hidden>선택한 레이드가 없습니다. 이대로 저장하면 이 캐릭터 카드에 레이드가 하나도 보이지 않아요.</p>
     <button type="submit" class="raid-select-save-btn">저장</button>
   </form>
 </div>
+<script>
+  (function () {
+    var form = document.getElementById("raid-select-form");
+    var boxes = form.querySelectorAll('input[name="raid_names"]');
+    var count = document.getElementById("raid-select-count");
+    var hint = document.getElementById("raid-select-empty-hint");
+    function refresh() {
+      var n = Array.prototype.filter.call(boxes, function (b) { return b.checked; }).length;
+      count.textContent = n + " / " + boxes.length + "개 선택";
+      hint.hidden = n > 0;
+    }
+    form.querySelectorAll("[data-bulk]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var on = btn.dataset.bulk === "all";
+        boxes.forEach(function (b) { b.checked = on; });
+        refresh();
+      });
+    });
+    boxes.forEach(function (b) { b.addEventListener("change", refresh); });
+    form.addEventListener("submit", function (e) {
+      if (!hint.hidden && !confirm("선택한 레이드가 없습니다. 카드가 비어 보이게 되는데 저장할까요?")) e.preventDefault();
+    });
+    refresh();
+  })();
+</script>
 {% endblock %}

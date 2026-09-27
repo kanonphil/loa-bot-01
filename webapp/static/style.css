@@ -621,21 +621,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   outline-offset: 2px;
 }
 
-.raid-select-save-btn {
-  padding: 10px 24px;
-  border-radius: 8px;
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
 
-.raid-select-save-btn:hover {
-  filter: brightness(1.1);
-}
 
 /* ── 공대 모집 ─────────────────────────────────────────── */
 
@@ -870,29 +856,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   outline: none;
 }
 
-.party-join-form button[type="submit"],
-.party-leave-btn {
-  padding: 8px 18px;
-  border-radius: 8px;
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
 
-.party-join-form button[type="submit"]:hover,
-.party-leave-btn:hover {
-  filter: brightness(1.1);
-}
 
-.party-leave-btn {
-  background: var(--danger-soft);
-  border-color: rgba(239, 106, 99, 0.4);
-  color: var(--danger);
-}
 
 .party-no-qualifying,
 .party-cannot-join {
@@ -908,22 +873,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   align-items: center;
 }
 
-.party-switch-btn {
-  display: inline-block;
-  padding: 8px 18px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: background 0.15s ease;
-}
 
-.party-switch-btn:hover {
-  background: var(--panel);
-}
 
 .party-switch-desc {
   color: var(--text-muted);
@@ -985,21 +935,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   gap: 8px;
 }
 
-.party-create-link {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  transition: filter 0.15s ease;
-}
 
-.party-create-link:hover {
-  filter: brightness(1.1);
-}
 
 /* 다크 테마에서 브라우저 기본 달력 아이콘이 검은색이라 안 보이는 문제 수정 */
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
@@ -1067,21 +1003,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   gap: 6px;
 }
 
-.leader-btn-sm {
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
 
-.leader-btn-sm:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
 
 .leader-form {
   display: flex;
@@ -1108,35 +1030,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   outline: none;
 }
 
-.leader-btn {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.15s ease, filter 0.15s ease;
-}
 
-.leader-btn:hover {
-  border-color: var(--accent);
-  filter: brightness(1.1);
-}
 
-.leader-btn-success {
-  background: rgba(122, 208, 138, 0.15);
-  border-color: rgba(122, 208, 138, 0.4);
-  color: var(--ok);
-}
 
-.leader-btn-danger {
-  background: rgba(224, 92, 92, 0.15);
-  border-color: rgba(224, 92, 92, 0.4);
-  color: var(--danger);
-}
 
 /* ── 파티 스레드 댓글 (디스코드 ↔ 웹) ──────────────────── */
 
@@ -1395,39 +1291,13 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   outline: none;
 }
 
-.expedition-add-form button {
-  padding: 10px 18px;
-  border-radius: 8px;
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 500;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
 
-.expedition-add-form button:hover {
-  filter: brightness(1.1);
-}
 
 .expedition-sync-form {
   margin-bottom: 16px;
 }
 
-.expedition-sync-form button {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
 
-.expedition-sync-form button:hover {
-  border-color: var(--accent);
-}
 
 .expedition-account-add {
   margin-bottom: 24px;
@@ -1470,21 +1340,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   outline: none;
 }
 
-.expedition-account-form button {
-  padding: 10px 18px;
-  border-radius: 8px;
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: filter 0.15s ease;
-}
 
-.expedition-account-form button:hover {
-  filter: brightness(1.1);
-}
 
 .expedition-account-group {
   margin-bottom: 20px;
@@ -1823,24 +1679,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 /* 여러 달/주를 넘겨본 뒤 바로 현재로 돌아올 방법이 없었다 — 토글과 대칭되게
    왼쪽에 둬서 헤더 중앙 정렬(제목)을 방해하지 않는다. */
-.calendar-today-btn {
-  position: absolute;
-  left: 0;
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
 
-.calendar-today-btn:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
 
 .calendar-view-btn {
   padding: 6px 14px;
@@ -2294,22 +2133,7 @@ a.calendar-party:hover {
   color: var(--text-muted);
 }
 
-.armory-sync-btn {
-  width: 100%;
-  padding: 8px 0;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
 
-.armory-sync-btn:hover {
-  background: var(--panel);
-}
 
 .armory-tabs {
   display: flex;
@@ -4385,20 +4209,7 @@ a.rank-row:hover {
   margin-left: 4px;
 }
 
-.settings-filter-remove {
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-}
 
-.settings-filter-remove:hover {
-  color: var(--danger);
-  border-color: var(--danger);
-}
 
 .settings-filter-add {
   display: flex;
@@ -4441,34 +4252,9 @@ select.settings-select {
   cursor: pointer;
 }
 
-.settings-toggle-btn {
-  height: var(--ctrl-h);
-  padding: 0 var(--sp-4);
-  border-radius: var(--r-md);
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: var(--fs-body);
-  font-weight: 650;
-  cursor: pointer;
-  box-sizing: border-box;
-  transition: filter 0.15s ease;
-}
 
-.settings-toggle-btn:hover {
-  filter: brightness(1.08);
-}
 
-.settings-toggle-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 
-.settings-toggle-on {
-  background: #21331f;
-  border-color: var(--ok);
-  color: var(--ok);
-}
 
 /* ── 커스텀 드롭다운 (themed-select.js) ─────────────────────
    네이티브 select는 그대로 두고(폼 제출용) 시각적으로만 덮는다 — 펼쳐진 목록까지
@@ -4750,20 +4536,6 @@ select.settings-select {
 }
 .admin-row-actions form { display: contents; }
 
-.admin-toggle-link,
-.admin-danger-link {
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  text-decoration: none;
-  line-height: 1.6;
-}
-.admin-toggle-link:hover { color: var(--text); border-color: var(--accent-dim); }
-.admin-danger-link:hover { color: var(--danger); border-color: var(--danger); }
 
 /* ── 관리자 표 / 봇 상태 / 클리어 편집 그리드 ──────────────── */
 .admin-table-wrap { overflow-x: auto; }
@@ -5143,23 +4915,6 @@ a.ui-card:hover {
   max-width: 38ch;
 }
 
-.ui-btn {
-  display: inline-block;
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  border-radius: var(--r-md);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-family: inherit;
-  font-size: var(--fs-body);
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
-.ui-btn:hover { filter: brightness(1.1); }
-.ui-btn.is-ghost { background: transparent; color: var(--text-muted); border-color: var(--border); }
-.ui-btn.is-ghost:hover { color: var(--text); border-color: var(--accent); filter: none; }
 
 .ui-toolbar {
   display: flex;
@@ -5618,4 +5373,186 @@ a.ui-card:hover {
 }
 @media (max-width: 760px) {
   .armory-sidebar { position: static; }
+}
+
+/* ── 레이드 선택: 전체 선택/해제 ───────────────────────── */
+.raid-select-bulk { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); flex-wrap: wrap; }
+.raid-select-count { margin-left: auto; font-size: var(--fs-meta); color: var(--text-muted); font-family: var(--font-mono); }
+.raid-select-empty-hint { margin: 0 0 var(--sp-3); padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 6px; font-size: var(--fs-body); }
+
+/* ══════════════════════════════════════════════════════════════
+   버튼 시스템 — 흩어져 있던 20종 버튼 정의를 하나로.
+   톤 5종(기본=accent-soft / ghost / neutral / danger / success) × 크기(sm / 기본 / lg / ctrl).
+   옛 클래스명(leader-btn, party-leave-btn, settings-toggle-btn …)은 별칭으로 남겨 템플릿을 안 건드린다.
+   맥락별 크기 차이는 의도적으로 유지한다 — 패널 안 보조 동작(sm), 카드/폼 기본, 페이지 주 동작(lg),
+   폼 컨트롤 옆 정렬(ctrl = --ctrl-h). 예전 통합 때 크기까지 평준화해서 화면이 밋밋해진 적이 있다.
+   ══════════════════════════════════════════════════════════════ */
+.ui-btn, .leader-btn, .party-leave-btn, .party-switch-btn, .party-create-link, .raid-select-save-btn,
+.armory-sync-btn, .calendar-today-btn, .settings-toggle-btn,
+.expedition-add-form button, .expedition-sync-form button, .expedition-account-form button,
+.party-join-form button[type="submit"],
+.leader-btn-sm, .admin-toggle-link, .admin-danger-link, .settings-filter-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: var(--ctrl-h);
+  padding: 0 16px;
+  border: 1px solid rgba(53, 214, 196, 0.4);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 0.15s ease, border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.ui-btn:hover, .party-create-link:hover, .raid-select-save-btn:hover, .settings-toggle-btn:hover,
+.expedition-add-form button:hover, .expedition-account-form button:hover,
+.party-join-form button[type="submit"]:hover { filter: brightness(1.1); }
+.ui-btn:focus-visible, .leader-btn:focus-visible, .party-leave-btn:focus-visible, .settings-toggle-btn:focus-visible,
+.party-join-form button[type="submit"]:focus-visible, .expedition-add-form button:focus-visible,
+.expedition-account-form button:focus-visible, .raid-select-save-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ui-btn:disabled, .leader-btn:disabled, .settings-toggle-btn:disabled, .party-join-form button[type="submit"]:disabled,
+.expedition-add-form button:disabled, .expedition-account-form button:disabled, .raid-select-save-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* 톤: ghost — 테두리만, 보조 동작(내 이력·주차별 기록·전체 동기화·동기화·오늘·관리자 행 액션) */
+.ui-btn.is-ghost, .party-switch-btn, .expedition-sync-form button, .armory-sync-btn, .calendar-today-btn,
+.leader-btn-sm, .admin-toggle-link, .admin-danger-link, .settings-filter-remove {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border);
+  font-weight: 500;
+}
+.ui-btn.is-ghost:hover, .party-switch-btn:hover, .expedition-sync-form button:hover, .armory-sync-btn:hover,
+.calendar-today-btn:hover, .leader-btn-sm:hover, .admin-toggle-link:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  filter: none;
+}
+/* 톤: neutral — 파티장 패널의 일반 동작(마감/재개/초대/위임/일정 변경/등록) */
+.ui-btn.is-neutral, .leader-btn {
+  background: var(--sidebar-bg);
+  color: var(--text);
+  border-color: var(--border);
+  font-weight: 500;
+}
+.ui-btn.is-neutral:hover, .leader-btn:hover { border-color: var(--accent); filter: brightness(1.1); }
+/* 톤: danger / success */
+.ui-btn.is-danger, .party-leave-btn, .leader-btn-danger, .party-join-form button.party-leave-btn {
+  background: var(--danger-soft);
+  border-color: rgba(239, 106, 99, 0.4);
+  color: var(--danger);
+}
+.ui-btn.is-danger:hover, .party-leave-btn:hover, .leader-btn-danger:hover { filter: brightness(1.1); border-color: var(--danger); }
+.ui-btn.is-success, .leader-btn-success, .settings-toggle-on {
+  background: var(--ok-soft);
+  border-color: rgba(94, 214, 122, 0.4);
+  color: var(--ok);
+}
+.ui-btn.is-success:hover, .leader-btn-success:hover { filter: brightness(1.1); border-color: var(--ok); }
+/* ghost인데 위험 동작(삭제·구독 취소) — 평소엔 조용하고 올리면 빨강 */
+.ui-btn.is-ghost.is-danger { background: transparent; color: var(--text-muted); border-color: var(--border); }
+.ui-btn.is-ghost.is-danger:hover, .admin-danger-link:hover, .settings-filter-remove:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  filter: none;
+}
+
+/* 크기 */
+.ui-btn.is-sm, .leader-btn-sm, .admin-toggle-link, .admin-danger-link, .settings-filter-remove,
+.expedition-remove-form .party-leave-btn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: var(--fs-meta);
+  border-radius: var(--r-sm);
+  line-height: 1;
+}
+.leader-btn-sm { border-radius: var(--r-pill); }
+/* lg = 페이지 주 동작. 높이는 같고(--ctrl-h) 좌우 여백·글자만 키운다 — 옆 셀렉트(36px)와 줄이 맞아야 한다 */
+.ui-btn.is-lg, .party-create-link, .raid-select-save-btn,
+.expedition-add-form button, .expedition-account-form button, .party-join-form button[type="submit"],
+.party-join-form button.party-leave-btn {
+  padding: 0 20px;
+  font-size: 14px;
+}
+.ui-btn.is-ctrl, .settings-toggle-btn { height: var(--ctrl-h); padding: 0 var(--sp-4); }
+.ui-btn.is-block, .armory-sync-btn { width: 100%; }
+.calendar-today-btn { position: absolute; left: 0; height: 32px; padding: 0 14px; } /* 옆 ←→ 버튼(32px)과 같은 키 */
+/* 관리자: 입력창(36px) 옆의 인라인 버튼은 같은 키로, 행 액션 링크와 ▲▼는 28px로 맞춘다 */
+.admin-inline-form .admin-toggle-link, .admin-inline-form .admin-danger-link {
+  height: var(--ctrl-h);
+  padding: 0 12px;
+  font-size: var(--fs-body);
+  border-radius: var(--r-md);
+}
+.admin-row-actions .admin-toggle-link, .admin-row-actions .admin-danger-link, .admin-move-btn {
+  height: 28px;
+  box-sizing: border-box;
+}
+.admin-move-btn { padding: 0 6px; }
+/* 버튼 옆에 놓이는 입력창도 같은 키(36px) — 이전엔 34/40/42px가 섞여 있었다 */
+.leader-form input, .expedition-add-form input, .expedition-account-form input, .party-switch-form select,
+.calc-field input, .calc-field select {
+  height: var(--ctrl-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  box-sizing: border-box;
+}
+.party-comment-form { align-items: flex-end; }
+/* 파티장 패널: flex column 안에서 단독 버튼이 가로로 늘어나지 않게 */
+.leader-group > .leader-btn, .leader-group > .ui-btn { align-self: flex-start; }
+
+/* ── 캘린더 모바일: 7열 격자(360px에서 칸당 48px) 대신 하루 한 줄 목록형 ───── */
+@media (max-width: 640px) {
+  .calendar-weekdays { display: none; }
+  .calendar-grid { border: 0; }
+  .calendar-week { display: flex; flex-direction: column; gap: 6px; }
+  .calendar-week + .calendar-week { margin-top: 6px; }
+  .calendar-cell {
+    min-height: 0;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--panel);
+  }
+  .calendar-week-single .calendar-cell { min-height: 0; }
+  .calendar-week .calendar-cell:last-child { border-right: 1px solid var(--border); }
+  .calendar-cell.empty { display: none; }
+  .calendar-cell.is-empty-day:not(.today) { opacity: 0.55; padding-top: var(--sp-1); padding-bottom: var(--sp-1); }
+  .calendar-day-number { flex: 0 0 64px; font-size: var(--fs-body); white-space: nowrap; }
+  .calendar-day-number::after { content: " (" attr(data-wd) ")"; color: var(--text-muted); font-weight: 400; }
+  .calendar-cell.today .calendar-day-number { width: auto; height: auto; border-radius: var(--r-pill); padding: 0 8px; }
+  .calendar-party-list { flex: 1; min-width: 0; }
+  .calendar-party { padding: 5px 8px; }
+  .calendar-party-name { white-space: normal; }
+}
+@media (max-width: 640px) {
+  /* 월간 목록형에서 공대 없는 날은 숨긴다(오늘은 유지) — 30줄 중 대부분이 빈 줄이었다. 주간은 7줄이라 그대로. */
+  .calendar-week:not(.calendar-week-single) .calendar-cell.is-empty-day:not(.today) { display: none; }
+  .calendar-week:not(.calendar-week-single):not(:has(.calendar-cell:not(.is-empty-day), .calendar-cell.today)) { display: none; }
+  .calendar-week:not(.calendar-week-single) + .calendar-week:not(.calendar-week-single) { margin-top: 0; }
+}
+/* 익스트림 섹션: 캐릭터 셀렉트(30px)와 "체크" 버튼을 같은 키로 */
+.extreme-diff-form .themed-select-trigger, .extreme-diff-form .raid-card-diff-toggle { height: 30px; box-sizing: border-box; }
+.extreme-diff-form .raid-card-diff-toggle { padding: 0 12px; }
+@media (max-width: 1024px) {
+  /* 세로 배치(flex column)에서는 flex:1이 높이를 나눠 가져 입력창이 21px로 찌그러졌다 — 높이는 고정 */
+  .expedition-add-form input, .expedition-account-form input { flex: 0 0 auto; }
 }

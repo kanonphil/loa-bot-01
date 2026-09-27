@@ -71,7 +71,7 @@ def test_calendar_highlights_today(client, monkeypatch):
         respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=PARTIES))
         resp = client.get("/calendar")
 
-    assert '<div class="calendar-cell today">' in resp.text
+    assert '<div class="calendar-cell today' in resp.text  # 모바일 목록형용 is-empty-day가 뒤에 붙을 수 있다
 
 
 def test_calendar_does_not_highlight_today_in_other_month(client, monkeypatch):
@@ -194,7 +194,7 @@ def test_calendar_week_view_highlights_today(client, monkeypatch):
         respx.get(CALENDAR_URL).mock(return_value=httpx.Response(200, json=[]))
         resp = client.get("/calendar", params={"view": "week"})
 
-    assert '<div class="calendar-cell today">' in resp.text
+    assert '<div class="calendar-cell today' in resp.text  # 모바일 목록형용 is-empty-day가 뒤에 붙을 수 있다
 
 
 def test_calendar_week_navigation_stays_within_seven_days(client, monkeypatch):

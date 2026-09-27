@@ -45,8 +45,8 @@
     {% if view == "week" %}
     <div class="calendar-week calendar-week-single">
       {% for d in week_days %}
-      <div class="calendar-cell{% if d.is_today %} today{% endif %}">
-        <span class="calendar-day-number">{% if d.show_month %}{{ d.month }}/{{ d.day }}{% else %}{{ d.day }}{% endif %}</span>
+      <div class="calendar-cell{% if d.is_today %} today{% endif %}{% if not d.parties %} is-empty-day{% endif %}">
+        <span class="calendar-day-number" data-wd="{{ weekday_labels[loop.index0].label }}">{% if d.show_month %}{{ d.month }}/{{ d.day }}{% else %}{{ d.day }}{% endif %}</span>
         <div class="calendar-party-list">{{ render_parties(d.parties) }}</div>
       </div>
       {% endfor %}
@@ -59,8 +59,8 @@
       <div class="calendar-cell empty"></div>
       {% else %}
       {% set day_parties = parties_by_day.get(day, []) %}
-      <div class="calendar-cell{% if day == today_day %} today{% endif %}">
-        <span class="calendar-day-number">{{ day }}</span>
+      <div class="calendar-cell{% if day == today_day %} today{% endif %}{% if not day_parties %} is-empty-day{% endif %}">
+        <span class="calendar-day-number" data-wd="{{ weekday_labels[loop.index0].label }}">{{ day }}</span>
         <div class="calendar-party-list">{{ render_parties(day_parties) }}</div>
       </div>
       {% endif %}
