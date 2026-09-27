@@ -6,7 +6,7 @@ import respx
 
 from webapp import notification_store, party_events
 from webapp.routes import notifications
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 
 @pytest.fixture(autouse=True)
@@ -70,7 +70,7 @@ def test_settings_toggle_subscribe(client):
 
     resp = client.post("/notifications/subscribe")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/settings"
+    assert without_toast(resp.headers["location"]) == "/settings"
 
     resp = client.get("/settings")
     assert "구독 중" in resp.text
@@ -122,7 +122,7 @@ def test_open_marks_read_and_redirects_to_party(client):
 
     resp = client.get(f"/notifications/{saved['id']}/open")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/msg-1"
+    assert without_toast(resp.headers["location"]) == "/parties/msg-1"
 
     resp = client.get("/notifications/panel")
     assert "새 알림이 없습니다" in resp.text
@@ -165,7 +165,7 @@ def test_open_unknown_notification_redirects_to_party_list(client):
     _login(client, discord_id="111")
     resp = client.get("/notifications/9999/open")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties"
+    assert without_toast(resp.headers["location"]) == "/parties"
 
 
 def test_unsubscribed_user_does_not_accumulate_unread(client):
@@ -340,7 +340,7 @@ def test_add_discord_subscription_posts_to_bot(client):
         resp = client.post("/settings/discord-subscriptions/add", data={"raid_name": "아르모체(4막)", "difficulty": ""})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/settings?saved=subscription"
+    assert without_toast(resp.headers["location"]) == "/settings"
     import json as _json
     assert _json.loads(route.calls[0].request.content) == {"discord_id": "111", "raid_name": "아르모체(4막)", "difficulty": "전체"}
 
@@ -352,7 +352,7 @@ def test_add_discord_subscription_failure_shows_reason(client):
         resp = client.post("/settings/discord-subscriptions/add", data={"raid_name": "아르모체(4막)", "difficulty": "노말"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"].startswith("/settings?error=")
+    assert "toast_type=error" in resp.headers["location"]
 
 
 def test_remove_discord_subscription(client):
@@ -372,6 +372,6 @@ def test_save_pre_notify_hours(client):
         resp = client.post("/settings/pre-notify", data={"pre_notify_hours": "1.0"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/settings?saved=pre_notify"
+    assert without_toast(resp.headers["location"]) == "/settings"
     import json as _json
     assert _json.loads(route.calls[0].request.content) == {"discord_id": "111", "pre_notify_hours": 1.0}

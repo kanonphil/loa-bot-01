@@ -2,7 +2,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
@@ -106,7 +106,7 @@ def test_switch_role_submit_posts_to_bot_and_redirects_on_success(client):
         resp = client.post("/parties/p1/switch-role", data={"new_role": "dps"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert switch_route.called
     import json as _json
 

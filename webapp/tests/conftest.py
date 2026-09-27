@@ -74,3 +74,19 @@ def log_in(client: TestClient, discord_id: str = "111", username: str = "tester"
     )
     respx.get(USER_CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
     return client.get("/callback", params={"code": "abc", "state": state})
+
+
+def without_toast(location: str) -> str:
+    """redirect 위치에서 1회성 토스트 파라미터(?toast=…&toast_type=…)를 뗀 경로 — 액션 라우트 테스트가
+    "어디로 갔는지"만 볼 때 쓴다."""
+    import re as _re
+
+    return _re.sub(r"[?&]toast=[^&]*&toast_type=[^&]*", "", location)
+
+
+def toast_of(location: str) -> tuple[str, str]:
+    """redirect 위치의 토스트 (문구, 종류)."""
+    from urllib.parse import parse_qs, urlparse
+
+    q = parse_qs(urlparse(location).query)
+    return (q.get("toast", [""])[0], q.get("toast_type", [""])[0])

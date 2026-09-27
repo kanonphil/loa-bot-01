@@ -45,16 +45,21 @@
     var form = document.getElementById("switch-form");
     if (!select) return;
 
+    var suppress = false;
     select.addEventListener("change", function () {
+      if (suppress) { suppress = false; return; }
       var opt = select.options[select.selectedIndex];
       var isOther = opt.textContent.includes("타 공대 참여중");
       var message = isOther
-        ? opt.value + "(으)로 변경하시겠습니까?\n이 캐릭터가 참여 중인 다른 공대에서는 자동으로 나가게 됩니다."
-        : opt.value + "(으)로 변경하시겠습니까?";
+        ? opt.value + "(으)로 변경할까요?\n이 캐릭터가 참여 중인 다른 공대에서는 자동으로 나가게 됩니다."
+        : opt.value + "(으)로 변경할까요?";
       if (window.confirm(message)) {
         form.submit();
       } else {
         select.selectedIndex = 0;
+        // themed-select.js는 change 이벤트로 라벨을 다시 그린다 — 되돌린 값도 보이게
+        suppress = true;
+        select.dispatchEvent(new Event("change"));
       }
     });
   })();

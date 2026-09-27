@@ -7,6 +7,7 @@ from starlette.responses import RedirectResponse
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
+from webapp.flash import redirect_with_toast
 from webapp.templating import templates
 from webapp.utils import time_ago
 
@@ -46,8 +47,10 @@ async def character_detail_sync(
     character_name: str, user: dict = Depends(get_current_user)
 ):
     """"동기화" 버튼 — 실제로 로스트아크 API를 호출해 캐시를 최신 정보로 갱신."""
-    await bot_client.sync_armory_detail(user["discord_id"], character_name)
-    return RedirectResponse(f"/characters/{character_name}", status_code=303)
+    detail = await bot_client.sync_armory_detail(user["discord_id"], character_name)
+    if isinstance(detail, dict) and detail.get("error"):
+        return redirect_with_toast(f"/characters/{character_name}", detail["error"], "error")
+    return redirect_with_toast(f"/characters/{character_name}", "최신 정보로 동기화했습니다.")
 
 
 @router.get("/party-member-card")

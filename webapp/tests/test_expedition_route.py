@@ -2,7 +2,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, toast_of, without_toast
 
 CHARACTERS_URL = "http://bot-server.internal/api/internal/user-characters-grouped"
 ADD_URL = "http://bot-server.internal/api/internal/characters/add"
@@ -112,7 +112,9 @@ def test_expedition_page_hides_account_section_when_no_accounts(client):
     assert "내 계정" not in resp.text
 
 
-def test_add_character_success_shows_confirmation(client):
+def test_add_character_success_redirects_with_toast(client):
+    """POST가 페이지를 직접 렌더하면 뒤로가기가 그 응답으로 돌아가고 F5가 동작을 재실행한다 —
+    전부 303 redirect + 1회성 토스트로."""
     with respx.mock:
         log_in(client)
         respx.post(ADD_URL).mock(
@@ -121,59 +123,69 @@ def test_add_character_success_shows_confirmation(client):
                 json={"success": True, "character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0},
             )
         )
-        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
-        _mock_accounts()
-
         resp = client.post("/expedition/add", data={"character_name": "발키리"})
 
-    assert resp.status_code == 200
-    assert "등록 완료" in resp.text
+    assert resp.status_code == 303
+    assert without_toast(resp.headers["location"]) == "/expedition"
+    text, kind = toast_of(resp.headers["location"])
+    assert kind == "success" and "발키리" in text and "등록 완료" in text
 
 
-def test_add_character_failure_shows_reason(client):
+def test_add_character_failure_redirects_with_error_toast(client):
     with respx.mock:
         log_in(client)
         respx.post(ADD_URL).mock(
             return_value=httpx.Response(200, json={"success": False, "reason": "이미 등록된 캐릭터입니다."})
         )
-        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
-        _mock_accounts()
-
         resp = client.post("/expedition/add", data={"character_name": "발키리"})
 
-    assert resp.status_code == 200
-    assert "이미 등록된 캐릭터입니다" in resp.text
+    assert resp.status_code == 303
+    assert toast_of(resp.headers["location"]) == ("이미 등록된 캐릭터입니다.", "error")
 
 
-def test_remove_character_calls_bot(client):
+def test_failure_without_reason_still_shows_a_toast(client):
+    """봇이 reason 없이 실패를 주면 예전엔 빈 토스트(=아무 표시 없음)였다."""
+    with respx.mock:
+        log_in(client)
+        respx.post(ADD_URL).mock(return_value=httpx.Response(200, json={"success": False}))
+        resp = client.post("/expedition/add", data={"character_name": "발키리"})
+    text, kind = toast_of(resp.headers["location"])
+    assert kind == "error" and text
+
+
+def test_remove_character_calls_bot_and_redirects(client):
     with respx.mock:
         log_in(client)
         remove_route = respx.post(REMOVE_URL).mock(return_value=httpx.Response(200, json={"success": True}))
-        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
-        _mock_accounts()
-
         resp = client.post("/expedition/remove", data={"character_name": "발키리"})
 
-    assert resp.status_code == 200
-    assert remove_route.called
+    assert resp.status_code == 303 and remove_route.called
+    assert without_toast(resp.headers["location"]) == "/expedition"
 
 
-def test_sync_shows_result(client):
+def test_sync_redirects_with_result_toast(client):
     with respx.mock:
         log_in(client)
         respx.post(SYNC_URL).mock(
             return_value=httpx.Response(200, json={"success": True, "updated": 2, "total": 2})
         )
-        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
-        _mock_accounts()
-
         resp = client.post("/expedition/sync")
 
-    assert resp.status_code == 200
-    assert "2/2개 캐릭터 동기화 완료" in resp.text
+    assert resp.status_code == 303
+    assert toast_of(resp.headers["location"])[0] == "2/2개 캐릭터 동기화 완료"
 
 
-def test_add_account_success_shows_confirmation(client):
+def test_sync_can_return_to_caller_page(client):
+    with respx.mock:
+        log_in(client)
+        respx.post(SYNC_URL).mock(return_value=httpx.Response(200, json={"success": True, "updated": 1, "total": 1}))
+        resp = client.post("/expedition/sync", data={"next": "/main"})
+        evil = client.post("/expedition/sync", data={"next": "//evil.example"})
+    assert without_toast(resp.headers["location"]) == "/main"
+    assert without_toast(evil.headers["location"]) == "/expedition"  # 외부 리다이렉트 금지
+
+
+def test_add_account_success_redirects_with_toast(client):
     with respx.mock:
         log_in(client)
         respx.post(ADD_ACCOUNT_URL).mock(
@@ -181,62 +193,47 @@ def test_add_account_success_shows_confirmation(client):
                 200, json={"success": True, "label": "슬레이어부계정", "added": 3, "total": 3}
             )
         )
-        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
-        _mock_accounts()
-
         resp = client.post(
             "/expedition/add-account",
             data={"api_key": "dummy-key", "character_name": "슬레이어부계정"},
         )
 
-    assert resp.status_code == 200
-    assert "슬레이어부계정" in resp.text
-    assert "3/3개" in resp.text
+    assert resp.status_code == 303
+    text, _ = toast_of(resp.headers["location"])
+    assert "슬레이어부계정" in text and "3/3개" in text
 
 
-def test_add_account_failure_shows_reason(client):
+def test_add_account_failure_redirects_with_reason(client):
     with respx.mock:
         log_in(client)
         respx.post(ADD_ACCOUNT_URL).mock(
-            return_value=httpx.Response(
-                200, json={"success": False, "reason": "동물롱장 길드 소속이 아닙니다."}
-            )
+            return_value=httpx.Response(200, json={"success": False, "reason": "동물롱장 길드 소속이 아닙니다."})
         )
-        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
-        _mock_accounts()
+        resp = client.post("/expedition/add-account", data={"api_key": "dummy-key", "character_name": "발키리"})
 
-        resp = client.post(
-            "/expedition/add-account",
-            data={"api_key": "dummy-key", "character_name": "발키리"},
-        )
-
-    assert resp.status_code == 200
-    assert "동물롱장 길드 소속이 아닙니다" in resp.text
+    assert toast_of(resp.headers["location"]) == ("동물롱장 길드 소속이 아닙니다.", "error")
 
 
-def test_remove_account_success_shows_confirmation(client):
+def test_remove_account_redirects(client):
     with respx.mock:
         log_in(client)
         remove_route = respx.post(REMOVE_ACCOUNT_URL).mock(return_value=httpx.Response(200, json={"success": True}))
-        respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
-        _mock_accounts()
+        ok = client.post("/expedition/remove-account", data={"key_id": "1"})
+        respx.post(REMOVE_ACCOUNT_URL).mock(return_value=httpx.Response(200, json={"success": False}))
+        bad = client.post("/expedition/remove-account", data={"key_id": "999"})
 
-        resp = client.post("/expedition/remove-account", data={"key_id": "1"})
-
-    assert resp.status_code == 200
     assert remove_route.called
-    assert remove_route.calls[0].request.content
-    assert "삭제되었습니다" in resp.text
+    assert toast_of(ok.headers["location"])[0] == "계정이 삭제되었습니다."
+    assert toast_of(bad.headers["location"]) == ("계정을 찾을 수 없습니다.", "error")
 
 
-def test_remove_account_failure_shows_message(client):
+def test_expedition_page_renders_toast_from_query(client):
+    """base.html이 ?toast= 를 flash-data로 바꿔 어떤 페이지든 1회 토스트를 띄운다."""
     with respx.mock:
         log_in(client)
-        respx.post(REMOVE_ACCOUNT_URL).mock(return_value=httpx.Response(200, json={"success": False}))
         respx.get(CHARACTERS_URL).mock(return_value=httpx.Response(200, json=CHARACTERS))
         _mock_accounts()
-
-        resp = client.post("/expedition/remove-account", data={"key_id": "999"})
-
-    assert resp.status_code == 200
-    assert "계정을 찾을 수 없습니다" in resp.text
+        resp = client.get("/expedition?toast=%EB%93%B1%EB%A1%9D%20%EC%99%84%EB%A3%8C&toast_type=success")
+    assert 'data-message="등록 완료"' in resp.text and 'data-strip-url="1"' in resp.text
+    assert 'type="password"' in resp.text  # API 키는 비밀 입력
+    assert "삭제할까요" in resp.text  # 캐릭터 삭제 confirm

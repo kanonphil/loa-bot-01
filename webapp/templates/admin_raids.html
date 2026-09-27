@@ -9,10 +9,6 @@
   "순서 저장"을 눌러야 반영되며, 이 순서가 그대로 공대 모집 드롭다운 순서가 됩니다.
 </p>
 
-{% if error %}
-<p class="admin-error">{{ error }}</p>
-{% endif %}
-
 {% call ui.toolbar() %}
   {% for key, label in tabs %}
   {% set count = {"categories": categories | length, "raids": raids | length, "difficulties": (raids[selected_raid].difficulties | length) if selected_raid else none}[key] %}

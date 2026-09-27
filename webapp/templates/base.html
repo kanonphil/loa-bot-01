@@ -9,7 +9,11 @@
 </head>
 <body>
   {% block body %}
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+  {# POST → redirect 뒤 1회성 토스트 (webapp/flash.py). toast.js가 띄운 뒤 URL에서 지운다. #}
+  {% if request.query_params.get("toast") %}
+  <div class="flash-data" hidden data-type="{{ request.query_params.get('toast_type') or 'success' }}" data-message="{{ request.query_params.get('toast') }}" data-strip-url="1"></div>
+  {% endif %}
   <div class="layout">
     <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="메뉴 열기">☰</button>
     <div class="sidebar-overlay" id="sidebar-overlay"></div>

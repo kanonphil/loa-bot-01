@@ -81,19 +81,19 @@
         숙련도
         <select name="proficiency" required class="js-themed-select">
           {% for p in proficiency_options %}
-          <option value="{{ p.value }}" title="{{ p.description }}">{{ p.label }}</option>
+          <option value="{{ p.value }}" title="{{ p.description }}" {% if preset.proficiency == p.value %}selected{% endif %}>{{ p.label }}</option>
           {% endfor %}
         </select>
       </label>
 
       <label>
         일정
-        <input type="text" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" required>
+        <input type="text" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" value="{{ preset.scheduled_datetime }}" aria-label="일정">
       </label>
 
       <label>
         공지/메모 (선택)
-        <input type="text" name="memo" maxlength="150" placeholder="예) 음성 채널 필수">
+        <input type="text" name="memo" maxlength="150" placeholder="예: 음성 채널 필수" value="{{ preset.memo }}">
       </label>
 
       <label>
@@ -101,7 +101,7 @@
         <select name="character_name" id="character-name-select" class="js-themed-select">
           <option value="">선택 안 함</option>
           {% for c in characters %}
-          <option value="{{ c.character_name }}">{{ c.character_name }} ({{ c.character_class }} · {{ c.item_level }})</option>
+          <option value="{{ c.character_name }}" {% if preset.character_name == c.character_name %}selected{% endif %}>{{ c.character_name }} ({{ c.character_class }} · {{ c.item_level }})</option>
           {% endfor %}
         </select>
       </label>
@@ -110,11 +110,12 @@
         역할
         <select name="role" id="role-select" class="js-themed-select">
           <option value="dps">딜러</option>
-          <option value="support">서포터</option>
+          <option value="support" {% if preset.role == "support" %}selected{% endif %}>서포터</option>
         </select>
       </label>
 
       <button type="submit" id="party-create-submit" class="ui-btn" disabled>레이드를 먼저 고르세요</button>
+      <div id="party-create-preset" hidden data-raid="{{ preset.raid }}" data-diff="{{ preset.difficulty }}"></div>
     </aside>
   </div>
 </form>
@@ -210,12 +211,28 @@
 
   // 응답이 느릴 때 더블클릭/재제출로 스레드가 중복 생성되는 것을 막는다
   // (서버에도 중복 요청 방지가 있지만, 불필요한 왕복 자체를 줄인다).
-  document.querySelector(".party-create-form").addEventListener("submit", function () {
+  document.querySelector(".party-create-form").addEventListener("submit", function (event) {
+    // flatpickr가 원본 input을 숨겨서 브라우저 required 검증 말풍선이 못 뜬다 — 여기서 직접 확인
+    if (!document.getElementById("scheduled-datetime-input").value) {
+      event.preventDefault();
+      if (window.showToast) window.showToast("일정을 선택해주세요.", "error");
+      return;
+    }
     submitBtn.disabled = true;
     submitBtn.textContent = "개설 중...";
   });
 
   applyFilters();
+
+  // 개설 실패 후 되돌아온 경우 — 고르던 레이드/난이도를 다시 선택 상태로
+  (function () {
+    var preset = document.getElementById("party-create-preset");
+    if (!preset || !preset.dataset.raid) return;
+    var btn = Array.prototype.find.call(document.querySelectorAll(".raid-diff"), function (b) {
+      return b.dataset.raid === preset.dataset.raid && b.dataset.diff === preset.dataset.diff;
+    });
+    if (btn) selectDifficulty(btn);
+  })();
 </script>
 <script src="/static/flatpickr.min.js"></script>
 <script src="/static/party-datetime.js?v={{ static_version }}"></script>

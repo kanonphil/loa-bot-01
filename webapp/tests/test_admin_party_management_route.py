@@ -4,7 +4,7 @@ import httpx
 import respx
 
 from webapp import config
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
@@ -160,7 +160,7 @@ def test_revert_clear_route_forwards_admin_discord_id(client, monkeypatch):
         resp = client.post("/parties/p1/admin-revert-clear")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert revert_route.called
     import json as _json
     assert _json.loads(revert_route.calls[0].request.content) == {"discord_id": "999"}
@@ -277,7 +277,7 @@ def test_admin_disband_route_forwards_and_redirects(client, monkeypatch):
         route = respx.post(DISBAND_URL).mock(return_value=httpx.Response(200, json={"success": True}))
         resp = client.post("/parties/p1/admin-disband")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     import json as _json
     assert _json.loads(route.calls[0].request.content) == {"discord_id": "999"}
 
@@ -296,7 +296,7 @@ def test_admin_notify_route_reports_sent_count(client, monkeypatch):
         route = respx.post(NOTIFY_URL).mock(return_value=httpx.Response(200, json={"success": True, "sent": 3, "total": 3}))
         resp = client.post("/parties/p1/admin-notify", data={"content": "오늘 8시 집합"})
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1?notice_sent=3"
+    assert without_toast(resp.headers["location"]) == "/parties/p1?notice_sent=3"
     import json as _json
     assert _json.loads(route.calls[0].request.content) == {"discord_id": "999", "content": "오늘 8시 집합"}
 
@@ -352,7 +352,7 @@ def test_admin_set_forum_channel_posts_to_bot_and_redirects(client, monkeypatch)
         )
         resp = client.post("/admin/forum-channel", data={"channel_id": "701"})
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/admin/parties?forum_saved=1"
+    assert without_toast(resp.headers["location"]) == "/admin/parties"
     sent = route.calls[0].request
     import json as _json
     assert _json.loads(sent.content) == {"discord_id": "999", "guild_id": "test-guild-id", "channel_id": "701"}
@@ -364,7 +364,7 @@ def test_admin_set_forum_channel_failure_redirects_with_error(client, monkeypatc
         respx.post(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json={"success": False, "reason": "이 서버의 포럼 채널만 지정할 수 있습니다."}))
         resp = client.post("/admin/forum-channel", data={"channel_id": "1"})
     assert resp.status_code == 303
-    assert "forum_error=" in resp.headers["location"]
+    assert "toast_type=error" in resp.headers["location"]
 
 
 def test_admin_set_forum_channel_requires_admin(client, monkeypatch):

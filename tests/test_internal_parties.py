@@ -82,6 +82,7 @@ def test_list_parties_includes_slots(client, party_setup, fake_bot):
     assert len(data[0]["slots"]) == 1
     assert data[0]["slots"][0]["character_name"] == "워로드캐릭"
     assert data[0]["comment_count"] == 0
+    assert data[0]["waitlist_count"] == 0
 
 
 def test_list_parties_counts_comments(client, party_setup, fake_bot):

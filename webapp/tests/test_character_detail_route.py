@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 ARMORY_URL = "http://bot-server.internal/api/internal/armory-detail"
 
@@ -352,7 +352,7 @@ def test_own_character_shows_sync_button_and_last_synced_time(client):
     assert "마지막 동기화" in resp.text
     assert "동기화" in resp.text
     # 아이콘 없이 텍스트만 — 이모지/아이콘 클래스가 버튼에 섞여 있지 않은지 확인
-    assert '<button type="submit" class="armory-sync-btn">동기화</button>' in resp.text
+    assert 'class="armory-sync-btn" data-busy-text="동기화 중…">동기화</button>' in resp.text
 
 
 def test_other_persons_character_hides_sync_button(client):
@@ -374,7 +374,7 @@ def test_sync_posts_to_bot_and_redirects_back(client):
         resp = client.post("/characters/발키리/sync")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/characters/%EB%B0%9C%ED%82%A4%EB%A6%AC"  # "발키리" URL 인코딩
+    assert without_toast(resp.headers["location"]) == "/characters/%EB%B0%9C%ED%82%A4%EB%A6%AC"  # "발키리" URL 인코딩
     assert sync_route.called
     sent_params = parse_qs(urlparse(str(sync_route.calls.last.request.url)).query)
     assert sent_params["discord_id"] == ["111"]

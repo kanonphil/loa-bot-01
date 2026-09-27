@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
+from webapp.flash import redirect_result
 from webapp.templating import templates
 from webapp.utils import time_ago
 
@@ -41,71 +42,51 @@ async def expedition_page(request: Request, user: dict = Depends(get_current_use
 
 @router.post("/expedition/add")
 async def add_character(
-    request: Request,
     character_name: str = Form(...),
     user: dict = Depends(get_current_user),
 ):
-    action_result = await bot_client.add_character(user["discord_id"], character_name)
-    ctx = await _page_context(user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "expedition.html",
-        {"user": user, "active": "expedition", "action_result": action_result, **ctx},
-    )
+    result = await bot_client.add_character(user["discord_id"], character_name)
+    if result.get("success") and result.get("character_name"):
+        msg = f"{result['character_name']} ({result.get('character_class')} / {result.get('item_level')}) 등록 완료"
+    else:
+        msg = "캐릭터를 등록했습니다."
+    return redirect_result("/expedition", result, msg, "캐릭터를 등록하지 못했습니다.")
 
 
 @router.post("/expedition/remove")
 async def remove_character(
-    request: Request,
     character_name: str = Form(...),
     user: dict = Depends(get_current_user),
 ):
-    action_result = await bot_client.remove_character(user["discord_id"], character_name)
-    ctx = await _page_context(user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "expedition.html",
-        {"user": user, "active": "expedition", "action_result": action_result, **ctx},
-    )
+    result = await bot_client.remove_character(user["discord_id"], character_name)
+    return redirect_result("/expedition", result, f"{character_name} 캐릭터를 삭제했습니다.", "캐릭터를 삭제하지 못했습니다.")
 
 
 @router.post("/expedition/sync")
-async def sync_characters(request: Request, user: dict = Depends(get_current_user)):
-    sync_result = await bot_client.sync_characters(user["discord_id"])
-    ctx = await _page_context(user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "expedition.html",
-        {"user": user, "active": "expedition", "sync_result": sync_result, **ctx},
-    )
+async def sync_characters(next: str = Form("/expedition"), user: dict = Depends(get_current_user)):
+    """동기화는 캐릭터 수만큼 로스트아크 API를 돌아 수 초 걸린다 — 결과를 렌더하지 않고 redirect 해야
+    뒤로가기/F5가 동기화를 다시 돌리지 않는다. next: 메인 카드 등 다른 곳에서 눌렀을 때 돌아갈 경로."""
+    result = await bot_client.sync_characters(user["discord_id"])
+    target = next if next.startswith("/") and not next.startswith("//") else "/expedition"
+    msg = f"{result.get('updated', 0)}/{result.get('total', 0)}개 캐릭터 동기화 완료"
+    return redirect_result(target, result, msg, "동기화하지 못했습니다.")
 
 
 @router.post("/expedition/add-account")
 async def add_account(
-    request: Request,
     api_key: str = Form(...),
     character_name: str = Form(...),
     user: dict = Depends(get_current_user),
 ):
-    account_result = await bot_client.add_account(user["discord_id"], api_key.strip(), character_name.strip())
-    ctx = await _page_context(user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "expedition.html",
-        {"user": user, "active": "expedition", "account_result": account_result, **ctx},
-    )
+    result = await bot_client.add_account(user["discord_id"], api_key.strip(), character_name.strip())
+    msg = f"\"{result.get('label')}\" 계정 등록 완료 (원정대 캐릭터 {result.get('added', 0)}/{result.get('total', 0)}개 추가)"
+    return redirect_result("/expedition", result, msg, "계정을 등록하지 못했습니다.")
 
 
 @router.post("/expedition/remove-account")
 async def remove_account(
-    request: Request,
     key_id: int = Form(...),
     user: dict = Depends(get_current_user),
 ):
-    remove_account_result = await bot_client.remove_account(user["discord_id"], key_id)
-    ctx = await _page_context(user["discord_id"])
-    return templates.TemplateResponse(
-        request,
-        "expedition.html",
-        {"user": user, "active": "expedition", "remove_account_result": remove_account_result, **ctx},
-    )
+    result = await bot_client.remove_account(user["discord_id"], key_id)
+    return redirect_result("/expedition", result, "계정이 삭제되었습니다.", "계정을 찾을 수 없습니다.")

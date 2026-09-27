@@ -3,7 +3,7 @@ import httpx
 import respx
 
 from webapp import config
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 CATEGORIES_URL = "http://bot-server.internal/api/internal/raid-categories"
@@ -97,7 +97,7 @@ def test_add_category_forwards_discord_id_and_redirects(client, monkeypatch):
             data={"name": "새카테고리", "sort_order": "1"},
         )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/admin/raids?tab=categories"
+    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=categories"
     import json as _json
 
     body = _json.loads(route.calls[0].request.content)
@@ -116,7 +116,7 @@ def test_add_category_failure_redirects_with_error(client, monkeypatch):
             data={"name": "새카테고리", "sort_order": "1"},
         )
     assert resp.status_code == 303
-    assert "error=" in resp.headers["location"]
+    assert "toast_type=error" in resp.headers["location"]
 
 
 # ── 순서 변경 / 카테고리 이동 / 운영 기간 ─────────────────────────────
@@ -159,7 +159,7 @@ def test_reorder_categories_posts_whole_array(client, monkeypatch):
         route = respx.post(REORDER_CATEGORIES_URL).mock(return_value=httpx.Response(200, json={"success": True, "count": 2}))
         resp = client.post("/admin/raids/categories/order", data={"order": '["군단장", "카제로스"]'})
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/admin/raids?tab=categories"
+    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=categories"
     assert _payload(route) == {"discord_id": "111", "order": ["군단장", "카제로스"]}
 
 
@@ -188,7 +188,7 @@ def test_reorder_with_bad_json_sends_empty_array(client, monkeypatch):
         route = respx.post(REORDER_CATEGORIES_URL).mock(return_value=httpx.Response(200, json={"success": False}))
         resp = client.post("/admin/raids/categories/order", data={"order": "not json"})
     assert resp.status_code == 303
-    assert "error=" in resp.headers["location"]
+    assert "toast_type=error" in resp.headers["location"]
     assert _payload(route)["order"] == []
 
 

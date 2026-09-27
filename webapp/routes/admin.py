@@ -21,6 +21,7 @@ from starlette.responses import RedirectResponse, Response
 from webapp import config, notification_store
 from webapp.auth.dependencies import require_admin
 from webapp.clients import bot_client
+from webapp.flash import redirect_result, redirect_with_toast
 from webapp.format import party_view
 from webapp.routes.party import _history_view
 from webapp.templating import templates
@@ -60,12 +61,10 @@ def _period_to_iso(value: str) -> str | None:
         return None
 
 
-def _redirect(fallback_reason: str, result: dict, path: str) -> RedirectResponse:
-    if not result.get("success"):
-        reason = quote(result.get("reason") or fallback_reason)
-        sep = "&" if "?" in path else "?"
-        return RedirectResponse(f"{path}{sep}error={reason}", status_code=303)
-    return RedirectResponse(path, status_code=303)
+def _redirect(fallback_reason: str, result: dict, path: str, done: str | None = "저장했습니다.") -> RedirectResponse:
+    """관리자 액션 결과 → redirect + 토스트(webapp/flash.py). 이전엔 실패만 `?error=`로 정적 문단에
+    보여주고 성공은 아무 반응이 없었다."""
+    return redirect_result(path, result, done, fallback_reason)
 
 
 # ── 관리자 모드 토글 (사이드바 스위치 — 화면 노출만 제어, 실행 권한은 항상 유효) ──
@@ -138,13 +137,14 @@ async def add_category(
     result = await bot_client.admin_add_category(user["discord_id"], name.strip(), sort_order)
     return _redirect(
         "카테고리를 추가하지 못했습니다. (이미 있는 이름일 수 있어요)", result, "/admin/raids?tab=categories",
+        "카테고리를 추가했습니다.",
     )
 
 
 @router.post("/admin/raids/categories/delete")
 async def delete_category(name: str = Form(...), user: dict = Depends(require_admin)):
     result = await bot_client.admin_delete_category(user["discord_id"], name)
-    return _redirect("카테고리를 삭제하지 못했습니다.", result, "/admin/raids?tab=categories")
+    return _redirect("카테고리를 삭제하지 못했습니다.", result, "/admin/raids?tab=categories", "카테고리를 삭제했습니다.")
 
 
 @router.post("/admin/raids/categories/extreme")
@@ -165,13 +165,14 @@ async def add_raid(
     )
     return _redirect(
         "레이드를 추가하지 못했습니다. (이미 있는 이름일 수 있어요)", result, "/admin/raids?tab=raids",
+        "레이드를 추가했습니다.",
     )
 
 
 @router.post("/admin/raids/delete")
 async def delete_raid(name: str = Form(...), user: dict = Depends(require_admin)):
     result = await bot_client.admin_delete_raid(user["discord_id"], name)
-    return _redirect("레이드를 삭제하지 못했습니다.", result, "/admin/raids?tab=raids")
+    return _redirect("레이드를 삭제하지 못했습니다.", result, "/admin/raids?tab=raids", "레이드를 삭제했습니다.")
 
 
 @router.post("/admin/raids/active")
@@ -238,7 +239,7 @@ async def rename_raid(
     result = await bot_client.admin_rename_raid(user["discord_id"], old_name, new_name)
     if result.get("success") and not result.get("unchanged"):
         await notification_store.rename_raid(old_name, new_name)
-    return _redirect("이름을 바꾸지 못했습니다.", result, "/admin/raids?tab=raids")
+    return _redirect("이름을 바꾸지 못했습니다.", result, "/admin/raids?tab=raids", "이름을 바꿨습니다. 관련 기록도 함께 갱신됐습니다.")
 
 
 @router.post("/admin/raids/categories/rename")
@@ -246,7 +247,7 @@ async def rename_category(
     old_name: str = Form(...), new_name: str = Form(...), user: dict = Depends(require_admin),
 ):
     result = await bot_client.admin_rename_category(user["discord_id"], old_name, new_name.strip())
-    return _redirect("이름을 바꾸지 못했습니다.", result, "/admin/raids?tab=categories")
+    return _redirect("이름을 바꾸지 못했습니다.", result, "/admin/raids?tab=categories", "카테고리 이름을 바꿨습니다.")
 
 
 @router.post("/admin/raids/difficulties/update")
@@ -293,7 +294,7 @@ async def raid_references(
 @router.post("/admin/raids/categories/order")
 async def reorder_categories(order: str = Form(...), user: dict = Depends(require_admin)):
     result = await bot_client.admin_reorder_categories(user["discord_id"], _parse_order(order))
-    return _redirect("순서를 저장하지 못했습니다.", result, "/admin/raids?tab=categories")
+    return _redirect("순서를 저장하지 못했습니다.", result, "/admin/raids?tab=categories", "순서를 저장했습니다.")
 
 
 @router.post("/admin/raids/order")
@@ -301,7 +302,7 @@ async def reorder_raids(
     category: str = Form(...), order: str = Form(...), user: dict = Depends(require_admin),
 ):
     result = await bot_client.admin_reorder_raids(user["discord_id"], category, _parse_order(order))
-    return _redirect("순서를 저장하지 못했습니다.", result, "/admin/raids?tab=raids")
+    return _redirect("순서를 저장하지 못했습니다.", result, "/admin/raids?tab=raids", "순서를 저장했습니다.")
 
 
 @router.post("/admin/raids/difficulties/order")
@@ -319,7 +320,7 @@ async def move_raid_category(
     name: str = Form(...), category: str = Form(...), user: dict = Depends(require_admin),
 ):
     result = await bot_client.admin_move_raid_category(user["discord_id"], name, category)
-    return _redirect("카테고리를 옮기지 못했습니다.", result, "/admin/raids?tab=raids")
+    return _redirect("카테고리를 옮기지 못했습니다.", result, "/admin/raids?tab=raids", "카테고리를 옮겼습니다.")
 
 
 @router.post("/admin/raids/period")
@@ -427,9 +428,7 @@ async def admin_set_forum_channel(
     """디스코드 /공대채널설정의 웹판 — 이게 없으면 웹 공대 개설이 "포럼 채널 미설정"으로 막혀
     관리자가 디스코드로 가야 했다."""
     result = await bot_client.admin_set_forum_channel(user["discord_id"], config.DISCORD_GUILD_ID, channel_id)
-    if not result.get("success"):
-        return RedirectResponse(f"/admin/parties?forum_error={quote(result.get('reason') or '저장하지 못했습니다.')}", status_code=303)
-    return RedirectResponse("/admin/parties?forum_saved=1", status_code=303)
+    return redirect_result("/admin/parties", result, "공대 모집 포럼 채널을 저장했습니다.", "저장하지 못했습니다.")
 
 
 def _is_problem_party(party: dict, now: datetime) -> bool:
@@ -512,7 +511,7 @@ async def admin_user_details(
 @router.post("/admin/users/{target_discord_id}/delete")
 async def admin_delete_user_route(target_discord_id: str, user: dict = Depends(require_admin)):
     result = await bot_client.admin_delete_user(user["discord_id"], target_discord_id)
-    return _redirect("유저 데이터를 삭제하지 못했습니다.", result, "/admin/users")
+    return _redirect("유저 데이터를 삭제하지 못했습니다.", result, "/admin/users", "유저 데이터를 삭제했습니다.")
 
 
 # ── 통계 (관리자 앱 Stats.tsx의 클리어/활동 탭) ────────────────────────
@@ -689,4 +688,8 @@ async def admin_completion_toggle(
         uid, target_discord_id, character_name, raid_name, difficulty, week_key, done == "1",
     )
     grid = await _completion_grid(uid, target_discord_id, character_name, week_key)
-    return templates.TemplateResponse(request, "_admin_completion_grid.html", {"grid": grid})
+    toast = f"{character_name} · {raid_name} {difficulty} {'완료 체크' if done == '1' else '체크 해제'}"
+    return templates.TemplateResponse(
+        request, "_admin_completion_grid.html", {"grid": grid},
+        headers={"X-Toast": quote(toast), "X-Toast-Type": "success" if done == "1" else "info"},
+    )

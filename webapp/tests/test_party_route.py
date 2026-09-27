@@ -2,7 +2,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 PARTIES_URL = "http://bot-server.internal/api/internal/parties"
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
@@ -301,7 +301,7 @@ def test_leave_posts_to_bot(client):
         resp = client.post("/parties/p1/leave")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert leave_route.called
 
 
@@ -318,7 +318,7 @@ def test_waitlist_toggle_posts_to_bot(client):
         resp = client.post("/parties/p1/waitlist")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert waitlist_route.called
 
 

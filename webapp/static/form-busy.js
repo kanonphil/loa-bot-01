@@ -6,6 +6,11 @@ document.addEventListener("submit", function (event) {
   if (!(form instanceof HTMLFormElement)) return;
 
   var button = form.querySelector("button[data-busy-text]");
+  if (!button && form.hasAttribute("data-busy-form")) {
+    // 폼 단위 표시 — 버튼마다 문구를 적지 않아도 "처리 중…"으로 잠근다
+    button = form.querySelector("button[type=submit]") || form.querySelector("button");
+    if (button) button.dataset.busyText = button.dataset.busyText || "처리 중…";
+  }
   if (!button || button.disabled) return;
 
   button.dataset.idleText = button.textContent;

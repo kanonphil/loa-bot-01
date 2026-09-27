@@ -176,10 +176,12 @@ CREATE TABLE IF NOT EXISTS raid_subscriptions (
 );
 
 CREATE TABLE IF NOT EXISTS party_invites (
-    message_id  TEXT,
-    discord_id  TEXT,
-    slot_number INTEGER NOT NULL DEFAULT 0,
-    invited_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    message_id     TEXT,
+    discord_id     TEXT,
+    slot_number    INTEGER NOT NULL DEFAULT 0,
+    invited_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dm_channel_id  TEXT,
+    dm_message_id  TEXT,
     PRIMARY KEY (message_id, discord_id)
 );
 
@@ -321,6 +323,12 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE party_invites ADD COLUMN slot_number INTEGER NOT NULL DEFAULT 0")
         except Exception:
             pass
+        # 초대 DM 메시지 위치 — 웹에서 수락/거절하거나 만료됐을 때 DM의 수락/거절 버튼을 정리하기 위해
+        for col in ("dm_channel_id", "dm_message_id"):
+            try:
+                await db.execute(f"ALTER TABLE party_invites ADD COLUMN {col} TEXT")
+            except Exception:
+                pass
         try:
             await db.execute("ALTER TABLE parties ADD COLUMN pre_notified INTEGER DEFAULT 0")
         except Exception:
@@ -1844,13 +1852,23 @@ async def get_guild_parties_with_slots(guild_id: str) -> list[dict]:
             ids,
         )
         comment_counts = {r["party_message_id"]: r["n"] for r in await comment_cur.fetchall()}
+        waitlist_cur = await db.execute(
+            "SELECT party_message_id, COUNT(*) AS n FROM party_waitlist "
+            f"WHERE party_message_id IN ({placeholders}) GROUP BY party_message_id",
+            ids,
+        )
+        waitlist_counts = {r["party_message_id"]: r["n"] for r in await waitlist_cur.fetchall()}
     by_party: dict[str, list[dict]] = {mid: [] for mid in ids}
     for r in rows:
         row = dict(r)
         row["is_guest"] = bool(row["is_guest"])
         by_party[row["party_message_id"]].append(row)
     return [
-        {**p, "slots": by_party[p["message_id"]], "comment_count": comment_counts.get(p["message_id"], 0)}
+        {
+            **p, "slots": by_party[p["message_id"]],
+            "comment_count": comment_counts.get(p["message_id"], 0),
+            "waitlist_count": waitlist_counts.get(p["message_id"], 0),
+        }
         for p in parties
     ]
 
@@ -2148,12 +2166,34 @@ async def get_expired_invites(hours: int = 1) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT message_id, discord_id, slot_number FROM party_invites "
+            "SELECT message_id, discord_id, slot_number, dm_channel_id, dm_message_id FROM party_invites "
             "WHERE invited_at < datetime('now', ?)",
             (f"-{hours} hours",),
         )
         rows = await cur.fetchall()
     return [dict(r) for r in rows]
+
+
+async def set_invite_dm_message(message_id: str, discord_id: str, dm_channel_id: str, dm_message_id: str) -> None:
+    """초대 DM을 보낸 직후 그 메시지 위치를 기록 — 나중에 버튼 없는 최종 상태로 편집하기 위해."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE party_invites SET dm_channel_id=?, dm_message_id=? WHERE message_id=? AND discord_id=?",
+            (dm_channel_id, dm_message_id, message_id, discord_id),
+        )
+        await db.commit()
+
+
+async def get_invite(message_id: str, discord_id: str) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT message_id, discord_id, slot_number, invited_at, dm_channel_id, dm_message_id "
+            "FROM party_invites WHERE message_id=? AND discord_id=?",
+            (message_id, discord_id),
+        )
+        row = await cur.fetchone()
+    return dict(row) if row else None
 
 
 async def get_reserved_slots(message_id: str) -> dict[int, str]:

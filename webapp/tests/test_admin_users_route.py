@@ -3,7 +3,7 @@ import httpx
 import respx
 
 from webapp import config
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 USERS_URL = "http://bot-server.internal/api/internal/admin/users"
 CHARACTERS_URL = "http://bot-server.internal/api/internal/admin/users/222/characters"
@@ -86,7 +86,7 @@ def test_admin_deletes_user(client, monkeypatch):
         resp = client.post("/admin/users/222/delete")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/admin/users"
+    assert without_toast(resp.headers["location"]) == "/admin/users"
     assert delete_route.called
     import json as _json
     payload = _json.loads(delete_route.calls[0].request.content)
@@ -103,7 +103,7 @@ def test_admin_delete_user_shows_error_on_failure(client, monkeypatch):
         resp = client.post("/admin/users/222/delete")
 
     assert resp.status_code == 303
-    assert "error=" in resp.headers["location"]
+    assert "toast_type=error" in resp.headers["location"]
 
 
 # ── 가입일 / API 만료 의심 ──────────────────────────────────────

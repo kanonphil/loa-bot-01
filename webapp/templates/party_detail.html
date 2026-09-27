@@ -88,7 +88,8 @@
   </form>
   {% endif %}
   {% endif %}
-  <form method="post" action="/parties/{{ party.message_id }}/leave">
+  <form method="post" action="/parties/{{ party.message_id }}/leave"
+        onsubmit="return confirm('이 공대에서 나갈까요? 자리가 비면 빈자리 알림을 켠 사람에게 안내가 갑니다.');">
     <button type="submit" class="party-leave-btn">나가기</button>
   </form>
 </div>
@@ -181,7 +182,7 @@
   <div class="leader-panel">
     <h2 class="leader-panel-title">관리자</h2>
     <p class="settings-desc">클리어 처리를 실수로 눌렀다면 되돌릴 수 있습니다. 파티원 전체의 이번 주 완료 체크도 함께 취소됩니다.</p>
-    <form method="post" action="/parties/{{ party.message_id }}/admin-revert-clear" onsubmit="return confirm('클리어를 취소하고 파티를 되돌릴까요? 파티원들의 이번 주 완료 체크도 함께 취소됩니다.');">
+    <form method="post" action="/parties/{{ party.message_id }}/admin-revert-clear" onsubmit="return confirm('클리어를 취소하고 파티를 되돌릴까요? 파티원들의 이번 주 완료 체크도 함께 취소됩니다.');" data-busy-form>
       <button type="submit" class="leader-btn">클리어 되돌리기</button>
     </form>
     <div class="leader-group">
@@ -192,8 +193,8 @@
     </div>
     <div class="leader-group">
       <span class="leader-group-label">파티원 전체 DM</span>
-      <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" onsubmit="return confirm('파티원 전원에게 DM을 보낼까요?');">
-        <input type="text" name="content" maxlength="500" placeholder="보낼 내용" required>
+      <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" onsubmit="return confirm('파티원 전원에게 DM을 보낼까요?');" data-busy-form>
+        <input type="text" name="content" maxlength="500" placeholder="보낼 내용" required aria-label="DM 내용">
         <button type="submit" class="leader-btn">DM 보내기</button>
       </form>
     </div>
@@ -217,8 +218,9 @@
       </form>
       {% endif %}
 
-      <form method="post" action="/parties/{{ party.message_id }}/clear">
-        <button type="submit" class="leader-btn leader-btn-success">클리어</button>
+      <form method="post" action="/parties/{{ party.message_id }}/clear"
+            onsubmit="return confirm('클리어 처리할까요? 스레드가 잠기고 참여자 전원의 이번 주 완료 체크가 자동으로 반영됩니다.');">
+        <button type="submit" class="leader-btn leader-btn-success" data-busy-text="처리 중…">클리어</button>
       </form>
     </div>
   </div>
@@ -227,17 +229,17 @@
   <div class="leader-group">
     <span class="leader-group-label">초대</span>
     <form method="post" action="/parties/{{ party.message_id }}/invite" class="leader-form">
-      <select name="target_discord_id" class="js-themed-select">
+      <select name="target_discord_id" class="js-themed-select" aria-label="초대할 유저">
         {% for u in invitable_users %}
         <option value="{{ u.discord_id }}">{{ u.representative or u.discord_id }}</option>
         {% endfor %}
       </select>
-      <select name="slot_number" class="js-themed-select">
+      <select name="slot_number" class="js-themed-select" aria-label="슬롯">
         {% for n in invitable_slots %}
         <option value="{{ n }}">{{ n }}번 슬롯</option>
         {% endfor %}
       </select>
-      <button type="submit" class="leader-btn">초대</button>
+      <button type="submit" class="leader-btn" data-busy-text="발송 중…">초대</button>
     </form>
   </div>
   {% endif %}
@@ -256,7 +258,7 @@
   <div class="leader-group">
     <span class="leader-group-label">멤버 관리</span>
     <div class="leader-form">
-      <select id="member-target-select" class="js-themed-select">
+      <select id="member-target-select" class="js-themed-select" aria-label="대상 멤버">
         {% for m in other_members %}
         <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
         {% endfor %}
@@ -294,8 +296,9 @@
 
   <div class="leader-group">
     <span class="leader-group-label">일정 변경</span>
-    <form method="post" action="/parties/{{ party.message_id }}/reschedule" class="leader-form">
-      <input type="text" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" required>
+    <form method="post" action="/parties/{{ party.message_id }}/reschedule" class="leader-form"
+          onsubmit="if (!this.scheduled_datetime.value) { if (window.showToast) window.showToast('일정을 선택해주세요.', 'error'); return false; } return true;">
+      <input type="text" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정">
       <input type="text" name="memo" maxlength="150" placeholder="공지/메모 (비우면 삭제)" value="{{ party.memo or '' }}">
       <button type="submit" class="leader-btn">일정 변경</button>
     </form>
@@ -309,8 +312,8 @@
   {% if user.is_admin and user.admin_mode %}
   <div class="leader-group">
     <span class="leader-group-label">관리자 전용</span>
-    <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" onsubmit="return confirm('파티원 전원에게 DM을 보낼까요?');">
-      <input type="text" name="content" maxlength="500" placeholder="파티원 전체 DM 내용" required>
+    <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" onsubmit="return confirm('파티원 전원에게 DM을 보낼까요?');" data-busy-form>
+      <input type="text" name="content" maxlength="500" placeholder="파티원 전체 DM 내용" required aria-label="파티원 전체 DM 내용">
       <button type="submit" class="leader-btn">DM 보내기</button>
     </form>
     <div class="leader-actions-row">
@@ -327,9 +330,10 @@
   {% if not viewing_as_admin %}
   <div class="leader-group leader-group-danger">
     <span class="leader-group-label">위험 구역</span>
-    <form method="post" action="/parties/{{ party.message_id }}/cancel" class="leader-form">
-      <input type="text" name="reason" maxlength="200" placeholder="취소 사유 (선택)">
-      <button type="submit" class="leader-btn leader-btn-danger">파티 취소</button>
+    <form method="post" action="/parties/{{ party.message_id }}/cancel" class="leader-form"
+          onsubmit="return confirm('파티를 취소할까요? 디스코드 스레드가 삭제되고 파티원 전원에게 취소 안내가 갑니다. 되돌릴 수 없습니다.');">
+      <input type="text" name="reason" maxlength="200" placeholder="취소 사유 (선택)" aria-label="취소 사유">
+      <button type="submit" class="leader-btn leader-btn-danger" data-busy-text="취소 중…">파티 취소</button>
     </form>
   </div>
   {% endif %}
@@ -356,6 +360,13 @@
     }
     select.addEventListener("change", sync);
     sync();
+    function targetName() { return select.options[select.selectedIndex].textContent.trim(); }
+    document.getElementById("kick-form").addEventListener("submit", function (e) {
+      if (!confirm(targetName() + "을(를) 강제 퇴장시킬까요? 본인에게 DM으로 안내가 갑니다.")) e.preventDefault();
+    });
+    document.getElementById("transfer-form").addEventListener("submit", function (e) {
+      if (!confirm(targetName() + "에게 파티장을 위임할까요? 위임하면 이 관리 패널을 더 쓸 수 없습니다.")) e.preventDefault();
+    });
   })();
   {% endif %}
 </script>

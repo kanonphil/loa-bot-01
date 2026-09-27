@@ -2,7 +2,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
@@ -93,7 +93,7 @@ def test_post_comment_calls_bot_with_session_identity(client):
         resp = client.post("/parties/p1/comments", data={"content": "안녕하세요"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert comment_route.called
     import json as _json
     payload = _json.loads(comment_route.calls[0].request.content)
@@ -146,7 +146,7 @@ def test_delete_comment_calls_bot_with_session_identity(client):
         resp = client.post("/parties/p1/comments/2/delete")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert delete_route.called
     import json as _json
     payload = _json.loads(delete_route.calls[0].request.content)

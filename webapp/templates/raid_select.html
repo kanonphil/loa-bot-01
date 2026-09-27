@@ -6,6 +6,7 @@
   <p class="expedition-section-desc">체크한 레이드만 카드에 표시됩니다. 입장 가능한 레이드만 고를 수 있어요.</p>
 
   <form method="post" action="/raid-check/select/{{ character_name }}" class="raid-select-form">
+    <input type="hidden" name="account" value="{{ account }}">
     {% for group in groups %}
     <div class="raid-select-category">
       <h3>{{ group.category }}</h3>

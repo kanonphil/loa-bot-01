@@ -169,5 +169,19 @@ def test_create_submit_shows_error_on_failure(client):
             },
         )
 
-    assert resp.status_code == 200
-    assert "/api등록" in resp.text
+    from urllib.parse import parse_qs, urlparse
+
+    assert resp.status_code == 303  # 실패 화면을 직접 렌더하면 F5가 개설(스레드 생성)을 재시도한다
+    parsed = urlparse(resp.headers["location"])
+    assert parsed.path == "/parties/create"
+    q = parse_qs(parsed.query)
+    assert "/api등록" in q["error"][0]
+    assert q["raid"] == ["아르모체(4막)"] and q["difficulty"] == ["노말"] and q["scheduled_datetime"] == ["2026-05-20T20:00"]
+
+    # 되돌아온 폼은 고르던 값을 프리셋으로 들고 있다
+    with respx.mock:
+        log_in(client)
+        _mock_form_deps()
+        form = client.get(resp.headers["location"])
+    assert 'data-raid="아르모체(4막)" data-diff="노말"' in form.text
+    assert 'value="2026-05-20T20:00"' in form.text

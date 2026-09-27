@@ -2,7 +2,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 RAIDS_URL = "http://bot-server.internal/api/internal/raids"
 CATEGORIES_URL = "http://bot-server.internal/api/internal/raid-categories"
@@ -70,7 +70,7 @@ def test_no_characters_shows_registration_notice(client):
         resp = client.get("/raid-check")
 
     assert resp.status_code == 200
-    assert "/api등록" in resp.text
+    assert "등록된 캐릭터가 없습니다" in resp.text and 'href="/expedition"' in resp.text  # 디스코드 대신 원정대 관리로 안내
 
 
 def test_raid_check_page_renders_checklist(client):
@@ -406,7 +406,8 @@ def test_raid_select_save_calls_bot_and_redirects(client):
         )
 
     assert resp.status_code in (302, 303, 307)
-    assert resp.headers["location"] == "/raid-check?saved=1"  # 저장 토스트용
+    assert without_toast(resp.headers["location"]) == "/raid-check"
+    assert "toast=" in resp.headers["location"]  # 저장 토스트
     assert save_route.called
 
 

@@ -54,13 +54,13 @@
   {% endif %}
   {% if raids %}
   <form method="post" action="/notifications/raid-filters/add" class="settings-filter-add">
-    <select name="raid_name" id="filter-raid-select" class="settings-select js-themed-select" required>
+    <select name="raid_name" id="filter-raid-select" class="settings-select js-themed-select" required aria-label="레이드">
       <option value="" disabled selected>레이드 선택</option>
       {% for name, info in raids.items() %}{% if info.get("is_active", True) %}
       <option value="{{ name }}" data-difficulties="{{ (info.get('difficulties') or {}).keys() | list | join(',') }}">{{ name }}</option>
       {% endif %}{% endfor %}
     </select>
-    <select name="difficulty" id="filter-diff-select" class="settings-select js-themed-select">
+    <select name="difficulty" id="filter-diff-select" class="settings-select js-themed-select" aria-label="난이도">
       <option value="">모든 난이도</option>
     </select>
     <button type="submit" class="settings-toggle-btn">추가</button>
@@ -85,14 +85,6 @@
   </script>
   {% endif %}
 </div>
-
-{% if saved == "subscription" %}
-<div class="flash-data" hidden data-type="success" data-message="디스코드 DM 구독을 추가했습니다."></div>
-{% elif saved == "pre_notify" %}
-<div class="flash-data" hidden data-type="success" data-message="사전 알림 설정을 저장했습니다."></div>
-{% elif error %}
-<div class="flash-data" hidden data-type="error" data-message="{{ error }}"></div>
-{% endif %}
 
 <div class="settings-card">
   <h2 class="leader-panel-title">디스코드 DM 구독</h2>
@@ -121,13 +113,13 @@
   {% endif %}
   {% if raids %}
   <form method="post" action="/settings/discord-subscriptions/add" class="settings-filter-add">
-    <select name="raid_name" id="dm-raid-select" class="settings-select js-themed-select" required>
+    <select name="raid_name" id="dm-raid-select" class="settings-select js-themed-select" required aria-label="레이드">
       <option value="" disabled selected>레이드 선택</option>
       {% for name, info in raids.items() %}{% if info.get("is_active", True) %}
       <option value="{{ name }}" data-difficulties="{{ (info.get('difficulties') or {}).keys() | list | join(',') }}">{{ name }}</option>
       {% endif %}{% endfor %}
     </select>
-    <select name="difficulty" id="dm-diff-select" class="settings-select js-themed-select">
+    <select name="difficulty" id="dm-diff-select" class="settings-select js-themed-select" aria-label="난이도">
       <option value="전체">전체 난이도</option>
     </select>
     <button type="submit" class="settings-toggle-btn">구독</button>
@@ -164,7 +156,7 @@
   <p class="settings-desc">봇 서버에 연결하지 못해 지금은 표시할 수 없습니다.</p>
   {% else %}
   <form method="post" action="/settings/pre-notify" class="settings-filter-add">
-    <select name="pre_notify_hours" class="settings-select js-themed-select">
+    <select name="pre_notify_hours" class="settings-select js-themed-select" aria-label="사전 알림 시간">
       {% for h in pre_notify.choices %}
       <option value="{{ h }}" {% if h == pre_notify.pre_notify_hours %}selected{% endif %}>
         {%- if h == 0 %}받지 않음{% elif h < 1 %}{{ (h * 60) | int }}분 전{% else %}{{ h | int }}시간 전{% endif -%}

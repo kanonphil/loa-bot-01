@@ -87,9 +87,20 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     var flashes = document.querySelectorAll(".flash-data");
+    var strip = false;
     flashes.forEach(function (el) {
       showToast(el.getAttribute("data-message"), el.getAttribute("data-type"));
+      if (el.hasAttribute("data-strip-url")) strip = true;
       el.remove();
     });
+    // ?toast= 는 1회성 — 남겨두면 F5/뒤로가기마다 같은 토스트가 다시 뜬다
+    if (strip && window.history && window.history.replaceState) {
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.delete("toast");
+        url.searchParams.delete("toast_type");
+        window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+      } catch (e) { /* URL 정리는 부가 기능 */ }
+    }
   });
 })();

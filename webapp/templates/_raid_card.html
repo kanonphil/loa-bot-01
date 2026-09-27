@@ -3,7 +3,7 @@
   <div class="raid-card-header">
     <div class="raid-card-header-top">
       <span class="raid-card-name">{{ card.character_name }}</span>
-      <a class="raid-card-select-link" href="/raid-check/select/{{ card.character_name }}">레이드 선택</a>
+      <a class="raid-card-select-link" href="/raid-check/select/{{ card.character_name }}{% if card.account %}?account={{ card.account | urlencode }}{% endif %}">레이드 선택</a>
     </div>
     <span class="raid-card-meta">{{ card.character_class }} &middot; {{ card.item_level }}</span>
   </div>
@@ -34,7 +34,10 @@
           <input type="hidden" name="difficulty" value="{{ diff_name }}">
           <input type="hidden" name="character_name" value="{{ card.character_name }}">
           <input type="hidden" name="card_index" value="{{ card_index }}">
-          <button type="submit" class="raid-card-diff-toggle {% if (r.raid_name ~ '_' ~ diff_name) in card.done %}done{% endif %}">
+          <input type="hidden" name="account" value="{{ card.account or '' }}">
+          {% set is_done = (r.raid_name ~ '_' ~ diff_name) in card.done %}
+          <button type="submit" id="tg-{{ card_index }}-{{ loop.index0 }}-{{ r.raid_name | replace(' ', '') | replace('(', '') | replace(')', '') }}-{{ diff_name }}"
+                  class="raid-card-diff-toggle {% if is_done %}done{% endif %}" aria-pressed="{{ 'true' if is_done else 'false' }}">
             {{ diff_name }}
           </button>
         </form>

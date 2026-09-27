@@ -62,3 +62,11 @@ def test_expired_invite_cleanup_frees_reserved_slot(clean_db):
 
     reserved = asyncio.run(db.get_reserved_slots("700"))
     assert reserved == {}
+
+
+def test_expired_invites_carry_dm_location_for_cleanup(clean_db):
+    """만료 루프가 DM의 수락/거절 버튼을 정리할 수 있도록 dm 위치도 함께 나와야 한다."""
+    asyncio.run(_insert_invite_with_age("700", "111", 3, hours_ago=5))
+    asyncio.run(db.set_invite_dm_message("700", "111", "4444", "5555"))
+    expired = asyncio.run(db.get_expired_invites(hours=1))
+    assert expired[0]["dm_channel_id"] == "4444" and expired[0]["dm_message_id"] == "5555"

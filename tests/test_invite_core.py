@@ -217,3 +217,60 @@ def test_get_user_invites_joins_party_info(party):
 
 def test_get_user_invites_empty_when_none(party):
     assert asyncio.run(db.get_user_invites(TARGET_ID)) == []
+
+
+# ── 초대 DM 정리 — 웹에서 수락/거절하거나 만료되면 DM의 수락/거절 버튼이 사라져야 한다 ──
+
+def _make_bot_with_dm():
+    """fetch_user().send()가 id/채널이 있는 메시지를 돌려주고, 그 채널을 get_channel로 다시 찾을 수 있는 봇."""
+    bot = _make_bot()
+    dm_message = MagicMock()
+    dm_message.id = 5555
+    dm_message.channel.id = 4444
+    dm_message.edit = AsyncMock()
+    dm_channel = MagicMock()
+    dm_channel.fetch_message = AsyncMock(return_value=dm_message)
+    bot.fetch_user = AsyncMock(return_value=MagicMock(send=AsyncMock(return_value=dm_message), display_name="리더캐릭"))
+    party_channel = bot.get_channel.return_value
+    bot.get_channel = MagicMock(side_effect=lambda cid: dm_channel if cid == 4444 else party_channel)
+    return bot, dm_message
+
+
+def test_create_invite_records_dm_message_location(party):
+    bot, _ = _make_bot_with_dm()
+    asyncio.run(_create_invite_core(bot, party, LEADER_ID, TARGET_ID, 1))
+    row = asyncio.run(db.get_invite(party, TARGET_ID))
+    assert row["dm_channel_id"] == "4444" and row["dm_message_id"] == "5555"
+
+
+def test_web_accept_edits_invite_dm_to_final_state(party):
+    bot, dm_message = _make_bot_with_dm()
+    asyncio.run(_create_invite_core(bot, party, LEADER_ID, TARGET_ID, 1))
+    result = asyncio.run(_accept_invite_core(bot, party, TARGET_ID, "타겟캐릭", "dps"))
+    assert result["success"] is True
+    dm_message.edit.assert_awaited_once()
+    kwargs = dm_message.edit.await_args.kwargs
+    assert kwargs["view"] is None and "웹에서" in kwargs["content"] and "타겟캐릭" in kwargs["content"]
+
+
+def test_web_decline_edits_invite_dm_but_button_path_does_not(party):
+    bot, dm_message = _make_bot_with_dm()
+    asyncio.run(_create_invite_core(bot, party, LEADER_ID, TARGET_ID, 1))
+    asyncio.run(_decline_invite_core(bot, party, TARGET_ID))
+    dm_message.edit.assert_awaited_once()
+    assert dm_message.edit.await_args.kwargs["view"] is None
+
+    # 버튼 경로는 interaction이 직접 편집하므로 코어는 건너뛴다
+    dm_message.edit.reset_mock()
+    asyncio.run(_create_invite_core(bot, party, LEADER_ID, TARGET_ID, 2))
+    asyncio.run(_decline_invite_core(bot, party, TARGET_ID, finalize_dm=False))
+    dm_message.edit.assert_not_awaited()
+
+
+def test_finalize_dm_ignores_invites_without_location(party):
+    from bot.ui.views import _finalize_invite_dm
+
+    bot = _make_bot()
+    asyncio.run(_finalize_invite_dm(bot, {"dm_channel_id": None, "dm_message_id": None}, "x"))  # 옛 초대
+    asyncio.run(_finalize_invite_dm(bot, None, "x"))
+    bot.get_channel.return_value.fetch_message.assert_not_awaited()

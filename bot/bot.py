@@ -9,6 +9,7 @@ import bot.api.lostark as loa
 from bot.services.expedition import sync_all_accounts_daily
 from bot.ui.views import (
     PartyView, _refresh_party_embed_with_reserved, _send_dm, _notify_members_web, _party_url,
+    _finalize_invite_dm, INVITE_EXPIRED_DM_TEXT,
 )
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
@@ -195,6 +196,7 @@ class LoABot(commands.Bot):
         for invite in await db.get_expired_invites(hours=1):
             try:
                 await db.delete_invite(invite["message_id"], invite["discord_id"])
+                await _finalize_invite_dm(self, invite, INVITE_EXPIRED_DM_TEXT)
                 party = await db.get_party(invite["message_id"])
                 if party and party["status"] != "disbanded":
                     await _refresh_party_embed_with_reserved(self, party)

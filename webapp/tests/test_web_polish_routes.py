@@ -111,9 +111,9 @@ def test_raid_check_page_links_history_and_shows_saved_toast(client):
     with respx.mock:
         log_in(client)
         respx.get(f"{B}/user-characters-grouped").mock(return_value=httpx.Response(200, json=[]))
-        resp = client.get("/raid-check?saved=1")
+        resp = client.get("/raid-check?toast=%EC%A0%80%EC%9E%A5&toast_type=success")
     assert 'href="/raid-check/history"' in resp.text
-    assert "레이드 선택을 저장했습니다" in resp.text
+    assert 'data-message="저장"' in resp.text  # 공용 토스트(base.html)
 
 
 def test_raid_check_toggle_sends_toast_header(client):
@@ -256,7 +256,7 @@ def test_post_comment_via_htmx_returns_partial(client):
         resp = client.post("/parties/p1/comments", data={"content": "새 댓글"}, headers={"HX-Request": "true"})
 
     assert resp.status_code == 200
-    assert 'id="party-comments"' in resp.text
+    assert 'id="party-comments-list"' in resp.text  # 목록만 갈아끼움 — 폼(초안)은 유지
     assert "새 댓글" in resp.text
     assert "<html" not in resp.text
     assert "X-Toast" not in resp.headers

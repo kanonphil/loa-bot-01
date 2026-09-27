@@ -9,7 +9,7 @@ import respx
 
 from webapp import config, notification_store
 from webapp.format import KST
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 B = "http://bot-server.internal/api/internal"
 RAIDS_URL = f"{B}/raids"
@@ -74,7 +74,7 @@ def test_update_raid_forwards_and_redirects(client, monkeypatch):
         _admin(client, monkeypatch)
         route = respx.post(f"{B}/admin/raids/update").mock(return_value=httpx.Response(200, json={"success": True}))
         resp = client.post("/admin/raids/update", data={"name": "카멘익스", "short_name": " 익스2 ", "icon": ""})
-    assert resp.status_code == 303 and resp.headers["location"] == "/admin/raids?tab=raids"
+    assert resp.status_code == 303 and without_toast(resp.headers["location"]) == "/admin/raids?tab=raids"
     assert json.loads(route.calls[0].request.content) == {"discord_id": "111", "name": "카멘익스", "short_name": "익스2", "icon": "⚔️"}
 
 
@@ -98,7 +98,7 @@ def test_rename_raid_failure_leaves_web_filters_and_shows_error(client, monkeypa
             return_value=httpx.Response(200, json={"success": False, "reason": "이미 같은 이름의 레이드가 있습니다."})
         )
         resp = client.post("/admin/raids/rename", data={"old_name": "카멘익스", "new_name": "아르모체(4막)"})
-    assert resp.status_code == 303 and "error=" in resp.headers["location"]
+    assert resp.status_code == 303 and "toast_type=error" in resp.headers["location"]
     prefs = asyncio.run(notification_store.get_preferences("111"))
     assert prefs["raid_filters"][0]["raid_name"] == "카멘익스"
 
@@ -111,7 +111,7 @@ def test_rename_difficulty_renames_web_filter_but_keeps_all_difficulty_filter(cl
         respx.post(f"{B}/admin/difficulties/rename").mock(return_value=httpx.Response(200, json={"success": True}))
         resp = client.post("/admin/raids/difficulties/rename",
                            data={"raid_name": "카멘익스", "old_difficulty": "노말", "new_difficulty": "일반"})
-    assert resp.headers["location"] == "/admin/raids?tab=difficulties&raid=%EC%B9%B4%EB%A9%98%EC%9D%B5%EC%8A%A4"
+    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=difficulties&raid=%EC%B9%B4%EB%A9%98%EC%9D%B5%EC%8A%A4"
     assert asyncio.run(notification_store.get_preferences("111"))["raid_filters"][0]["difficulty"] == "일반"
     assert asyncio.run(notification_store.get_preferences("222"))["raid_filters"][0]["difficulty"] is None
 
@@ -132,7 +132,7 @@ def test_rename_category_forwards(client, monkeypatch):
         _admin(client, monkeypatch)
         route = respx.post(f"{B}/admin/categories/rename").mock(return_value=httpx.Response(200, json={"success": True}))
         resp = client.post("/admin/raids/categories/rename", data={"old_name": "카제로스", "new_name": "군단장"})
-    assert resp.headers["location"] == "/admin/raids?tab=categories"
+    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=categories"
     assert json.loads(route.calls[0].request.content)["new_name"] == "군단장"
 
 

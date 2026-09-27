@@ -2,7 +2,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
@@ -101,7 +101,7 @@ def test_invite_submit_posts_to_bot_and_redirects(client):
         resp = client.post("/parties/p1/invite", data={"target_discord_id": "333", "slot_number": "3"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert invite_route.called
     import json as _json
     payload = _json.loads(invite_route.calls[0].request.content)
@@ -144,7 +144,7 @@ def test_close_action_calls_bot(client):
         resp = client.post("/parties/p1/close")
 
     assert resp.status_code == 303  # redirect-after-POST — 뒤로가기 시 폼 재제출 방지
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert close_route.called
 
 
@@ -159,7 +159,7 @@ def test_clear_action_shows_success(client):
         resp = client.post("/parties/p1/clear")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
 
 
 def test_kick_action_shows_error_reason(client):
@@ -206,7 +206,7 @@ def test_reschedule_action_calls_bot_with_datetime(client):
         )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert reschedule_route.called
 
 
@@ -238,7 +238,7 @@ def test_edit_difficulty_action_calls_bot(client):
         )
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert edit_route.called
     import json as _json
     payload = _json.loads(edit_route.calls[0].request.content)
@@ -270,7 +270,7 @@ def test_transfer_leader_action_calls_bot(client):
         resp = client.post("/parties/p1/transfer-leader", data={"new_leader_discord_id": "222"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert transfer_route.called
 
 
@@ -285,7 +285,7 @@ def test_cancel_action_calls_bot_with_reason(client):
         resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1?cancelled=1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1?cancelled=1"
 
 
 def test_cancel_success_shows_styled_confirmation_when_party_purged(client):
@@ -299,7 +299,7 @@ def test_cancel_success_shows_styled_confirmation_when_party_purged(client):
         respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
         resp = client.post("/parties/p1/cancel", data={"reason": "인원 부족"})
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/parties/p1?cancelled=1"
+        assert without_toast(resp.headers["location"]) == "/parties/p1?cancelled=1"
 
         resp2 = client.get(resp.headers["location"])
 
@@ -373,6 +373,6 @@ def test_guest_invite_submit_uses_same_invite_endpoint(client):
         resp = client.post("/parties/p1/invite-guest", data={"target_discord_id": "555", "slot_number": "2"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     import json as _json
     assert _json.loads(invite_route.calls[0].request.content) == {"discord_id": "111", "target_discord_id": "555", "slot_number": 2}

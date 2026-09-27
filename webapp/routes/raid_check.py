@@ -16,6 +16,7 @@ from starlette.responses import RedirectResponse
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
+from webapp.flash import redirect_with_toast
 from webapp.format import period_view
 from webapp.raid_check import (
     applicable_raids, eligible_characters, extreme_raids, filter_groups_by_selection, group_by_category,
@@ -34,7 +35,9 @@ async def _find_own_character(discord_id: str, character_name: str) -> dict | No
     return next((c for c in characters if c["character_name"] == character_name), None)
 
 
-async def _character_card(discord_id: str, character: dict, raids: dict, categories: list[dict]) -> dict:
+async def _character_card(
+    discord_id: str, character: dict, raids: dict, categories: list[dict], account: str | None = None,
+) -> dict:
     item_level = character.get("item_level") or 0
     completion_data, selection = await asyncio.gather(
         bot_client.get_completions(discord_id, character["character_name"]),
@@ -57,6 +60,7 @@ async def _character_card(discord_id: str, character: dict, raids: dict, categor
         "character_name": character["character_name"],
         "character_class": character["character_class"],
         "item_level": character.get("item_level"),
+        "account": account or "",
         "groups": groups,
         "done": done,
         "done_count": done_count,
@@ -107,7 +111,7 @@ async def _page_context(discord_id: str, account: str | None) -> dict:
         bot_client.get_raids(), bot_client.get_raid_categories()
     )
     *cards, extreme = await asyncio.gather(
-        *[_character_card(discord_id, c, raids, categories) for c in visible],
+        *[_character_card(discord_id, c, raids, categories, selected_account) for c in visible],
         _extreme_section(discord_id, characters, raids),
     )
     return {
@@ -158,12 +162,12 @@ async def clear_extreme(
 
 @router.get("/raid-check")
 async def raid_check_page(
-    request: Request, account: str | None = None, saved: int | None = None,
+    request: Request, account: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     ctx = await _page_context(user["discord_id"], account)
     return templates.TemplateResponse(
-        request, "raid_check.html", {"user": user, "active": "raid_check", "saved": saved, **ctx}
+        request, "raid_check.html", {"user": user, "active": "raid_check", **ctx}
     )
 
 
@@ -209,6 +213,7 @@ async def toggle_raid_check(
     difficulty: str = Form(...),
     character_name: str = Form(...),
     card_index: int = Form(...),
+    account: str = Form(""),
     user: dict = Depends(get_current_user),
 ):
     character = await _find_own_character(user["discord_id"], character_name)
@@ -223,7 +228,7 @@ async def toggle_raid_check(
     raids, categories = await asyncio.gather(
         bot_client.get_raids(), bot_client.get_raid_categories()
     )
-    card = await _character_card(user["discord_id"], character, raids, categories)
+    card = await _character_card(user["discord_id"], character, raids, categories, account or None)
     short = (raids.get(raid_name) or {}).get("short_name") or raid_name
     toast = f"{character_name} · {short} {difficulty} {'완료 체크' if completed else '체크 해제'}"
     # htmx 부분 갱신이라 flash-data를 못 쓴다 — 헤더는 latin-1이어야 해서 percent-encoding으로 싣는다
@@ -235,7 +240,8 @@ async def toggle_raid_check(
 
 @router.get("/raid-check/select/{character_name}")
 async def raid_select_page(
-    request: Request, character_name: str, user: dict = Depends(get_current_user)
+    request: Request, character_name: str, account: str | None = None,
+    user: dict = Depends(get_current_user),
 ):
     character = await _find_own_character(user["discord_id"], character_name)
     if character is None:
@@ -265,6 +271,7 @@ async def raid_select_page(
             "character_name": character_name,
             "groups": groups,
             "selected_raids": selected_raids,
+            "account": account or "",
         },
     )
 
@@ -273,6 +280,7 @@ async def raid_select_page(
 async def raid_select_save(
     character_name: str,
     raid_names: list[str] = Form(default=[]),
+    account: str = Form(""),
     user: dict = Depends(get_current_user),
 ):
     character = await _find_own_character(user["discord_id"], character_name)
@@ -282,4 +290,5 @@ async def raid_select_save(
         )
 
     await bot_client.set_raid_selection(user["discord_id"], character_name, raid_names)
-    return RedirectResponse("/raid-check?saved=1", status_code=303)
+    back = f"/raid-check?account={quote(account)}" if account else "/raid-check"
+    return redirect_with_toast(back, f"{character_name}의 레이드 선택을 저장했습니다.")

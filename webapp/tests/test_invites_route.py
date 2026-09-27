@@ -2,7 +2,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, toast_of, without_toast
 
 MY_INVITES_URL = "http://bot-server.internal/api/internal/my-invites"
 ELIGIBILITY_URL = "http://bot-server.internal/api/internal/parties/700/eligibility"
@@ -78,7 +78,9 @@ def test_accept_invite_posts_to_bot(client):
 
         resp = client.post("/invites/700/accept", data={"character_name": "발키리", "role": "dps"})
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303
+    assert without_toast(resp.headers["location"]) == "/parties/700"  # 수락하면 참여한 공대로 바로
+    assert "발키리" in toast_of(resp.headers["location"])[0]
     assert accept_route.called
     import json as _json
     payload = _json.loads(accept_route.calls[0].request.content)
@@ -95,8 +97,9 @@ def test_accept_invite_shows_error_on_failure(client):
 
         resp = client.post("/invites/700/accept", data={"character_name": "발키리", "role": "dps"})
 
-    assert resp.status_code == 200
-    assert "이미 참여 중입니다" in resp.text
+    assert resp.status_code == 303
+    assert without_toast(resp.headers["location"]) == "/invites"
+    assert toast_of(resp.headers["location"]) == ("이미 참여 중입니다.", "error")
 
 
 def test_decline_invite_posts_to_bot(client):
@@ -107,5 +110,6 @@ def test_decline_invite_posts_to_bot(client):
 
         resp = client.post("/invites/700/decline")
 
-    assert resp.status_code == 200
+    assert resp.status_code == 303
+    assert without_toast(resp.headers["location"]) == "/invites"
     assert decline_route.called

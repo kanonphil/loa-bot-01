@@ -5,12 +5,6 @@
 <h1>내게 온 초대</h1>
 <p class="settings-desc">파티장이 특정 슬롯에 초대한 공대 목록입니다. 초대는 보낸 지 1시간이 지나면 자동으로 만료됩니다. 게스트(API 미등록 유저)로 받은 초대는 디스코드 DM에서 응답합니다.</p>
 
-{% if action_result and not action_result.success %}
-<div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
-{% elif action_result and action_result.success %}
-<div class="flash-data" hidden data-type="success" data-message="처리되었습니다."></div>
-{% endif %}
-
 {% if not invites %}
 {{ ui.empty("받은 초대가 없습니다", "파티장이 초대하면 여기에 나타납니다.", "공대 목록 보기", "/parties", "📬") }}
 {% else %}
@@ -40,12 +34,12 @@
 
     {% if inv.qualifying %}
     <form method="post" action="/invites/{{ inv.message_id }}/accept" class="party-join-form invite-accept-form">
-      <select name="character_name" class="js-themed-select invite-char-select">
+      <select name="character_name" class="js-themed-select invite-char-select" aria-label="참여 캐릭터">
         {% for q in inv.qualifying %}
         <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
         {% endfor %}
       </select>
-      <select name="role" class="js-themed-select invite-role-select">
+      <select name="role" class="js-themed-select invite-role-select" aria-label="역할">
         <option value="dps">딜러</option>
         <option value="support">서포터</option>
       </select>
@@ -74,7 +68,8 @@
     <p class="party-cannot-join">{{ inv.cannot_accept_reason or "참여 가능한 캐릭터가 없습니다." }}</p>
     {% endif %}
 
-    <form method="post" action="/invites/{{ inv.message_id }}/decline">
+    <form method="post" action="/invites/{{ inv.message_id }}/decline"
+          onsubmit="return confirm('{{ inv.raid_name }} {{ inv.difficulty }} 초대를 거절할까요? 거절한 초대는 되돌릴 수 없습니다.');">
       <button type="submit" class="party-leave-btn">거절</button>
     </form>
   {% endcall %}

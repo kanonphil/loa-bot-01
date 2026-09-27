@@ -6,7 +6,7 @@ import httpx
 import respx
 
 from webapp import config
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 JOB_CLASSES_URL = "http://bot-server.internal/api/internal/job-classes"
 ADD_CLASS_URL = "http://bot-server.internal/api/internal/admin/classes/add"
@@ -49,7 +49,7 @@ def test_add_class_forwards_discord_id_and_redirects(client, monkeypatch):
             data={"name": "새직업", "is_support": "on"},
         )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/admin/classes"
+    assert without_toast(resp.headers["location"]) == "/admin/classes"
     import json as _json
 
     body = _json.loads(route.calls[0].request.content)
@@ -65,4 +65,5 @@ def test_delete_class_failure_redirects_with_error(client, monkeypatch):
         )
         resp = client.post("/admin/classes/delete", data={"name": "워로드"})
     assert resp.status_code == 303
-    assert resp.headers["location"].startswith("/admin/classes?error=")
+    assert without_toast(resp.headers["location"]) == "/admin/classes"
+    assert "toast_type=error" in resp.headers["location"]

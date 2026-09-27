@@ -3,7 +3,7 @@
 import httpx
 import respx
 
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, without_toast
 
 PARTY_DETAIL_URL = "http://bot-server.internal/api/internal/parties/p1"
 COMMENTS_URL = "http://bot-server.internal/api/internal/parties/p1/comments"
@@ -108,7 +108,7 @@ def test_switch_form_redirects_to_detail_when_cannot_switch(client):
         resp = client.get("/parties/p1/switch")
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
 
 
 def test_switch_submit_posts_to_bot_and_redirects_on_success(client):
@@ -120,7 +120,7 @@ def test_switch_submit_posts_to_bot_and_redirects_on_success(client):
         resp = client.post("/parties/p1/switch", data={"character_name": "부캐1"})
 
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/parties/p1"
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert switch_route.called
     sent = switch_route.calls.last.request
     import json as _json

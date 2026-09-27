@@ -238,12 +238,20 @@ async def _create_invite_core(
     raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
     try:
         target_user = await bot.fetch_user(int(target_discord_id))
-        await target_user.send(
+        dm_message = await target_user.send(
             f"⚔️ **{leader_name}**님이 **{raid_title}** 공대 **{slot_number}번** 슬롯에 초대했습니다!\n"
             f"일정: **{party['scheduled_time']}** | {_party_url(party)}\n\n"
             f"참여 의사를 알려주세요:",
             view=InviteResponseView(message_id, party, target_discord_id, client=bot),
         )
+        # 웹에서 수락/거절하거나 만료됐을 때 이 DM의 버튼을 정리할 수 있도록 위치를 남긴다
+        # (버튼으로 응답하는 경로는 interaction으로 스스로 편집하므로 이 값이 없어도 된다)
+        try:
+            await db.set_invite_dm_message(
+                message_id, target_discord_id, str(dm_message.channel.id), str(dm_message.id),
+            )
+        except Exception:
+            pass
         await db.add_web_notification(
             target_discord_id, "invited", message_id,
             f"{leader_name}님이 {raid_title} 공대 {slot_number}번 슬롯에 초대했습니다. 초대함에서 수락하거나 거절할 수 있습니다.",
@@ -279,12 +287,18 @@ async def _accept_invite_core(
     if role == "support" and match["class"] not in SUPPORT_CLASSES:
         return {"success": False, "reason": f"{match['class']}은(는) 서포터 역할을 맡을 수 없습니다."}
 
+    invite_row = await db.get_invite(message_id, discord_id)
     ok, msg = await db.assign_invite_slot(message_id, discord_id, match["name"], match["class"], role)
     if not ok:
         return {"success": False, "reason": msg}
 
     updated_party = await db.get_party(message_id)
     if bot and updated_party:
+        await _finalize_invite_dm(
+            bot, invite_row,
+            f"✅ (웹에서) **{match['name']}**({match['class']})로 "
+            f"**{updated_party['raid_name']} {updated_party['difficulty']}** 공대에 참여했습니다.",
+        )
         await _refresh_party_embed_with_reserved(bot, updated_party)
         try:
             leader = await bot.fetch_user(int(updated_party["leader_id"]))
@@ -299,8 +313,12 @@ async def _accept_invite_core(
     return {"success": True, "reason": None}
 
 
-async def _decline_invite_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
-    """초대 거절 — Discord InviteResponseView.거절과 웹 API가 공유."""
+async def _decline_invite_core(
+    bot: discord.Client, message_id: str, discord_id: str, *, finalize_dm: bool = True,
+) -> dict:
+    """초대 거절 — Discord InviteResponseView.거절과 웹 API가 공유.
+    finalize_dm: 웹 경로는 DM의 수락/거절 버튼을 여기서 정리한다. 버튼 경로는 interaction으로
+    그 메시지를 직접 편집하므로 False를 넘긴다."""
     party = await db.get_party(message_id)
     if not party:
         return {"success": False, "reason": "파티를 찾을 수 없습니다."}
@@ -308,8 +326,11 @@ async def _decline_invite_core(bot: discord.Client, message_id: str, discord_id:
     if discord_id not in reserved.values():
         return {"success": False, "reason": "초대 정보를 찾을 수 없습니다."}
 
+    invite_row = await db.get_invite(message_id, discord_id)
     await db.delete_invite(message_id, discord_id)
     if bot:
+        if finalize_dm:
+            await _finalize_invite_dm(bot, invite_row, "❌ (웹에서) 초대를 거절했습니다.")
         await _refresh_party_embed_with_reserved(bot, party)
         try:
             leader = await bot.fetch_user(int(party["leader_id"]))
@@ -973,9 +994,11 @@ class InviteResponseView(View):
         self._client    = client
 
     async def on_timeout(self) -> None:
+        invite_row = await db.get_invite(self.message_id, self.invitee_id)
         await db.delete_invite(self.message_id, self.invitee_id)
-        # 초대 만료 시 파티 embed의 예약 슬롯 표시 제거
+        # 초대 만료 시 파티 embed의 예약 슬롯 표시 제거 + DM의 수락/거절 버튼 정리
         if self._client:
+            await _finalize_invite_dm(self._client, invite_row, INVITE_EXPIRED_DM_TEXT)
             party = await db.get_party(self.message_id)
             if party:
                 await _refresh_party_embed_with_reserved(self._client, party)
@@ -1058,7 +1081,7 @@ class InviteResponseView(View):
         if str(interaction.user.id) != self.invitee_id:
             await interaction.response.send_message("본인만 응답할 수 있습니다.", ephemeral=True)
             return
-        await _decline_invite_core(interaction.client, self.message_id, self.invitee_id)
+        await _decline_invite_core(interaction.client, self.message_id, self.invitee_id, finalize_dm=False)
         await interaction.response.edit_message(content="❌ 초대를 거절했습니다.", view=None)
         self.stop()
 
@@ -1305,6 +1328,25 @@ async def _notify_members_web(message_id: str, kind: str, text: str, exclude: st
 def _party_url(party: dict) -> str:
     """DM용 공대 스레드 직접 링크 — 채널 멘션(<#id>)은 포럼 스레드에서 알 수 없음으로 표시."""
     return f"https://discord.com/channels/{party['guild_id']}/{party['channel_id']}"
+
+
+INVITE_EXPIRED_DM_TEXT = "⌛ 초대가 만료되었습니다(1시간). 필요하면 파티장에게 다시 초대를 요청해주세요."
+
+
+async def _finalize_invite_dm(bot: discord.Client, invite_row: dict | None, content: str) -> None:
+    """초대 DM을 버튼 없는 최종 상태로 편집한다 — 웹에서 수락/거절했거나 만료된 초대의
+    수락/거절 버튼이 DM에 그대로 남아 있던 문제. 버튼 경로(interaction)는 스스로 편집하므로
+    여기 오지 않는다. 위치가 기록되지 않은 옛 초대나 삭제된 DM은 조용히 넘어간다."""
+    if not bot or not invite_row or not invite_row.get("dm_message_id") or not invite_row.get("dm_channel_id"):
+        return
+    try:
+        channel = bot.get_channel(int(invite_row["dm_channel_id"]))
+        if channel is None:
+            channel = await bot.fetch_channel(int(invite_row["dm_channel_id"]))
+        message = await channel.fetch_message(int(invite_row["dm_message_id"]))
+        await message.edit(content=content, view=None)
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException, ValueError, TypeError, AttributeError):
+        pass
 
 
 async def _notify_waitlist(client: discord.Client, party: dict) -> None:
