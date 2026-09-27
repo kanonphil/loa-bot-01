@@ -3,14 +3,14 @@ import base64, json, os, subprocess, sys, time, urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).parent
-ROOT = r"C:\Users\xoghk\Desktop\loa-bot-01"
+ROOT = str(Path(__file__).resolve().parents[2])
 TAG = sys.argv[1] if len(sys.argv) > 1 else "before"
-OUT = HERE / TAG
-OUT.mkdir(exist_ok=True)
+OUT = HERE / "out" / TAG
+OUT.mkdir(parents=True, exist_ok=True)
 SECRET = "shot-secret"
 ENV = {**os.environ, "DISCORD_CLIENT_ID": "x", "DISCORD_CLIENT_SECRET": "x", "DISCORD_REDIRECT_URI": "http://127.0.0.1:8766/callback",
        "BOT_API_BASE_URL": "http://127.0.0.1:8765", "BOT_API_WEBAPP_KEY": "k", "DISCORD_GUILD_ID": "1", "SESSION_SECRET": SECRET,
-       "SESSION_HTTPS_ONLY": "false", "ADMIN_DISCORD_IDS": "111", "NOTIFICATION_DB_PATH": str(HERE / "notif.db"), "PYTHONIOENCODING": "utf-8"}
+       "SESSION_HTTPS_ONLY": "false", "ADMIN_DISCORD_IDS": "111", "NOTIFICATION_DB_PATH": str(HERE / "out" / "notif.db"), "PYTHONIOENCODING": "utf-8"}
 
 def wait(url, tries=60):
     for _ in range(tries):

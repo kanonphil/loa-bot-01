@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-sys.path.insert(0, r"C:\Users\xoghk\Desktop\loa-bot-01")
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
 import os
 os.environ.setdefault("DISCORD_CLIENT_ID", "x"); os.environ.setdefault("DISCORD_CLIENT_SECRET", "x")
 os.environ.setdefault("BOT_API_WEBAPP_KEY", "k"); os.environ.setdefault("DISCORD_GUILD_ID", "1"); os.environ.setdefault("SESSION_SECRET", "s")
