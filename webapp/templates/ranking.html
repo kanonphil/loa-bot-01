@@ -42,16 +42,16 @@
   <input type="search" class="js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="랭킹 검색" autocomplete="off"
          data-filter-target="#rank-table" data-filter-item="a.rank-row" data-filter-no-result="#rank-search-noresult">
 </label>
-<div class="rank-table" id="rank-table" role="table">
-  <div class="rank-row rank-head" role="row">
+<div class="rank-table" id="rank-table">
+  <div class="rank-row rank-head" aria-hidden="true">
     <span class="rank-col-rank">#</span>
     <span class="rank-col-name">{% if metric == "weekly_clears" %}대표 캐릭터{% else %}캐릭터{% endif %}</span>
     <span class="rank-col-class">직업</span>
     <span class="rank-col-value">{{ metric_labels[metric] }}</span>
   </div>
   {% for e in entries %}
-  <a class="rank-row rank-medal-{{ e.rank if e.rank <= 3 else 0 }}" role="row"
-     href="/characters/{{ e.character_name | urlencode }}?discord_id={{ e.discord_id }}">
+  <a class="rank-row rank-medal-{{ e.rank if e.rank <= 3 else 0 }}"
+     href="/characters/{{ e.character_name | urlencode }}?discord_id={{ e.discord_id }}&back=ranking">
     <span class="rank-col-rank">{{ e.rank }}</span>
     <span class="rank-col-name">{{ e.character_name }}</span>
     <span class="rank-col-class">{{ e.character_class or "—" }}</span>

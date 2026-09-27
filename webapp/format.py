@@ -164,3 +164,12 @@ def invite_expiry_view(invited_at: str | None, ttl_minutes: int = 60, now: datet
     if minutes <= 0:
         return {"label": "곧 만료", "tone": "warn", "minutes": 0}
     return {"label": f"만료까지 {minutes}분", "tone": "warn" if minutes <= 15 else "", "minutes": minutes}
+
+
+def is_overdue_party(party: dict, now: datetime | None = None) -> bool:
+    """일정이 이미 지났는데 아직 모집중/파티완성인 공대 — 파티장이 클리어/취소를 안 눌러 방치된 것.
+    관리자 공대 관리의 "문제 공대"와 메인의 "처리 안 한 내 공대"가 같은 규칙을 쓴다."""
+    if party.get("status") not in ("recruiting", "full"):
+        return False
+    dt = _parse(party.get("scheduled_datetime"))
+    return dt is not None and dt < (now or datetime.now(KST))

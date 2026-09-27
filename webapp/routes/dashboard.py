@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, Request
 from webapp import config
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
-from webapp.format import party_view, reset_view
+from webapp.format import is_overdue_party, party_view, reset_view
+from webapp.routes.invites import _build_invite_views
 from webapp.templating import templates
 
 router = APIRouter()
@@ -44,15 +45,47 @@ def split_parties(parties: list[dict], discord_id: str, max_level: float) -> tup
     return mine, opportunities
 
 
+INVITE_LIMIT = 3
+
+
+async def _safe(coro, default):
+    """카드 하나의 봇 호출이 실패해도 메인 전체가 502로 떨어지지 않게 — 그 카드만 비운다."""
+    try:
+        return await coro
+    except Exception:
+        return default
+
+
+def leader_overview(party: dict, discord_id: str) -> dict | None:
+    """내가 파티장인 공대의 채워야 할 자리/서포터 유무/일정 지남 여부. 파티장이 아니면 None."""
+    if party.get("leader_id") != discord_id:
+        return None
+    slots = party.get("slots") or []
+    total = party.get("total_slots") or 0
+    return {
+        "open_slots": max(total - len(slots), 0),
+        "has_support": any(s.get("role") == "support" for s in slots),
+        "overdue": is_overdue_party(party),
+    }
+
+
 async def _dashboard_context(discord_id: str) -> dict:
-    characters, all_parties, progress = await asyncio.gather(
+    characters, all_parties, progress, invites = await asyncio.gather(
         bot_client.get_user_characters(discord_id),
         bot_client.list_parties(config.DISCORD_GUILD_ID),
         bot_client.get_raid_progress(discord_id),
+        _safe(_build_invite_views(discord_id), []),
     )
 
     max_level = max((c.get("item_level") or 0) for c in characters) if characters else 0
     mine, opportunities = split_parties(all_parties, discord_id, max_level)
+    for p in mine:
+        p["leader"] = leader_overview(p, discord_id)
+    # 일정이 지났는데 클리어/취소를 안 한 내 공대 — split_parties는 지난 일정을 걸러내므로 따로 센다
+    overdue_mine = [
+        party_view(p) for p in all_parties
+        if p.get("leader_id") == discord_id and is_overdue_party(p)
+    ]
 
     # 아직 남은 캐릭터만, 많이 남은 순으로 — "어디부터 돌면 되나"에 바로 답하도록.
     remaining = sorted(
@@ -72,6 +105,9 @@ async def _dashboard_context(discord_id: str) -> dict:
         "remaining_characters": remaining,
         "reset": reset_view(),
         "recruiting_count": sum(1 for p in all_parties if p["status"] == "recruiting"),
+        "invites": invites[:INVITE_LIMIT],
+        "invite_count": len(invites),
+        "overdue_parties": overdue_mine,
     }
 
 

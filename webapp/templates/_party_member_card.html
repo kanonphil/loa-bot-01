@@ -18,6 +18,6 @@
     </div>
     {% endif %}
   </div>
-  <a class="member-card-link" href="/characters/{{ detail.character_name }}?discord_id={{ discord_id }}">자세히 보기 →</a>
+  <a class="member-card-link" href="/characters/{{ detail.character_name | urlencode }}?discord_id={{ discord_id }}{% if message_id %}&back=party:{{ message_id }}{% endif %}">자세히 보기 →</a>
 </div>
 {% endif %}

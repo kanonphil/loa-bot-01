@@ -22,7 +22,7 @@ from webapp import config, notification_store
 from webapp.auth.dependencies import require_admin
 from webapp.clients import bot_client
 from webapp.flash import redirect_result, redirect_with_toast
-from webapp.format import party_view
+from webapp.format import is_overdue_party, party_view
 from webapp.routes.party import _history_view
 from webapp.templating import templates
 
@@ -432,18 +432,8 @@ async def admin_set_forum_channel(
 
 
 def _is_problem_party(party: dict, now: datetime) -> bool:
-    """일정이 이미 지났는데 아직 모집중/파티완성인 공대 — 관리자 앱 Dashboard의
-    "문제" 규칙 그대로. 파티장이 클리어/취소를 안 눌러 방치된 공대를 찾아낸다."""
-    sdt = party.get("scheduled_datetime")
-    if not sdt or party.get("status") not in ("recruiting", "full"):
-        return False
-    try:
-        dt = datetime.fromisoformat(sdt)
-    except ValueError:
-        return False
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=KST)
-    return dt < now
+    """관리자 앱 Dashboard의 "문제" 규칙 — 메인의 "처리 안 한 내 공대"와 공용(webapp/format.py)."""
+    return is_overdue_party(party, now)
 
 
 # ── 유저 관리 (Electron 관리자 앱에만 있던 기능을 웹에도 추가) ────────

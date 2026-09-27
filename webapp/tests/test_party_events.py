@@ -62,6 +62,7 @@ def test_fingerprint_changes_when_schedule_or_difficulty_changes():
     assert party_events._fingerprint([base]) != party_events._fingerprint([{**base, "leader_id": "222"}])
     # 댓글 수 — 파티 상세 페이지가 새 댓글을 실시간으로 받도록
     assert party_events._fingerprint([{**base, "comment_count": 1}]) != party_events._fingerprint([{**base, "comment_count": 2}])
+    assert party_events._fingerprint([{**base, "waitlist_count": 0}]) != party_events._fingerprint([{**base, "waitlist_count": 1}])
 
 
 def test_fingerprint_changes_on_one_in_one_out():

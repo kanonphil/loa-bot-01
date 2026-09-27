@@ -2,6 +2,15 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
-{{ ui.empty(title, desc, "메인으로", "/main", "⚠️") }}
+<div class="ui-empty">
+  <span class="ui-empty-icon" aria-hidden="true">⚠️</span>
+  <b class="ui-empty-title">{{ title }}</b>
+  {% if desc %}<p class="ui-empty-desc">{{ desc }}</p>{% endif %}
+  <div class="ui-row error-actions">
+    <a class="ui-btn is-ghost" href="javascript:history.back()">이전 화면</a>
+    <a class="ui-btn is-ghost" href="">다시 시도</a>
+    <a class="ui-btn" href="{{ '/main' if user else '/' }}">메인으로</a>
+  </div>
+</div>
 </div>
 {% endblock %}

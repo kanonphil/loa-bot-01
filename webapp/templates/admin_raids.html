@@ -81,7 +81,7 @@
       </label>
       <label class="admin-field">
         <span class="admin-field-label">순서</span>
-        <input type="number" name="sort_order" value="0" class="settings-select">
+        <input type="number" name="sort_order" value="0" min="0" class="settings-select">
       </label>
     </div>
     <div class="admin-form-actions">
@@ -257,11 +257,11 @@
             <span class="admin-inline-label">입장 레벨</span>
             <input type="number" name="min_level" value="{{ d.min_level }}" min="1" required class="settings-select admin-input-narrow" aria-label="입장 레벨">
             <span class="admin-inline-label">인원</span>
-            <input type="number" name="total_slots" value="{{ d.total_slots }}" min="1" required class="settings-select admin-input-narrow" aria-label="인원">
+            <input type="number" name="total_slots" value="{{ d.total_slots }}" min="1" max="16" required class="settings-select admin-input-narrow" aria-label="인원">
             <span class="admin-inline-label">분할</span>
-            <input type="number" name="party_split" value="{{ d.party_split or '' }}" min="1" placeholder="없음" class="settings-select admin-input-narrow" aria-label="분할 인원">
+            <input type="number" name="party_split" value="{{ d.party_split or '' }}" min="2" placeholder="없음" class="settings-select admin-input-narrow" aria-label="분할 인원">
             <span class="admin-inline-label">관문</span>
-            <input type="number" name="gates" value="{{ d.gates }}" min="1" required class="settings-select admin-input-narrow" aria-label="관문 수">
+            <input type="number" name="gates" value="{{ d.gates }}" min="1" max="4" required class="settings-select admin-input-narrow" aria-label="관문 수">
             <button type="submit" class="admin-toggle-link">저장</button>
             <span class="admin-inline-label">이미 개설된 공대에는 적용되지 않습니다.</span>
           </form>
@@ -293,19 +293,19 @@
       </label>
       <label class="admin-field">
         <span class="admin-field-label">입장 레벨</span>
-        <input type="number" name="min_level" placeholder="예: 1700" required class="settings-select">
+        <input type="number" name="min_level" placeholder="예: 1700" min="1" step="5" required class="settings-select">
       </label>
       <label class="admin-field">
         <span class="admin-field-label">인원</span>
-        <input type="number" name="total_slots" placeholder="예: 8" required class="settings-select">
+        <input type="number" name="total_slots" placeholder="예: 8" min="1" max="16" required class="settings-select">
       </label>
       <label class="admin-field">
         <span class="admin-field-label">분할 인원 (선택)</span>
-        <input type="number" name="party_split" placeholder="예: 4" class="settings-select">
+        <input type="number" name="party_split" placeholder="예: 4" min="2" class="settings-select">
       </label>
       <label class="admin-field admin-field-narrow">
         <span class="admin-field-label">관문 수</span>
-        <input type="number" name="gates" value="1" class="settings-select">
+        <input type="number" name="gates" value="1" min="1" max="4" class="settings-select">
       </label>
     </div>
     <div class="admin-form-actions">

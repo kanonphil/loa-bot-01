@@ -52,7 +52,7 @@
         {% for r in characters %}
         <tr>
           <td>{{ r.representative or r.discord_id }}</td>
-          <td><a href="/characters/{{ r.character_name | urlencode }}?discord_id={{ r.discord_id }}">{{ r.character_name }}</a></td>
+          <td><a href="/characters/{{ r.character_name | urlencode }}?discord_id={{ r.discord_id }}&back=admin">{{ r.character_name }}</a></td>
           <td class="num">{{ r.clears }}</td>
         </tr>
         {% endfor %}

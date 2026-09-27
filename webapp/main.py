@@ -6,6 +6,8 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import PlainTextResponse, RedirectResponse
@@ -115,6 +117,42 @@ app.include_router(admin.router)
 @app.exception_handler(NotAuthenticated)
 async def not_authenticated_handler(request, exc):
     return RedirectResponse("/login")
+
+
+def _error_page(request, status: int, title: str, desc: str):
+    if request.headers.get("HX-Request"):
+        return PlainTextResponse(title, status_code=status)
+    user = request.session.get("user") if "session" in request.scope else None
+    return templates.TemplateResponse(
+        request, "error.html",
+        {"user": user, "active": None, "title": title, "desc": desc},
+        status_code=status,
+    )
+
+
+_HTTP_TITLES = {
+    403: ("접근할 수 없습니다", "이 작업을 할 권한이 없습니다."),
+    404: ("페이지를 찾을 수 없습니다", "주소가 바뀌었거나 삭제된 페이지입니다."),
+    405: ("허용되지 않는 요청입니다", "이 주소는 이 방식으로 열 수 없습니다."),
+}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    """웹앱 자체가 던지는 403(본인 캐릭터 아님·관리자 아님)/404 등이 FastAPI 기본 JSON으로 떨어졸
+    사용자가 원시 {"detail": ...}를 보던 문제. 로그인 필요(401 NotAuthenticated)는 기존대로 /login."""
+    if isinstance(exc, NotAuthenticated) or exc.status_code == 401:
+        return RedirectResponse("/login")
+    title, desc = _HTTP_TITLES.get(exc.status_code, ("요청을 처리하지 못했습니다", "잠시 후 다시 시도해주세요."))
+    if isinstance(exc.detail, str) and exc.detail:
+        desc = exc.detail
+    return _error_page(request, exc.status_code, title, desc)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request, exc):
+    """폼 필드가 빠졌거나 형식이 틀리면(422) 기본 JSON 대신 안내 — 대부분 뒤로가기·중복 제출·조작된 폼."""
+    return _error_page(request, 422, "입력값이 올바르지 않습니다", "필요한 값이 빠졌거나 형식이 맞지 않습니다. 이전 화면으로 돌아가 다시 시도해주세요.")
 
 
 @app.exception_handler(httpx.HTTPError)

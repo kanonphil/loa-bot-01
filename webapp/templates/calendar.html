@@ -20,13 +20,13 @@
     <a href="/calendar?view={{ view }}" class="calendar-today-btn">오늘</a>
     <div class="calendar-header">
       {% if view == "week" %}
-      <a href="/calendar?view=week&week_start={{ prev_week_start }}" class="calendar-nav-btn">&larr;</a>
+      <a href="/calendar?view=week&week_start={{ prev_week_start }}" class="calendar-nav-btn" aria-label="이전 주">&larr;</a>
       <h1>{{ week_label }}</h1>
-      <a href="/calendar?view=week&week_start={{ next_week_start }}" class="calendar-nav-btn">&rarr;</a>
+      <a href="/calendar?view=week&week_start={{ next_week_start }}" class="calendar-nav-btn" aria-label="다음 주">&rarr;</a>
       {% else %}
-      <a href="/calendar?view=month&year={{ prev_year }}&month={{ prev_month }}" class="calendar-nav-btn">&larr;</a>
+      <a href="/calendar?view=month&year={{ prev_year }}&month={{ prev_month }}" class="calendar-nav-btn" aria-label="이전 달">&larr;</a>
       <h1>{{ year }}년 {{ month }}월</h1>
-      <a href="/calendar?view=month&year={{ next_year }}&month={{ next_month }}" class="calendar-nav-btn">&rarr;</a>
+      <a href="/calendar?view=month&year={{ next_year }}&month={{ next_month }}" class="calendar-nav-btn" aria-label="다음 달">&rarr;</a>
       {% endif %}
     </div>
     <div class="calendar-view-toggle">

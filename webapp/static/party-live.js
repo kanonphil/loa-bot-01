@@ -3,7 +3,9 @@
   // 파티 상세(/parties/<id>)도 포함 — 목록/캘린더만 갱신되고 상세는 F5를 눌러야
   // 슬롯/댓글이 보이던 문제. /parties/create, /parties/history는 폼/이력 화면이라 제외.
   var isDetail = /^\/parties\/[^/]+$/.test(path) && path !== "/parties/create" && path !== "/parties/history";
-  var isRelevant = path === "/main" || path === "/parties" || path === "/calendar" || path === "/admin/parties" || isDetail;
+  // /invites: 파티장이 초대하거나 슬롯이 채워지면 바뀜, /raid-check: 파티장이 클리어하면 자동 체크가 들어옴
+  var isRelevant = path === "/main" || path === "/parties" || path === "/calendar" || path === "/admin/parties"
+    || path === "/invites" || path === "/raid-check" || isDetail;
   if (!isRelevant) return;
 
   var source = new EventSource("/events/parties");
@@ -68,6 +70,7 @@
         });
         restoreDrafts(newContent, drafts);
         if (window.htmx) window.htmx.process(newContent);
+        if (window.refreshNavBadges) window.refreshNavBadges();
         if (window.applyMarquee) window.applyMarquee();
         if (window.initThemedSelects) window.initThemedSelects();
       })

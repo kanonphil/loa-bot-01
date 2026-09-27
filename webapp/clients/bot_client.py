@@ -34,7 +34,8 @@ async def aclose() -> None:
 # 데이터인데, 페이지 조회는 물론 레이드체크 토글처럼 자주 눌리는 액션에서도 매번
 # 봇 서버를 왕복하고 있었다 — 짧은 TTL 캐시로 왕복 횟수를 크게 줄인다.
 # (테스트는 webapp/tests/conftest.py의 autouse 픽스처가 매 테스트 전에 이 캐시를 비운다.)
-_CACHE_TTL_SECONDS = 60
+# 60초였으나 디스코드 /관리로 바꾼 것(웹 프로세스는 무효화를 못 받음)이 반영되기까지 너무 길어 20초로.
+_CACHE_TTL_SECONDS = 20
 _cache: dict[str, tuple[float, object]] = {}
 
 
@@ -53,7 +54,7 @@ async def _cached_get(cache_key: str, url: str) -> object:
 def _invalidate_raid_cache() -> None:
     """관리자가 카테고리/레이드/난이도/직업을 바꾼 직후 호출 — 안 하면 최대 60초간
     (레이드체크·공대개설 등 사이트 전체가) 바뀌기 전 데이터를 계속 보게 된다."""
-    for key in ("raids", "raid_categories", "support_classes"):
+    for key in ("raids", "raid_categories", "support_classes", "proficiency_options"):
         _cache.pop(key, None)
 
 

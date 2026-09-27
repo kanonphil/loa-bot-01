@@ -33,9 +33,11 @@
     }
 
     popover.innerHTML = '<div class="member-card-error">불러오는 중...</div>';
+    var partyMatch = window.location.pathname.match(/^\/parties\/([^/]+)$/);
     fetch(
       "/party-member-card?discord_id=" + encodeURIComponent(discordId) +
-        "&character_name=" + encodeURIComponent(name)
+        "&character_name=" + encodeURIComponent(name) +
+        (partyMatch ? "&message_id=" + encodeURIComponent(partyMatch[1]) : "")
     )
       .then(function (res) {
         return res.text();

@@ -25,6 +25,13 @@
     button.className = "themed-select-trigger";
     button.setAttribute("aria-haspopup", "listbox");
     button.setAttribute("aria-expanded", "false");
+    // 원본 select는 aria-hidden으로 숨기므로 트리거가 이름을 이어받아야 스크린리더가 읽는다
+    var accessibleName = select.getAttribute("aria-label");
+    if (!accessibleName) {
+      var owner = select.closest("label");
+      if (owner) accessibleName = owner.textContent.replace(/\s+/g, " ").trim();
+    }
+    if (accessibleName) button.setAttribute("aria-label", accessibleName);
     wrap.appendChild(button);
 
     var label = document.createElement("span");

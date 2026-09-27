@@ -4162,11 +4162,11 @@ a.rank-row:hover {
 
 /* 데스크톱: 종 아이콘 아래에 붙는 320px 드롭다운 (사이드바 밖 본문 위로 펼쳐짐) */
 .notif-panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 8px;
+  position: fixed;
+  top: 56px;
+  left: 12px;
   width: 320px;
-  z-index: 220;
+  z-index: 240;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -4314,19 +4314,6 @@ a.rank-row:hover {
 /* 모바일: 오프캔버스 사이드바에 transform이 걸려있어 fixed/absolute 배치가 사이드바
    기준으로 뒤틀린다 — 드롭다운 대신 사이드바 흐름 안에 인라인으로 펼친다(메뉴를 아래로 밀어냄).
    패널은 brand(flex row)의 자식이라 wrap + 100% 폭으로 한 줄을 통째로 차지시킨다. */
-@media (max-width: 1024px) {
-  .sidebar-brand {
-    flex-wrap: wrap;
-  }
-
-  .notif-panel {
-    position: static;
-    flex-basis: 100%;
-    width: 100%;
-    margin-top: 12px;
-    max-height: 320px;
-  }
-}
 
 /* ── 설정 페이지 ───────────────────────────────────────── */
 
@@ -5549,7 +5536,7 @@ a.ui-card:hover {
 .guide-cmd code { margin-right: 4px; }
 
 @media (max-width: 640px) {
-  .bottom-tabs a { font-size: 10px; }
+  .bottom-tabs a, .bottom-tabs .bottom-tab-notif { font-size: 11px; }
 }
 
 /* ── 골드 칩 (익스트림 '원정대 주 1회' 등 보조 신호) ──────────── */
@@ -5577,3 +5564,58 @@ a.ui-card:hover {
 
 /* ── 메인: 익스트림 줄 ───────────────────────────────── */
 .dash-extreme-row { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px dashed var(--border); }
+
+
+/* ── 알림 패널: 모바일 하단 시트 + 오버레이 (패널은 사이드바 밖 .layout 직속) ─────── */
+.notif-overlay {
+  position: fixed; inset: 0; z-index: 230;
+  background: rgba(0, 0, 0, 0.45);
+}
+.notif-panel.is-sheet {
+  top: auto; left: 0; right: 0; bottom: 0;
+  width: auto;
+  max-height: 70vh;
+  border-radius: 16px 16px 0 0;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  animation: notif-sheet-up 0.18s ease-out;
+}
+@keyframes notif-sheet-up { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .notif-panel.is-sheet { animation: none; } }
+
+/* 하단 탭의 알림 버튼 — 링크 탭과 같은 모양 */
+.bottom-tabs .bottom-tab-notif {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-2) 0 var(--sp-2);
+  font: inherit;
+  font-size: var(--fs-label);
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  position: relative;
+}
+.bottom-tabs .bottom-tab-notif svg { width: 20px; height: 20px; }
+.bottom-tabs .bottom-tab-notif[aria-expanded="true"] { color: var(--accent); }
+
+/* ── 메인: 처리 필요 공대 액션, 에러 페이지 액션 ───────────── */
+.dash-overdue-actions { gap: var(--sp-2); }
+.dash-overdue-actions form { display: inline; }
+.error-actions { justify-content: center; gap: var(--sp-2); margin-top: var(--sp-3); }
+
+/* ── 완료 토글: 색만으로 구분하지 않도록 ✓ ───────────────── */
+.raid-card-diff-toggle.done::before { content: "✓ "; font-weight: 700; }
+
+/* ── 모바일 보정 ───────────────────────────────────────── */
+.expedition-account-form { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .rank-row { grid-template-columns: 40px 1fr 96px; }
+  .rank-row .rank-col-class { display: none; }
+  .rank-row .rank-col-name { white-space: normal; }
+}
+@media (max-width: 760px) {
+  .armory-sidebar { position: static; }
+}

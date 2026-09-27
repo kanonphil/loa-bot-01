@@ -14,8 +14,15 @@
     });
   }
 
-  fetch("/nav-badges", { credentials: "same-origin" })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (counts) { if (counts) paint(counts); })
-    .catch(function () { /* 배지는 부가 정보 — 실패해도 화면은 그대로 */ });
+  function refresh() {
+    fetch("/nav-badges", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (counts) { if (counts) paint(counts); })
+      .catch(function () { /* 배지는 부가 정보 — 실패해도 화면은 그대로 */ });
+  }
+
+  // party-live.js(공대 변경 SSE)·notifications.js(초대 알림)가 갱신 후 다시 부른다 —
+  // 이전엔 페이지 로드 때 한 번만 가져와서 초대/공대 배지가 이동 전까지 옛 숫자였다.
+  window.refreshNavBadges = refresh;
+  refresh();
 })();

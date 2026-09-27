@@ -19,6 +19,7 @@ async def character_detail(
     request: Request,
     character_name: str,
     discord_id: str | None = None,
+    back: str | None = None,
     user: dict = Depends(get_current_user),
 ):
     # discord_id를 안 넘기면(원정대 관리에서 들어온 경우) 내 캐릭터로 간주.
@@ -28,18 +29,35 @@ async def character_detail(
     # 동기화는 본인 캐릭터에서만 허용 — 남의 캐릭터 상세를 볼 때(discord_id 지정)는
     # 그 사람 대신 API를 호출시킬 권한이 없으므로 버튼 자체를 숨긴다.
     can_sync = discord_id is None
+    back_href, back_label, active = _back_target(back, discord_id is not None)
     return templates.TemplateResponse(
         request,
         "character_detail.html",
         {
             "user": user,
-            "active": "expedition",
+            "active": active,
             "character_name": character_name,
             "detail": detail,
             "can_sync": can_sync,
             "synced_ago": time_ago(detail.get("synced_at")),
+            "back_href": back_href,
+            "back_label": back_label,
         },
     )
+
+
+def _back_target(back: str | None, is_other: bool) -> tuple[str, str, str]:
+    """랭킹/공대 상세/관리자 통계에서 들어왔는데 뒤로가기가 항상 "원정대 관리로"였다 — 온 곳으로 돌려보낸다.
+    back 값: ranking | party:<message_id> | admin | (없음)"""
+    if back == "ranking":
+        return "/ranking", "원정대 랭킹으로", "ranking"
+    if back and back.startswith("party:") and back[6:].isalnum():
+        return f"/parties/{back[6:]}", "공대로", "parties"
+    if back == "admin":
+        return "/admin/stats", "통계로", "admin_stats"
+    if is_other:
+        return "/ranking", "원정대 랭킹으로", "ranking"
+    return "/expedition", "원정대 관리로", "expedition"
 
 
 @router.post("/characters/{character_name}/sync")
@@ -55,7 +73,8 @@ async def character_detail_sync(
 
 @router.get("/party-member-card")
 async def party_member_card(
-    request: Request, discord_id: str, character_name: str, user: dict = Depends(get_current_user)
+    request: Request, discord_id: str, character_name: str, message_id: str | None = None,
+    user: dict = Depends(get_current_user),
 ):
     """공대 모집 화면에서 파티원 위에 마우스를 올렸을 때 뜨는 간단 요약 카드.
     전체 정보는 캐릭터 상세 페이지(/characters/{name})에 이미 있으니, 여기선 한눈에
@@ -64,5 +83,5 @@ async def party_member_card(
     return templates.TemplateResponse(
         request,
         "_party_member_card.html",
-        {"discord_id": discord_id, "detail": detail},
+        {"discord_id": discord_id, "detail": detail, "message_id": message_id},
     )

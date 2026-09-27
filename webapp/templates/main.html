@@ -13,6 +13,109 @@
 
 <div class="dash-stack">
 
+  {# ── 내게 온 초대: 1시간 뒤 만료되는데 모바일에선 사이드바 배지가 안 보였다 ── #}
+  {% if invites %}
+  <section class="dash-section">
+    <h2 class="dash-section-title">
+      내게 온 초대
+      {{ ui.chip(invite_count ~ "건", "warn") }}
+    </h2>
+    <div class="ui-list">
+      {% for inv in invites %}
+      {% call ui.card(stripe="warn") %}
+        <div class="ui-row">
+          <span class="ui-card-title">{{ inv.raid_name }} {{ inv.difficulty }}</span>
+          {{ ui.chip(inv.proficiency) }}
+          <span class="ui-spacer"></span>
+          <span class="ui-card-meta">{{ inv.slot_number }}번 슬롯</span>
+          {% if inv.expiry %}{{ ui.chip(inv.expiry.label, inv.expiry.tone) }}{% endif %}
+        </div>
+        <div class="ui-row">
+          <span class="ui-card-meta">{{ inv.schedule.when }}</span>
+          {% if inv.schedule.countdown %}{{ ui.chip(inv.schedule.countdown, inv.schedule.tone) }}{% endif %}
+        </div>
+        {% if inv.qualifying %}
+        <form method="post" action="/invites/{{ inv.message_id }}/accept" class="party-join-form invite-accept-form">
+          <select name="character_name" class="js-themed-select invite-char-select" aria-label="참여 캐릭터">
+            {% for q in inv.qualifying %}
+            <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
+            {% endfor %}
+          </select>
+          <select name="role" class="js-themed-select invite-role-select" aria-label="역할">
+            <option value="dps">딜러</option>
+            <option value="support">서포터</option>
+          </select>
+          <button type="submit" data-busy-text="수락 중…">수락</button>
+          <button type="submit" class="party-leave-btn" form="decline-{{ inv.message_id }}">거절</button>
+        </form>
+        <script>
+          (function () {
+            var form = document.currentScript.previousElementSibling;
+            var isSupportMap = {{ inv.character_is_support | tojson }};
+            var charSelect = form.querySelector(".invite-char-select");
+            var roleSelect = form.querySelector(".invite-role-select");
+            var supportOption = roleSelect.querySelector('option[value="support"]');
+            function syncRole() {
+              var isSupport = isSupportMap[charSelect.value];
+              supportOption.disabled = !isSupport;
+              if (isSupport) roleSelect.value = "support";
+              else if (roleSelect.value === "support") roleSelect.value = "dps";
+              roleSelect.dispatchEvent(new Event("change"));
+            }
+            charSelect.addEventListener("change", syncRole);
+            syncRole();
+          })();
+        </script>
+        {% else %}
+        <div class="ui-row">
+          <p class="party-cannot-join">{{ inv.cannot_accept_reason or "참여 가능한 캐릭터가 없습니다." }}</p>
+          <span class="ui-spacer"></span>
+          <button type="submit" class="party-leave-btn" form="decline-{{ inv.message_id }}">거절</button>
+        </div>
+        {% endif %}
+        <form id="decline-{{ inv.message_id }}" method="post" action="/invites/{{ inv.message_id }}/decline" hidden
+              onsubmit="return confirm('{{ inv.raid_name }} {{ inv.difficulty }} 초대를 거절할까요? 거절한 초대는 되돌릴 수 없습니다.');"></form>
+      {% endcall %}
+      {% endfor %}
+    </div>
+    {% if invite_count > invites | length %}
+    <a class="dash-card-link" href="/invites">초대 전체 보기 &rarr;</a>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# ── 처리 안 한 내 공대: 일정이 지났는데 클리어/취소를 안 눌렀다 ── #}
+  {% if overdue_parties %}
+  <section class="dash-section">
+    <h2 class="dash-section-title">처리가 필요한 내 공대 {{ ui.chip(overdue_parties | length ~ "건", "danger") }}</h2>
+    <p class="settings-desc">일정이 지났는데 아직 모집중/파티완성 상태입니다. 클리어 처리하면 참여자 전원의 이번 주 완료가 자동 체크되고, 취소하면 스레드가 정리됩니다.</p>
+    <div class="ui-list">
+      {% for p in overdue_parties %}
+      {% call ui.card(stripe="danger") %}
+        <div class="ui-row">
+          <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
+          {{ ui.chip("일정 지남", "danger") }}
+          <span class="ui-spacer"></span>
+          <span class="ui-card-meta">{{ p.schedule.when }} · {{ p.filled }}/{{ p.total_slots }}명</span>
+        </div>
+        <div class="ui-row dash-overdue-actions">
+          <a class="ui-btn is-ghost" href="/parties/{{ p.message_id }}">상세 보기</a>
+          <form method="post" action="/parties/{{ p.message_id }}/clear"
+                onsubmit="return confirm('{{ p.raid_name }} {{ p.difficulty }} 공대를 클리어 처리할까요? 참여자 전원의 이번 주 완료가 자동 체크됩니다.');">
+            <button type="submit" class="leader-btn leader-btn-success" data-busy-text="처리 중…">클리어</button>
+          </form>
+          <form method="post" action="/parties/{{ p.message_id }}/cancel"
+                onsubmit="return confirm('{{ p.raid_name }} {{ p.difficulty }} 공대를 취소할까요? 디스코드 스레드가 삭제되고 파티원에게 안내가 갑니다.');">
+            <input type="hidden" name="reason" value="일정 경과">
+            <button type="submit" class="leader-btn leader-btn-danger" data-busy-text="취소 중…">취소</button>
+          </form>
+        </div>
+      {% endcall %}
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {# ── 급한 것: 내가 속한 임박 공대 ── #}
   <section class="dash-section">
     <h2 class="dash-section-title">
@@ -37,6 +140,8 @@
         <div class="ui-row">
           <span class="ui-card-meta">{{ p.schedule.when }}</span>
           <span class="ui-spacer"></span>
+          {% if p.leader and p.leader.open_slots %}{{ ui.chip("빈자리 " ~ p.leader.open_slots, "warn") }}{% endif %}
+          {% if p.leader and not p.leader.has_support and p.slots %}{{ ui.chip("서포터 없음", "warn") }}{% endif %}
           {{ ui.chip(p.status_label, p.status_tone) }}
         </div>
         {{ ui.slotbar(p.slots, p.total_slots, p.pct) }}
