@@ -28,8 +28,8 @@
 {% endmacro %}
 
 {% macro move_buttons() %}
-<button type="button" class="admin-move-btn" data-move="up" title="위로">▲</button>
-<button type="button" class="admin-move-btn" data-move="down" title="아래로">▼</button>
+<button type="button" class="admin-move-btn" data-move="up" data-tip="위로" aria-label="위로">▲</button>
+<button type="button" class="admin-move-btn" data-move="down" data-tip="아래로" aria-label="아래로">▼</button>
 {% endmacro %}
 
 {% if tab == "categories" %}
@@ -40,7 +40,7 @@
     {% for c in categories %}
     <li class="admin-row" data-key="{{ c.name }}">
       <span class="admin-row-name">
-        <span class="admin-drag-handle" data-drag-handle title="드래그해서 순서 변경">⠿</span>
+        <span class="admin-drag-handle" data-drag-handle data-tip="드래그해서 순서 변경">⠿</span>
         {{ c.name }}
       </span>
       <span class="admin-row-actions">
@@ -51,7 +51,7 @@
           {{ ui.chip("익스트림" if c.is_extreme else "일반 카테고리", "accent" if c.is_extreme else "") }}
           <button type="submit" class="admin-toggle-link">전환</button>
         </form>
-        <form method="post" action="/admin/raids/categories/delete" onsubmit="return confirm('{{ c.name }} 카테고리를 삭제할까요? 소속 레이드가 있으면 삭제되지 않습니다.');">
+        <form method="post" action="/admin/raids/categories/delete" data-confirm-title="{{ c.name }} 카테고리를 삭제할까요?" data-confirm="소속 레이드가 있으면 삭제되지 않습니다." data-confirm-ok="삭제" data-confirm-danger>
           <input type="hidden" name="name" value="{{ c.name }}">
           <button type="submit" class="admin-danger-link">삭제</button>
         </form>
@@ -60,7 +60,8 @@
         <summary>수정</summary>
         <div class="admin-inline-forms">
           <form method="post" action="/admin/raids/categories/rename" class="admin-inline-form"
-                onsubmit="return this.new_name.value.trim() === {{ c.name | tojson }} || confirm({{ c.name | tojson }} + ' → ' + this.new_name.value.trim() + ' 으로 바꿀까요? 소속 레이드의 카테고리도 함께 바뀝니다.');">
+                data-confirm-skip-same="new_name" data-confirm-original="{{ c.name }}" data-confirm-title="카테고리 이름을 바꿀까요?" data-confirm="{{ c.name }} → {new_name}
+소속 레이드의 카테고리도 함께 바뀝니다." data-confirm-ok="이름 변경">
             <input type="hidden" name="old_name" value="{{ c.name }}">
             <span class="admin-inline-label">이름</span>
             <input type="text" name="new_name" value="{{ c.name }}" required class="settings-select" aria-label="카테고리 이름">
@@ -101,7 +102,7 @@
     {% for r in group.raids %}
     <li class="admin-row" data-key="{{ r.name }}">
       <span class="admin-row-name">
-        <span class="admin-drag-handle" data-drag-handle title="드래그해서 순서 변경">⠿</span>
+        <span class="admin-drag-handle" data-drag-handle data-tip="드래그해서 순서 변경">⠿</span>
         {{ r.icon }} {{ r.name }} <span class="admin-row-sub">{{ r.short_name }}</span>
         {% if not r.is_active %}{{ ui.chip("비활성", "danger") }}{% endif %}
         {% if r.is_pinned %}{{ ui.chip("고정", "accent") }}{% endif %}
@@ -120,7 +121,7 @@
           <input type="hidden" name="is_active" value="{{ 'false' if r.is_active else 'true' }}">
           <button type="submit" class="admin-toggle-link">{{ "비활성화" if r.is_active else "활성화" }}</button>
         </form>
-        <form method="post" action="/admin/raids/delete" onsubmit="return confirm('{{ r.name }}을(를) 삭제할까요? 난이도도 함께 삭제됩니다.');">
+        <form method="post" action="/admin/raids/delete" data-confirm-title="{{ r.name }} 레이드를 삭제할까요?" data-confirm="난이도도 함께 삭제됩니다." data-confirm-ok="삭제" data-confirm-danger>
           <input type="hidden" name="name" value="{{ r.name }}">
           <button type="submit" class="admin-danger-link">삭제</button>
         </form>
@@ -137,7 +138,8 @@
             <button type="submit" class="admin-toggle-link">저장</button>
           </form>
           <form method="post" action="/admin/raids/rename" class="admin-inline-form"
-                onsubmit="return this.new_name.value.trim() === {{ r.name | tojson }} || confirm({{ r.name | tojson }} + ' → ' + this.new_name.value.trim() + ' 으로 바꿀까요?\n' + (this.parentNode.querySelector('.admin-refs').textContent || '') + '\n관련 기록이 모두 새 이름으로 바뀝니다. 이미 올라간 디스코드 게시글 제목은 그대로 남습니다.');">
+                data-confirm-skip-same="new_name" data-confirm-original="{{ r.name }}" data-confirm-title="레이드 이름을 바꿀까요?" data-confirm-extra=".admin-refs" data-confirm="{{ r.name }} → {new_name}
+관련 기록이 모두 새 이름으로 바뀝니다. 이미 올라간 디스코드 게시글 제목은 그대로 남습니다." data-confirm-ok="이름 변경">
             <input type="hidden" name="old_name" value="{{ r.name }}">
             <span class="admin-inline-label">이름</span>
             <input type="text" name="new_name" value="{{ r.name }}" required class="settings-select" aria-label="레이드 이름">
@@ -170,7 +172,7 @@
             <button type="submit" class="admin-toggle-link">기간 저장</button>
           </form>
           {% if r.available_from or r.available_until %}
-          <form method="post" action="/admin/raids/period" class="admin-inline-form" onsubmit="return confirm('{{ r.name }} 운영 기간을 삭제할까요?');">
+          <form method="post" action="/admin/raids/period" class="admin-inline-form" data-confirm-title="{{ r.name }} 운영 기간을 삭제할까요?" data-confirm="기간을 지우면 상시 운영으로 바뀝니다." data-confirm-ok="삭제" data-confirm-danger>
             <input type="hidden" name="name" value="{{ r.name }}">
             <button type="submit" class="admin-danger-link">기간 삭제</button>
           </form>
@@ -237,13 +239,13 @@
     {% for name, d in diffs.items() %}
     <li class="admin-row" data-key="{{ name }}">
       <span class="admin-row-name">
-        <span class="admin-drag-handle" data-drag-handle title="드래그해서 순서 변경">⠿</span>
+        <span class="admin-drag-handle" data-drag-handle data-tip="드래그해서 순서 변경">⠿</span>
         {{ name }}
         <span class="admin-row-sub">Lv.{{ d.min_level }} · {{ d.total_slots }}인{% if d.party_split %} · {{ d.party_split }}인씩 분할{% endif %} · {{ d.gates }}관문</span>
       </span>
       <span class="admin-row-actions">
         {{ move_buttons() }}
-        <form method="post" action="/admin/raids/difficulties/delete" onsubmit="return confirm('{{ name }} 난이도를 삭제할까요?');">
+        <form method="post" action="/admin/raids/difficulties/delete" data-confirm-title="{{ name }} 난이도를 삭제할까요?" data-confirm-ok="삭제" data-confirm-danger>
           <input type="hidden" name="raid_name" value="{{ selected_raid }}">
           <input type="hidden" name="difficulty" value="{{ name }}">
           <button type="submit" class="admin-danger-link">삭제</button>
@@ -267,7 +269,8 @@
             <span class="admin-inline-label">이미 개설된 공대에는 적용되지 않습니다.</span>
           </form>
           <form method="post" action="/admin/raids/difficulties/rename" class="admin-inline-form"
-                onsubmit="return this.new_difficulty.value.trim() === {{ name | tojson }} || confirm({{ name | tojson }} + ' → ' + this.new_difficulty.value.trim() + ' 으로 바꿀까요?\n' + (this.parentNode.querySelector('.admin-refs').textContent || '') + '\n관련 기록이 모두 새 이름으로 바뀝니다.');">
+                data-confirm-skip-same="new_difficulty" data-confirm-original="{{ name }}" data-confirm-title="난이도 이름을 바꿀까요?" data-confirm-extra=".admin-refs" data-confirm="{{ name }} → {new_difficulty}
+관련 기록이 모두 새 이름으로 바뀝니다." data-confirm-ok="이름 변경">
             <input type="hidden" name="raid_name" value="{{ selected_raid }}">
             <input type="hidden" name="old_difficulty" value="{{ name }}">
             <span class="admin-inline-label">난이도명</span>

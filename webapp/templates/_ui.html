@@ -8,7 +8,7 @@
 
 {# ── Chip — 상태·난이도·숙련도·기간을 전부 같은 형태로 ── #}
 {% macro chip(label, tone="", title="") -%}
-<span class="ui-chip{% if tone %} is-{{ tone }}{% endif %}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</span>
+<span class="ui-chip{% if tone %} is-{{ tone }}{% endif %}"{% if title %} data-tip="{{ title }}"{% endif %}>{{ label }}</span>
 {%- endmacro %}
 
 {# ── Card — href를 주면 링크 카드, stripe를 주면 왼쪽에 상태 색 띠 ── #}
@@ -41,24 +41,37 @@
 <div class="ui-slotbar">
   <span class="ui-avatars">
     {% for s in slots[:6] %}
-    <i title="{{ s.character_name }} ({{ s.character_class }})">{{ s.character_name[0] }}</i>
+    <i data-tip="{{ s.character_name }} ({{ s.character_class }})">{{ s.character_name[0] }}</i>
     {% endfor %}
     {% set empty = (total or 0) - (slots | length) %}
-    {% if empty > 0 %}<i class="is-empty" title="빈 자리 {{ empty }}">+{{ empty }}</i>{% endif %}
+    {% if empty > 0 %}<i class="is-empty" data-tip="빈 자리 {{ empty }}">+{{ empty }}</i>{% endif %}
   </span>
   <span class="ui-slotbar-count">{{ slots | length }}/{{ total }}</span>
 </div>
 {{ gauge(pct if pct is not none else 0, "ok" if (total and (slots | length) >= total) else "") }}
 {% endmacro %}
 
-{# ── EmptyState — "없다"에서 끝내지 않고 다음 행동을 항상 붙인다 ── #}
-{% macro empty(title, desc="", action_label=none, action_href=none, icon="") %}
+{# ── EmptyState — "없다"에서 끝내지 않고 다음 행동을 항상 붙인다.
+   icon: party · user · bell · calendar · chart · box (옛 이모지 값은 가까운 아이콘으로 바꿔 그린다)
+   동작 버튼: action_href가 있으면 링크, action_id만 있으면 페이지 스크립트가 붙일 <button type="button"> ── #}
+{% macro empty(title, desc="", action_label=none, action_href=none, icon="", action_id=none, action_tone="pri") %}
+{%- set icon_map = {"⚔️": "party", "🗂️": "box", "👤": "user", "🧭": "user", "🗓️": "calendar", "📊": "chart", "📭": "bell", "🔔": "bell"} -%}
+{%- set ic = icon_map.get(icon, icon) or "box" -%}
 <div class="ui-empty">
-  {% if icon %}<span class="ui-empty-icon" aria-hidden="true">{{ icon }}</span>{% endif %}
+  <span class="ui-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    {%- if ic == "party" %}<path d="M14.5 2.5l7 7-9 9-7 2 2-7 7-9z"/>
+    {%- elif ic == "user" %}<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>
+    {%- elif ic == "bell" %}<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+    {%- elif ic == "calendar" %}<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>
+    {%- elif ic == "chart" %}<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
+    {%- else %}<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>
+    {%- endif %}</svg></span>
   <b class="ui-empty-title">{{ title }}</b>
   {% if desc %}<p class="ui-empty-desc">{{ desc }}</p>{% endif %}
   {% if action_label and action_href %}
-  <a class="ui-btn" href="{{ action_href }}">{{ action_label }}</a>
+  <a class="btn sm {{ action_tone }}" href="{{ action_href }}">{{ action_label }}</a>
+  {% elif action_label and action_id %}
+  <button type="button" class="btn sm {{ action_tone }}" id="{{ action_id }}">{{ action_label }}</button>
   {% endif %}
 </div>
 {% endmacro %}
@@ -71,4 +84,27 @@
 {# ── Filter — 툴바 안에 들어가는 링크형 필터 ── #}
 {% macro filter_link(label, href, active=false, count=none) -%}
 <a class="ui-filter{% if active %} is-active{% endif %}" href="{{ href }}">{{ label }}{% if count is not none %} <b>{{ count }}</b>{% endif %}</a>
+{%- endmacro %}
+
+{# ── Banner — 화면 위 안내 줄. tone: err(봇 서버 끊김) · warn(게임 점검) · info(실시간 갱신 보류)
+   caller 없이 text만 주면 한 줄, 동작 버튼은 action_label + action_id(스크립트용) ── #}
+{% macro banner(text, tone="info", action_label=none, action_id=none) -%}
+<div class="banner {{ tone }}" role="{{ 'alert' if tone == 'err' else 'status' }}">
+  {% if tone != "info" %}<b class="banner-mark" aria-hidden="true">!</b>{% endif %}
+  <span>{{ text }}</span>
+  {% if action_label %}<button type="button" class="btn sm{% if tone == 'info' %} pri{% endif %}"{% if action_id %} id="{{ action_id }}"{% endif %}>{{ action_label }}</button>{% endif %}
+</div>
+{%- endmacro %}
+
+{# ── Skeleton — 불러오는 동안 자리 모양 그대로. rows줄 × (이름 칸 + 버튼 cols개) ── #}
+{% macro skeleton(rows=3, cols=3) -%}
+<div class="ui-card" aria-busy="true" aria-label="불러오는 중">
+  <span class="sk is-title"></span>
+  {% for r in range(rows) %}
+  <div class="ui-row" style="gap: var(--sp-3)">
+    <span class="sk" style="width:110px;height:28px"></span>
+    {% for c in range(cols) %}<span class="sk" style="width:80px;height:28px"></span>{% endfor %}
+  </div>
+  {% endfor %}
+</div>
 {%- endmacro %}

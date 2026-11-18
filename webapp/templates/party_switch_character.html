@@ -50,17 +50,17 @@
       if (suppress) { suppress = false; return; }
       var opt = select.options[select.selectedIndex];
       var isOther = opt.textContent.includes("타 공대 참여중");
-      var message = isOther
-        ? opt.value + "(으)로 변경할까요?\n이 캐릭터가 참여 중인 다른 공대에서는 자동으로 나가게 됩니다."
-        : opt.value + "(으)로 변경할까요?";
-      if (window.confirm(message)) {
-        form.submit();
-      } else {
+      window.uiConfirm({
+        title: opt.value + "(으)로 변경할까요?",
+        message: isOther ? "이 캐릭터가 참여 중인 다른 공대에서는 자동으로 나가게 됩니다." : "",
+        ok: "변경",
+      }).then(function (ok) {
+        if (ok) { form.submit(); return; }
         select.selectedIndex = 0;
         // themed-select.js는 change 이벤트로 라벨을 다시 그린다 — 되돌린 값도 보이게
         suppress = true;
         select.dispatchEvent(new Event("change"));
-      }
+      });
     });
   })();
 </script>

@@ -1,42 +1,71 @@
+// 토스트 — 오른쪽 아래, 5초 뒤 사라짐(마우스를 올리거나 버튼에 포커스가 있으면 멈춤).
+//   window.showToast(kind, message, {actionLabel, onAction, duration})   kind: "ok" | "err" | "info"
+//   옛 호출 형식 showToast(message, "success"|"error"|"info")도 그대로 받는다(party-live.js 등).
+// ?toast= 플래시(webapp/flash.py)와 htmx X-Toast 헤더도 여기서 띄운다.
 (function () {
-  var TOAST_DURATION_MS = 4000;
-  var TOAST_EXIT_MS = 220;
+  var DURATION_MS = 5000;
+  var EXIT_MS = 200;
+  var KINDS = { ok: "ok", success: "ok", err: "err", error: "err", info: "info" };
+  var MARK = { ok: "✓", err: "!", info: "i" };
 
-  var ICONS = {
-    success: '<path d="M20 6L9 17l-5-5"/>',
-    error: '<path d="M18 6L6 18M6 6l12 12"/>',
-    info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/>',
-  };
-
-  function showToast(message, type) {
+  function showToast(a, b, opts) {
+    var kind, message;
+    if (KINDS[a] && typeof b === "string") { kind = KINDS[a]; message = b; }
+    else { message = a; kind = KINDS[b] || "info"; }
+    opts = opts || {};
     var container = document.getElementById("toast-container");
-    if (!container || !message) return;
+    if (!container || !message) return null;
 
-    var kind = type || "info";
+    var duration = opts.duration || DURATION_MS;
     var toast = document.createElement("div");
-    toast.className = "toast toast-" + kind;
-    toast.innerHTML =
-      '<span class="toast-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      (ICONS[kind] || ICONS.info) +
-      "</svg></span>" +
-      '<span class="toast-msg"></span>';
-    toast.querySelector(".toast-msg").textContent = message;
+    toast.className = "toast" + (kind === "ok" ? "" : " " + kind);
+    toast.style.setProperty("--toast-ms", duration + "ms");
+    if (kind === "err") toast.setAttribute("role", "alert");
+
+    var mark = document.createElement("b");
+    mark.className = "toast-mark";
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = MARK[kind];
+    var msg = document.createElement("span");
+    msg.className = "toast-msg";
+    msg.textContent = message;
+    toast.appendChild(mark);
+    toast.appendChild(msg);
+    if (opts.actionLabel) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn sm ghost";
+      btn.textContent = opts.actionLabel;
+      btn.addEventListener("click", function () {
+        dismiss();
+        if (typeof opts.onAction === "function") opts.onAction();
+      });
+      toast.appendChild(btn);
+    }
+    var bar = document.createElement("span");
+    bar.className = "toast-bar";
+    bar.setAttribute("aria-hidden", "true");
+    toast.appendChild(bar);
     container.appendChild(toast);
 
-    var dismissed = false;
-    var timer = setTimeout(dismiss, TOAST_DURATION_MS);
+    // 남은 시간은 막대 애니메이션이 아니라 타이머로 센다(움직임 줄이기 설정에서는 막대가 없다)
+    var remaining = duration, startedAt = Date.now(), timer = null, dismissed = false;
+    function start() { startedAt = Date.now(); timer = setTimeout(dismiss, remaining); }
+    function pause() { if (!timer) return; clearTimeout(timer); timer = null; remaining -= Date.now() - startedAt; }
+    function resume() { if (timer || dismissed) return; if (toast.matches(":hover") || toast.contains(document.activeElement)) return; start(); }
     function dismiss() {
       if (dismissed) return;
       dismissed = true;
       clearTimeout(timer);
       toast.classList.add("toast-hide");
-      setTimeout(function () {
-        toast.remove();
-      }, TOAST_EXIT_MS);
+      setTimeout(function () { toast.remove(); }, EXIT_MS);
     }
-    // 스택 위에서 마우스를 대면 바로 치워지도록 — 다음 토스트를 기다릴
-    // 필요 없이 읽은 것부터 넘길 수 있게 하는 요청 반영.
-    toast.addEventListener("mouseenter", dismiss);
+    toast.addEventListener("mouseenter", pause);
+    toast.addEventListener("mouseleave", resume);
+    toast.addEventListener("focusin", pause);
+    toast.addEventListener("focusout", function () { setTimeout(resume, 0); });
+    start();
+    return { dismiss: dismiss };
   }
 
   window.showToast = showToast;
@@ -82,14 +111,17 @@
     var raw = xhr.getResponseHeader("X-Toast");
     if (!raw) return;
     var type = xhr.getResponseHeader("X-Toast-Type") || "success";
-    try { showToast(decodeURIComponent(raw), type); } catch (e) { showToast(raw, type); }
+    var text;
+    try { text = decodeURIComponent(raw); } catch (e) { text = raw; }
+    showToast(KINDS[type] || "info", text);
   });
 
   document.addEventListener("DOMContentLoaded", function () {
     var flashes = document.querySelectorAll(".flash-data");
     var strip = false;
     flashes.forEach(function (el) {
-      showToast(el.getAttribute("data-message"), el.getAttribute("data-type"));
+      var type = el.getAttribute("data-type");
+      showToast(KINDS[type] || "info", el.getAttribute("data-message") || "");
       if (el.hasAttribute("data-strip-url")) strip = true;
       el.remove();
     });

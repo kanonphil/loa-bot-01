@@ -50,7 +50,7 @@
               hx-target="#admin-user-details-{{ u.discord_id }}"
               hx-swap="innerHTML">상세</button>
       <form method="post" action="/admin/users/{{ u.discord_id }}/delete"
-            onsubmit="return confirm('{{ u.representative or u.discord_id }}의 모든 데이터(API 키&middot;캐릭터)를 삭제할까요? 되돌릴 수 없습니다.');">
+            data-confirm-title="{{ u.representative or u.discord_id }}의 모든 데이터를 삭제할까요?" data-confirm="API 키와 캐릭터가 지워지고 되돌릴 수 없습니다." data-confirm-ok="삭제" data-confirm-danger>
         <button type="submit" class="admin-danger-link">삭제</button>
       </form>
     </span>
