@@ -6,12 +6,51 @@ from fastapi import APIRouter, Depends, Request
 from starlette.responses import RedirectResponse
 
 from webapp.auth.dependencies import get_current_user
-from webapp.clients import bot_client
+from webapp.clients import bot_client, bot_exp
 from webapp.flash import redirect_with_toast
 from webapp.templating import templates
 from webapp.utils import time_ago
 
 router = APIRouter()
+
+
+def build_cp_chart(history: list[dict] | None) -> dict | None:
+    """전투력 기록 → 인라인 SVG 선 그래프용 좌표. 점이 2개 미만이면 None(빈 상태로 그린다).
+    좌표는 0~100 비율(%)로 줘서 SVG(viewBox 100x100, preserveAspectRatio=none)와 끝점 표시(절대 위치 %)가 같은 값을 쓴다."""
+    points = []
+    for item in history or []:
+        try:
+            points.append((str(item["date"])[:10], float(item["combat_power"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if len(points) < 2:
+        return None
+    values = [v for _, v in points]
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    n = len(points)
+    coords = []
+    for i, (_, v) in enumerate(points):
+        x = 100.0 * i / (n - 1)
+        # 위아래 8% 여백 — 선이 테두리에 붙지 않게
+        y = 92.0 - 84.0 * (v - lo) / span if hi != lo else 50.0
+        coords.append((x, y))
+    line = " ".join(f"{x:.2f},{y:.2f}" for x, y in coords)
+    first, last = points[0], points[-1]
+    return {
+        "line": line,
+        "area": f"0,100 {line} 100,100",
+        "end_x": coords[-1][0],
+        "end_y": coords[-1][1],
+        "first_date": first[0],
+        "last_date": last[0],
+        "first": first[1],
+        "last": last[1],
+        "delta": last[1] - first[1],
+        "low": lo,
+        "high": hi,
+        "count": n,
+    }
 
 
 @router.get("/characters/{character_name}")
@@ -33,6 +72,10 @@ async def character_detail(
     # 동기화는 본인 캐릭터에서만 허용 — 남의 캐릭터 상세를 볼 때(discord_id 지정)는
     # 그 사람 대신 API를 호출시킬 권한이 없으므로 버튼 자체를 숨긴다.
     can_sync = discord_id is None
+    # 전투력 기록은 보조 정보라 봇이 못 주면(404·지연) 카드만 빈 상태로 둔다
+    cp_chart = build_cp_chart(
+        None if detail.get("error") else await bot_exp.get_character_history(user["discord_id"], character_name, 90)
+    )
     back_href, back_label, active = _back_target(back, discord_id is not None)
     return templates.TemplateResponse(
         request,
@@ -43,6 +86,7 @@ async def character_detail(
             "character_name": character_name,
             "detail": detail,
             "can_sync": can_sync,
+            "cp_chart": cp_chart,
             "synced_ago": time_ago(detail.get("synced_at")),
             "back_href": back_href,
             "back_label": back_label,

@@ -62,18 +62,27 @@ def test_panel_prompts_to_subscribe_when_not_subscribed(client):
     assert "구독하면" in resp.text
 
 
+def _switch_state(html: str, label_id: str) -> str:
+    """설정 화면의 role="switch" 버튼에서 aria-checked 값을 읽는다."""
+    import re
+
+    m = re.search(r'aria-checked="(true|false)" aria-labelledby="%s"' % label_id, html)
+    assert m, f"{label_id} 스위치가 없습니다"
+    return m.group(1)
+
+
 def test_settings_toggle_subscribe(client):
     _login(client)
 
     resp = client.get("/settings")
-    assert "구독하기" in resp.text
+    assert _switch_state(resp.text, "set-subscribe") == "false"
 
     resp = client.post("/notifications/subscribe")
     assert resp.status_code == 303
     assert without_toast(resp.headers["location"]) == "/settings"
 
     resp = client.get("/settings")
-    assert "구독 중" in resp.text
+    assert _switch_state(resp.text, "set-subscribe") == "true"
 
 
 def test_count_reflects_unread_after_subscribing(client):
@@ -315,7 +324,7 @@ def test_settings_page_shows_discord_subscriptions_and_pre_notify(client):
         resp = client.get("/settings")
 
     body = resp.text
-    assert "디스코드 DM 구독" in body
+    assert "디스코드 DM" in body and "레이드 구독" in body
     assert "전체 난이도" in body
     assert 'action="/settings/discord-subscriptions/remove"' in body
     assert "공대 시작 사전 알림" in body

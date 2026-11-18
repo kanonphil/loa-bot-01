@@ -5,11 +5,11 @@ import json
 from contextlib import aclosing
 
 from fastapi import APIRouter, Depends, Request
-from starlette.responses import RedirectResponse, StreamingResponse
+from starlette.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from webapp import notification_store, party_events, sse
 from webapp.auth.dependencies import get_current_user
-from webapp.clients import bot_client
+from webapp.clients import bot_client, bot_exp
 from webapp.flash import redirect_result, redirect_with_toast
 from webapp.templating import templates
 from webapp.utils import time_ago as _time_ago
@@ -103,12 +103,20 @@ async def settings_page(
     # 봇 쪽 데이터(레이드 목록/디스코드 구독/사전 알림)는 봇 서버가 응답 못 하면 그 카드만
     # 비활성으로 보여준다 — 설정 페이지 자체(웹 알림 설정)는 계속 동작해야 한다.
     # 세 호출은 서로 무관해 동시에 보내고, 각각 실패해도 그 카드만 비운다(return_exceptions).
-    raids_r, subs_r, pre_r = await asyncio.gather(
+    raids_r, subs_r, pre_r, overview = await asyncio.gather(
         bot_client.get_raids(),
         bot_client.get_raid_subscriptions(user["discord_id"]),
         bot_client.get_preferences(user["discord_id"]),
+        bot_exp.get_loa_overview(user["discord_id"]),  # 골드섬 구독 여부 — 실패하면 None(스위치만 비활성)
         return_exceptions=True,
     )
+    if isinstance(overview, BaseException):
+        overview = None
+    gold = {
+        "known": overview is not None and "gold_island_subscribed" in overview,
+        "subscribed": bool((overview or {}).get("gold_island_subscribed")),
+        "available": (overview or {}).get("available"),
+    }
     raids: dict = {} if isinstance(raids_r, BaseException) else raids_r
     discord_subscriptions: list[dict] | None = None if isinstance(subs_r, BaseException) else subs_r
     pre_notify: dict | None = None if isinstance(pre_r, BaseException) else pre_r
@@ -123,6 +131,7 @@ async def settings_page(
             "raids": raids,
             "discord_subscriptions": discord_subscriptions,
             "pre_notify": pre_notify,
+            "gold": gold,
         },
     )
 
@@ -203,3 +212,17 @@ async def save_pre_notify(request: Request, user: dict = Depends(get_current_use
         hours = 0.0
     result = await bot_client.set_pre_notify_hours(user["discord_id"], hours)
     return redirect_result("/settings", result, "사전 알림 설정을 저장했습니다.", "저장하지 못했습니다.")
+
+
+@router.post("/settings/gold-island")
+async def save_gold_island(request: Request, user: dict = Depends(get_current_user)):
+    """골드섬 10분 전 DM 구독 켜기/끄기. 스위치(exp.js)는 fetch + JSON으로, JS 없이 제출하면 303 + 토스트."""
+    form = await request.form()
+    enabled = (form.get("enabled") or "").strip() in ("1", "true", "on")
+    result = await bot_exp.set_gold_island_subscription(user["discord_id"], enabled)
+    message = ("골드섬 알림을 켰습니다." if enabled else "골드섬 알림을 껐습니다.") if result.get("success") else (
+        result.get("reason") or "저장하지 못했습니다. 잠시 후 다시 시도해주세요."
+    )
+    if "application/json" in request.headers.get("accept", ""):
+        return JSONResponse({"success": bool(result.get("success")), "reason": None if result.get("success") else message, "message": message})
+    return redirect_with_toast("/settings", message, "success" if result.get("success") else "error")

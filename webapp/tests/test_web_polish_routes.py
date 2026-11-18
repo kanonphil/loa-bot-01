@@ -66,7 +66,7 @@ def test_guide_for_logged_in_user_hides_login_button(client):
         resp = client.get("/guide")
     assert resp.status_code == 200
     assert "이용 가이드" in resp.text
-    assert "주차별 클리어 기록" in resp.text
+    assert "지난 주 기록" in resp.text and "공대 열기" in resp.text
 
 
 def test_landing_page_links_guide(client):
