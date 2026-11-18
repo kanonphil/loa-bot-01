@@ -1,11 +1,11 @@
 {% if not result.success %}
-<p class="party-cannot-join">{{ result.reason }}</p>
+<p class="pt-why">{{ result.reason }}</p>
 {% elif not result.members %}
-<p class="party-cannot-join">초대할 수 있는 미등록 서버 멤버가 없습니다.</p>
+<p class="pt-why">초대할 수 있는 미등록 서버 멤버가 없습니다.</p>
 {% elif not result.available_slots %}
-<p class="party-cannot-join">빈 슬롯이 없습니다.</p>
+<p class="pt-why">빈 슬롯이 없습니다.</p>
 {% else %}
-<form method="post" action="/parties/{{ message_id }}/invite-guest" class="leader-form">
+<form method="post" action="/parties/{{ message_id }}/invite-guest" class="pt-row">
   <select name="target_discord_id" class="js-themed-select" aria-label="초대할 게스트">
     {% for m in result.members %}
     <option value="{{ m.discord_id }}">{{ m.display_name }}</option>
@@ -16,7 +16,7 @@
     <option value="{{ n }}">{{ n }}번 슬롯</option>
     {% endfor %}
   </select>
-  <button type="submit" class="leader-btn" data-busy-text="발송 중…">게스트 초대</button>
+  <button type="submit" class="btn sm pri" data-busy-text="발송 중">게스트 초대</button>
 </form>
 <script>if (window.initThemedSelects) window.initThemedSelects();</script>
 {% endif %}

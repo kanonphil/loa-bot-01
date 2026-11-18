@@ -42,7 +42,7 @@ PARTY = {
          "character_class": "워로드", "role": "dps"},
     ],
 }
-DISBANDED_PARTY = {**PARTY, "status": "disbanded"}
+DISBANDED_PARTY = {**PARTY, "status": "disbanded", "cleared_at": "2026-05-20T22:00:00+09:00"}
 
 
 # ── 파티 상세: 관리자가 파티장 없이 관리 패널을 쓸 수 있는지 ─────────
@@ -62,10 +62,10 @@ def test_admin_sees_leader_panel_on_party_they_do_not_lead(client, monkeypatch):
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
-    assert "파티장 관리" in resp.text
+    assert "공대 설정" in resp.text
     assert "관리자 권한으로 보는 중" in resp.text
     assert ">클리어<" in resp.text  # 클리어는 관리자도 씀(파티장이 놓친 경우 대응)
-    assert "파티 취소" not in resp.text  # 취소는 아직 관리자 범위 밖 — 의도적으로 숨김
+    assert "취소 사유" not in resp.text  # 취소는 아직 관리자 범위 밖 — 의도적으로 숨김
 
 
 def test_admin_can_clear_party_via_leader_panel_route(client, monkeypatch):
@@ -133,7 +133,7 @@ def test_admin_sees_revert_panel_on_disbanded_party(client, monkeypatch):
 
     assert resp.status_code == 200
     assert "클리어 되돌리기" in resp.text
-    assert "파티장 관리" not in resp.text  # 종료된 파티는 일반 관리 패널 대신 되돌리기만
+    assert "공대 설정" not in resp.text  # 종료된 파티는 일반 관리 패널 대신 되돌리기만
 
 
 def test_non_admin_does_not_see_revert_panel_on_disbanded_party(client, monkeypatch):

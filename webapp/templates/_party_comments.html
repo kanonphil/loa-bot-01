@@ -1,16 +1,14 @@
 {% import "_ui.html" as ui %}
-<div class="leader-panel" id="party-comments">
-  <h2 class="leader-panel-title">댓글</h2>
-  <p class="settings-desc">디스코드 스레드 채팅과 서로 연결돼 있습니다 — 여기 남긴 댓글은 디스코드에도 그대로 올라갑니다.</p>
+<section class="ui-card pt-comments" id="party-comments" aria-label="댓글">
+  <div class="pt-row"><h2 class="pt-h">댓글</h2><span class="pt-meta pt-end">디스코드 스레드와 연결됨</span></div>
   {% include "_party_comments_list.html" %}
-
-  {% if party.status != "disbanded" %}
+  {% if party.status not in ("disbanded", "expired") %}
   {# htmx로 목록만 갈아끼운다 — 폼은 그대로 두어 실패(X-Toast error) 시 쓰던 글이 사라지지 않는다 #}
-  <form method="post" action="/parties/{{ party.message_id }}/comments" class="party-comment-form"
+  <form method="post" action="/parties/{{ party.message_id }}/comments" class="pt-comment-form"
         hx-post="/parties/{{ party.message_id }}/comments" hx-target="#party-comments-list" hx-swap="outerHTML" hx-disabled-elt="find button"
         hx-on::after-request="if (event.detail.successful && !event.detail.xhr.getResponseHeader('X-Toast-Type')) this.reset()">
-    <textarea name="content" maxlength="500" placeholder="댓글을 입력하세요" required aria-label="댓글"></textarea>
-    <button type="submit" class="leader-btn" data-busy-text="등록 중…">등록</button>
+    <textarea class="field" name="content" maxlength="500" rows="2" placeholder="댓글 입력" required aria-label="댓글"></textarea>
+    <button type="submit" class="btn pri" data-busy-text="등록 중">등록</button>
   </form>
   {% endif %}
-</div>
+</section>

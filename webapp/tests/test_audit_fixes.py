@@ -385,7 +385,7 @@ def test_failed_party_lookup_is_retried_and_cleared_notification_not_lost(notifi
         lookups["n"] += 1
         if lookups["n"] == 1:
             raise RuntimeError("bot down")
-        return {**PARTY, "status": "disbanded"}
+        return {**PARTY, "status": "disbanded", "cleared_at": "2026-11-19T22:00:00+09:00"}
 
     monkeypatch.setattr(party_events.bot_client, "list_parties", list_parties)
     monkeypatch.setattr(party_events.bot_client, "get_party", get_party)
@@ -441,7 +441,7 @@ def test_reopened_party_does_not_announce_recruitment_start(notification_db, mon
         return sequence.pop(0)
 
     async def get_party(message_id):
-        return {**PARTY, "status": "disbanded"}
+        return {**PARTY, "status": "disbanded", "cleared_at": "2026-11-19T22:00:00+09:00"}
 
     monkeypatch.setattr(party_events.bot_client, "list_parties", list_parties)
     monkeypatch.setattr(party_events.bot_client, "get_party", get_party)

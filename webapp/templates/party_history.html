@@ -1,12 +1,9 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
+{% block head %}<link rel="stylesheet" href="/static/pages/party.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}{% include "_party_top.html" %}{% endblock %}
 {% block content %}
 <div class="page-content">
-{% from "_subtabs.html" import subtabs with context %}{{ subtabs("party") }}
-<a href="/parties" class="party-back-link">&larr; 목록으로</a>
-<div class="party-list-header">
-  <h1>내 공대 이력</h1>
-</div>
 
 {% if not entries %}
 {% if page > 1 %}

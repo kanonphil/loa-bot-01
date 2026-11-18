@@ -71,7 +71,7 @@ def test_party_detail_shows_switch_button_when_joined(client):
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
-    assert "party-switch-btn" in resp.text
+    assert "캐릭터·역할 변경" in resp.text
     assert "/parties/p1/switch" in resp.text
 
 

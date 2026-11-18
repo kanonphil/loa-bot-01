@@ -1,27 +1,39 @@
 """공대 모집 페이지 — 목록/상세/참여/나가기/개설/파티장 관리."""
 import asyncio
+import logging
+from datetime import datetime, timedelta
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
-from starlette.responses import RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
-from webapp import config, party_events
+from webapp import config, party_events, party_logic
 from webapp.auth.dependencies import get_current_user, require_admin
-from webapp.clients import bot_client
+from webapp.clients import bot_client, bot_party
 from webapp.flash import redirect_with_toast
-from webapp.format import party_view, period_view
+from webapp.format import KST, _parse, party_view, period_view
 from webapp.raids import picker_groups
 from webapp.templating import templates
 
+logger = logging.getLogger("webapp.party")
 router = APIRouter()
 
-# 목록 상단 필터 — 라벨과 순서를 한 곳에서 관리한다.
+# 목록 상단 필터 — 라벨과 순서를 한 곳에서 관리한다. 기본은 "들어갈 수 있는".
 PARTY_FILTERS = [
+    ("eligible", "들어갈 수 있는"),
     ("all", "전체"),
-    ("recruiting", "모집중"),
     ("mine", "내 공대"),
-    ("eligible", "입장 가능"),
 ]
+DEFAULT_FILTER = "eligible"
+
+
+async def _safe(coro, default=None):
+    """보조 조회(추천 계산 재료)가 실패해도 화면은 떠야 한다 — 실패하면 기본값."""
+    try:
+        return await coro
+    except Exception:
+        logger.warning("공대 화면 보조 조회 실패", exc_info=True)
+        return default
 
 
 def _max_item_level(characters: list[dict]) -> float:
@@ -33,6 +45,8 @@ _HISTORY_STATUS = {
     "full": ("파티완성", "warn"),  # "클리어"(ok, 초록)와 구분되게 골드로 — 둘 다 초록이면 구분이 어려웠다
     "closed": ("마감", ""),
     "disbanded": ("클리어", "ok"),
+    "cleared": ("클리어", "ok"),
+    "expired": ("기한 만료", "past"),
     "cancelled": ("취소", "danger"),
 }
 
@@ -42,49 +56,62 @@ def _history_view(entry: dict) -> dict:
     return {**entry, "status_label": label, "status_tone": tone}
 
 
-def filter_parties(parties: list[dict], key: str, discord_id: str, max_level: float) -> list[dict]:
-    """목록 필터. '입장 가능'은 내 캐릭터 중 가장 높은 레벨 기준으로,
-    아직 자리가 남아 있고 이미 참여하지 않은 공대만 남긴다."""
-    if key == "recruiting":
-        return [p for p in parties if p["status"] == "recruiting"]
-    if key == "mine":
-        return [
-            p for p in parties
-            if p.get("leader_id") == discord_id
-            or any(s["discord_id"] == discord_id for s in p.get("slots") or [])
-        ]
-    if key == "eligible":
-        return [
-            p for p in parties
-            if p["status"] == "recruiting"
-            and (p.get("min_level") or 0) <= max_level
-            and not any(s["discord_id"] == discord_id for s in p.get("slots") or [])
-        ]
-    return parties
+def _is_mine(party: dict, discord_id: str) -> bool:
+    return party.get("leader_id") == discord_id or any(
+        s.get("discord_id") == discord_id for s in party.get("slots") or []
+    )
+
+
+def _leader_name(party: dict) -> str | None:
+    slot = next((s for s in party.get("slots") or [] if s.get("discord_id") == party.get("leader_id")), None)
+    return slot["character_name"] if slot else None
+
+
+def _row_view(party: dict, raids: dict, summary: dict | None, parties: list[dict], discord_id: str) -> dict:
+    view = party_view(party)
+    label, tone = party_logic.status_view(party)
+    view["status_label"], view["status_tone"] = label, tone
+    info = raids.get(party.get("raid_name")) or {}
+    comp = party_logic.composition(party)
+    sched = view["schedule"]
+    active = party.get("status") in party_logic.ACTIVE_STATUSES
+    view.update({
+        "comp": comp,
+        "period": period_view(info["available_until"]) if info.get("available_until") else None,
+        "is_extreme": bool(info.get("is_extreme")),
+        "is_mine": _is_mine(party, discord_id),
+        "leader_name": _leader_name(party),
+        "overdue": bool(sched.get("is_past") and active),
+        "join": party_logic.list_row_join(party, summary, parties, discord_id, raids),
+    })
+    return view
 
 
 @router.get("/parties")
 async def party_list(
-    request: Request, filter: str = "all", user: dict = Depends(get_current_user)
+    request: Request, filter: str | None = None, user: dict = Depends(get_current_user)
 ):
-    if filter not in dict(PARTY_FILTERS):
-        filter = "all"
-    parties, characters, raids = await asyncio.gather(
-        bot_client.list_parties(config.DISCORD_GUILD_ID),
-        bot_client.get_user_characters(user["discord_id"]),
-        bot_client.get_raids(),
-    )
-    max_level = _max_item_level(characters)
     discord_id = user["discord_id"]
-
+    parties, raids, summary = await asyncio.gather(
+        bot_client.list_parties(config.DISCORD_GUILD_ID),
+        bot_client.get_raids(),
+        _safe(bot_party.get_raid_check_summary(discord_id)),
+    )
+    if filter not in dict(PARTY_FILTERS):
+        # 기본은 "들어갈 수 있는" — 참여 가능 여부를 못 불러왔으면 빈 화면이 되지 않게 전체를 보여준다
+        filter = DEFAULT_FILTER if summary is not None else "all"
+    rows = [_row_view(p, raids, summary, parties, discord_id) for p in parties]
     counts = {
-        key: len(filter_parties(parties, key, discord_id, max_level))
-        for key, _ in PARTY_FILTERS
+        "eligible": sum(1 for r in rows if r["join"]["state"] == "can"),
+        "all": len(rows),
+        "mine": sum(1 for r in rows if r["is_mine"]),
     }
-    visible = [
-        {**party_view(p), "period": _party_period(p, raids)}
-        for p in filter_parties(parties, filter, discord_id, max_level)
-    ]
+    if filter == "eligible":
+        visible = [r for r in rows if r["join"]["state"] == "can"]
+    elif filter == "mine":
+        visible = [r for r in rows if r["is_mine"]]
+    else:
+        visible = rows
     # 가까운 일정부터 — 일정이 없는 공대는 뒤로.
     visible.sort(key=lambda p: (p.get("scheduled_datetime") is None, p.get("scheduled_datetime") or ""))
 
@@ -99,19 +126,12 @@ async def party_list(
             "active_filter": filter,
             "counts": counts,
             "has_any": bool(parties),
+            "summary_ok": summary is not None,
         },
     )
 
 
 _HISTORY_PAGE_SIZE = 10
-
-
-def _party_period(party: dict, raids: dict) -> dict | None:
-    """익스트림처럼 운영 기간이 있는 레이드면 '운영 종료 D-n' 표시 정보, 아니면 None."""
-    info = raids.get(party.get("raid_name")) or {}
-    if not info.get("available_until"):
-        return None
-    return period_view(info["available_until"])
 
 
 @router.get("/parties/history")
@@ -145,26 +165,121 @@ async def party_history(
     )
 
 
+# ── 공대 열기 ─────────────────────────────────────────────
+
+_WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def _next_occurrence(weekday: int, hour: int, minute: int, now: datetime) -> datetime:
+    """지금 이후 처음 오는 (요일, 시각)."""
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    candidate += timedelta(days=(weekday - candidate.weekday()) % 7)
+    if candidate <= now:
+        candidate += timedelta(days=7)
+    return candidate
+
+
+def recent_openings(entries: list[dict], raids: dict, discord_id: str, now: datetime | None = None, limit: int = 3) -> list[dict]:
+    """"다시 열기" 칩 — 내가 최근에 연 공대(같은 레이드·난이도는 한 번만). 요일·시각만 따라가고
+    날짜는 다음 그 요일로 맞춘다. 지금 열 수 없는 레이드·난이도는 뺀다."""
+    now = now or datetime.now(KST)
+    seen: set[tuple] = set()
+    out = []
+    for e in entries:
+        if e.get("leader_id") not in (None, discord_id):
+            continue
+        key = (e.get("raid_name"), e.get("difficulty"))
+        info = raids.get(e.get("raid_name")) or {}
+        if key in seen or not info.get("is_active", True) or e.get("difficulty") not in (info.get("difficulties") or {}):
+            continue
+        try:
+            when = datetime.strptime(f"{now.year}/{e['scheduled_time']}", "%Y/%m/%d %H:%M").replace(tzinfo=KST)
+        except (KeyError, TypeError, ValueError):
+            continue
+        seen.add(key)
+        nxt = _next_occurrence(when.weekday(), when.hour, when.minute, now)
+        out.append({
+            "raid_name": e["raid_name"], "difficulty": e["difficulty"], "proficiency": e.get("proficiency") or "",
+            "memo": e.get("memo") or "", "time": nxt.strftime("%Y-%m-%dT%H:%M"),
+            "label": f"{info.get('short_name') or e['raid_name']} {e['difficulty']} · {_WEEKDAYS[when.weekday()]} {when:%H:%M}"
+                     + (f" · {e['proficiency']}" if e.get("proficiency") else ""),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def _create_check_data(
+    discord_id: str, raid_name: str, difficulty: str, scheduled_datetime: str,
+) -> dict:
+    """개설 화면의 일정 안내·중복 경고·캐릭터 추천을 한 번에 계산한다 — 화면이 레이드·난이도·일정을 바꿀 때마다 부른다."""
+    now = datetime.now(KST)
+    target = _parse(scheduled_datetime) if scheduled_datetime else None
+    parties, raids, summary = await asyncio.gather(
+        bot_client.list_parties(config.DISCORD_GUILD_ID),
+        bot_client.get_raids(),
+        _safe(bot_party.get_raid_check_summary(discord_id)),
+    )
+    info = raids.get(raid_name) or {}
+    diff = (info.get("difficulties") or {}).get(difficulty) or {}
+    duplicates = [
+        {
+            "message_id": p["message_id"],
+            "title": f"{p['raid_name']} {p['difficulty']}",
+            "leader": _leader_name(p),
+            "filled": len(p.get("slots") or []), "total": p.get("total_slots"),
+            "when": party_view(p)["schedule"]["when"],
+        }
+        for p in party_logic.find_duplicates(parties, raid_name, difficulty, target)
+    ]
+    options = []
+    if info and diff:
+        options = party_logic.character_options(
+            summary, raid_name=raid_name, difficulty=difficulty, min_level=diff.get("min_level") or 0,
+            target=target, my_slots=party_logic.my_party_slots(parties, discord_id),
+            lacks_support=True,  # 새 공대는 서포터가 비어 있다
+            is_extreme=bool(info.get("is_extreme")), now=now,
+        )
+    return {
+        "reset": party_logic.reset_info(target, now),
+        "duplicates": duplicates,
+        "options": options,
+        "has_summary": summary is not None,
+    }
+
+
 @router.get("/parties/create")
 async def create_party_form(
     request: Request, error: str | None = None, user: dict = Depends(get_current_user),
 ):
-    raids, proficiency_options, characters, support_classes = await asyncio.gather(
+    discord_id = user["discord_id"]
+    raids, proficiency_options, summary, history = await asyncio.gather(
         bot_client.get_raids(),
         bot_client.get_proficiency_options(),
-        bot_client.get_user_characters_grouped(user["discord_id"]),
-        bot_client.get_support_classes(),
+        _safe(bot_party.get_raid_check_summary(discord_id)),
+        _safe(bot_client.get_user_party_history(discord_id, limit=20, offset=0), {"entries": []}),
     )
+    if summary is not None:
+        characters = [
+            {"character_name": c["character_name"], "character_class": c.get("character_class"),
+             "item_level": c.get("item_level") or 0, "is_support": bool(c.get("is_support"))}
+            for c in summary.get("characters") or []
+        ]
+    else:  # 요약 조회가 안 되면 예전처럼 전체 나열(추천·불가 사유는 없음)
+        grouped, support_classes = await asyncio.gather(
+            bot_client.get_user_characters_grouped(discord_id), bot_client.get_support_classes(),
+        )
+        support_set = set(support_classes)
+        characters = [
+            {"character_name": c["character_name"], "character_class": c["character_class"],
+             "item_level": c.get("item_level") or 0, "is_support": c["character_class"] in support_set}
+            for c in grouped
+        ]
     # 관리자가 정한 순서(카테고리 → sort_order → 상단 고정) 그대로 보여준다.
     groups = picker_groups(raids, _max_item_level(characters) or None)
-    character_levels = {
-        c["character_name"]: c.get("item_level") or 0 for c in characters
-    }
-    # 캐릭터 직업이 서포터가 아니면 "서포터" 역할을 고를 수 없다 — 참여 API도 동일하게 검증한다.
-    support_set = set(support_classes)
-    character_is_support = {
-        c["character_name"]: c["character_class"] in support_set for c in characters
-    }
+    now = datetime.now(KST)
+    preset = {k: request.query_params.get(k, "") for k in
+              ("raid", "difficulty", "proficiency", "scheduled_datetime", "memo", "character_name", "role")}
     return templates.TemplateResponse(
         request,
         "party_create.html",
@@ -173,15 +288,28 @@ async def create_party_form(
             "active": "parties",
             "groups": groups,
             # 개설 실패 후 되돌아왔을 때 채워줄 값(쿼리) — 없으면 빈 폼
-            "preset": {k: request.query_params.get(k, "") for k in
-                       ("raid", "difficulty", "proficiency", "scheduled_datetime", "memo", "character_name", "role")},
+            "preset": preset,
             "proficiency_options": proficiency_options,
             "characters": characters,
-            "character_levels": character_levels,
-            "character_is_support": character_is_support,
+            "recent": recent_openings((history or {}).get("entries") or [], raids, discord_id, now),
+            "presets": party_logic.time_presets(now),
+            "reset": party_logic.reset_info(None, now),
+            "default_prof": next(
+                (p["value"] for p in proficiency_options if p["value"] == preset["proficiency"]),
+                next((p["value"] for p in proficiency_options if p["value"] == "숙련"),
+                     proficiency_options[0]["value"] if proficiency_options else ""),
+            ),
             "error": error,
         },
     )
+
+
+@router.get("/parties/create/check")
+async def create_party_check(
+    raid_name: str = "", difficulty: str = "", scheduled_datetime: str = "",
+    user: dict = Depends(get_current_user),
+):
+    return JSONResponse(await _create_check_data(user["discord_id"], raid_name, difficulty, scheduled_datetime))
 
 
 @router.post("/parties/create")
@@ -215,13 +343,13 @@ async def create_party_submit(
     if character_name:
         join_result = await bot_client.join_party(message_id, user["discord_id"], character_name, role)
         if not join_result.get("success"):
-            from urllib.parse import quote
-
             reason = quote(join_result.get("reason") or "선택한 캐릭터로 자동 참여하지 못했습니다.")
             return RedirectResponse(f"/parties/{message_id}?join_error={reason}", status_code=303)
 
     return RedirectResponse(f"/parties/{message_id}", status_code=303)
 
+
+# ── 공대 상세 ─────────────────────────────────────────────
 
 async def _detail_context(
     message_id: str, discord_id: str, is_admin: bool = False, admin_mode: bool = False,
@@ -237,27 +365,25 @@ async def _detail_context(
     # "당신이 파티장" 대신 "관리자 권한으로 보는 중"이라고 구분해서 보여준다.
     # admin_mode(사이드바 토글)가 꺼져 있으면 관리자여도 일반 참가자로만 본다 —
     # 아무 공대나 열 때마다 관리 패널이 뜨는 걸 막기 위한 화면 전용 스위치.
-    is_leader = is_actual_leader or (is_admin and admin_mode)
+    ended = party_logic.is_ended(party)
+    is_leader = (is_actual_leader or (is_admin and admin_mode)) and not ended
     viewing_as_admin = is_admin and admin_mode and not is_actual_leader
-    other_members = [s for s in party["slots"] if s["discord_id"] != discord_id]
     my_slot = next((s for s in party["slots"] if s["discord_id"] == discord_id), None)
-    not_finished = party["status"] != "disbanded"
-    can_join_view = not joined and not_finished
-    show_invite = is_leader and not_finished
+    can_join_view = not joined and not ended
+    show_invite = is_leader
 
-    # get_party 이후의 호출은 서로 의존하지 않는다 — 예전엔 3~5번을 순서대로 기다렸다.
+    # get_party 이후의 호출은 서로 의존하지 않는다 — 한꺼번에 기다린다.
     calls: dict = {
         "comments": bot_client.get_party_comments(message_id),  # 리더 여부와 무관하게 누구나 볼 수 있다.
         "raids": bot_client.get_raids(),
     }
-    if joined and my_slot and my_slot["role"] != "support":
+    if joined and my_slot and my_slot["role"] != "support" and not ended:
         calls["support_classes"] = bot_client.get_support_classes()
     if can_join_view:
         # Discord PartyView._handle_waitlist와 동일한 조건(참여 안 했고 파티가 종료되지 않음)
         calls["eligibility"] = bot_client.get_party_eligibility(message_id, discord_id)
         calls["waitlist"] = bot_client.get_waitlist_status(message_id, discord_id)
     if show_invite:
-        # 게스트 초대(미등록 유저)는 웹에 동등한 UI가 없어 v1 범위에서 제외 — 등록된 유저만 초대할 수 있다.
         calls["invite"] = bot_client.get_invitable_users(message_id, discord_id)
         calls["proficiency"] = bot_client.get_proficiency_options()
     fetched = dict(zip(calls, await asyncio.gather(*calls.values())))
@@ -290,8 +416,8 @@ async def _detail_context(
     raid_info = raids.get(party["raid_name"], {})
     period = period_view(raid_info["available_until"]) if raid_info.get("available_until") else None
     diff_info = (raid_info.get("difficulties") or {}).get(party["difficulty"], {})
-    party_split = diff_info.get("party_split")
-    is_split = bool(party_split and party["total_slots"] > party_split)
+    groups = party_logic.group_layout(party, diff_info.get("party_split"))
+    comp = party_logic.composition(party)
 
     difficulty_options = []
     proficiency_options = []
@@ -299,52 +425,25 @@ async def _detail_context(
         difficulty_options = list((raid_info.get("difficulties") or {}).keys())
         proficiency_options = fetched["proficiency"]
 
-    slot_by_number = {s["slot_number"]: s for s in party["slots"]}
+    my_seat = None
+    if my_slot:
+        grp = next((g for g in groups if any(s.get("slot_number") == my_slot["slot_number"] for s in g["slots"])), None)
+        local = next((s["local_number"] for s in (grp["slots"] if grp else []) if s.get("slot_number") == my_slot["slot_number"]), my_slot["slot_number"])
+        my_seat = {"group": grp["group_number"] if grp else 1, "number": local, "multi": len(groups) > 1}
 
-    sub_parties = None
-    party_groups = None
-    all_slots = None
-
-    if is_split:
-        # 분할 파티는 "1파티/2파티" 별로 나란히, 각 파티 내부는 1번부터 다시 매기는 상대 번호로 보여준다.
-        num_groups = party["total_slots"] // party_split
-        sub_parties = list(range(1, num_groups + 1))
-        party_groups = []
-        for g in sub_parties:
-            start = (g - 1) * party_split + 1
-            slots = []
-            filled_count = 0
-            for local_number in range(1, party_split + 1):
-                absolute_number = start + local_number - 1
-                slot = slot_by_number.get(absolute_number)
-                if slot:
-                    filled_count += 1
-                    slots.append({**slot, "local_number": local_number, "filled": True})
-                else:
-                    slots.append({"local_number": local_number, "filled": False})
-            has_support = any(s.get("filled") and s.get("role") == "support" for s in slots)
-            party_groups.append(
-                {
-                    "group_number": g, "slots": slots, "filled_count": filled_count,
-                    "total": party_split, "has_support": has_support,
-                }
-            )
-    else:
-        # 슬롯은 연속으로 채워지지 않을 수 있다 — 번호 순으로 병합해서 표시용 목록을 만든다
-        all_slots = [
-            slot_by_number.get(n, {"slot_number": n, "filled": False})
-            for n in range(1, party["total_slots"] + 1)
-        ]
-        for s in all_slots:
-            s.setdefault("filled", True)
-
+    status_label, status_tone = party_logic.status_view(party)
     return {
         "party": party,
+        "view": party_view(party),
+        "status_label": status_label,
+        "status_tone": status_tone,
+        "ended": ended,
         "joined": joined,
         "is_leader": is_leader,
+        "is_actual_leader": is_actual_leader,
         "viewing_as_admin": viewing_as_admin,
-        "other_members": other_members,
         "my_slot": my_slot,
+        "my_seat": my_seat,
         "can_switch_to_support": can_switch_to_support,
         "eligibility": eligibility,
         "character_is_support": character_is_support,
@@ -352,9 +451,9 @@ async def _detail_context(
         "invitable_users": invitable_users,
         "invitable_slots": invitable_slots,
         "comments": comments,
-        "sub_parties": sub_parties,
-        "party_groups": party_groups,
-        "all_slots": all_slots,
+        "groups": groups,
+        "multi_group": len(groups) > 1,
+        "comp": comp,
         "difficulty_options": difficulty_options,
         "proficiency_options": proficiency_options,
         "period": period,

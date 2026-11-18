@@ -1,0 +1,7 @@
+{# 공대 화면 머리줄 — 제목 · 묶음 탭 · 공대 열기. 목록/달력/내 이력이 같이 쓴다. #}
+{% from "_subtabs.html" import subtabs with context %}
+<div class="pt-title-row">
+  <h1>공대</h1>
+  {{ subtabs("party") }}
+  <a class="btn pri pt-open" href="/parties/create">+ 공대 열기</a>
+</div>

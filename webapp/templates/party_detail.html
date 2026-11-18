@@ -1,381 +1,304 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
-{% block head %}<link rel="stylesheet" href="/static/flatpickr.min.css">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/flatpickr.min.css"><link rel="stylesheet" href="/static/pages/party.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}
+<div class="pt-crumb"><a class="btn sm ghost pt-back" href="/parties">&larr; 공대</a>
+{% if party %}<h1>{{ party.raid_name }} {{ party.difficulty }}</h1>{{ ui.chip(party.proficiency) }}{{ ui.chip(status_label, status_tone) }}{% endif %}</div>
+{% endblock %}
 {% block content %}
+{% macro role_chip(role) %}{{ ui.chip("서포터", "accent") if role == "support" else ui.chip("딜러", "danger") }}{% endmacro %}
 {% if not party %}
-<div class="page-content">
-  <div class="party-empty-card">
-    {% if action_result and action_result.success %}
-    <p class="party-empty-icon">✅</p>
-    <h1>공대가 취소되었습니다</h1>
-    <p class="party-empty-desc">파티원들에게 취소 안내가 개별적으로 전달됐습니다.</p>
+<div class="page-content pt-page">
+  {% if action_result and action_result.success %}
+  {{ ui.empty("공대가 취소되었습니다", "파티원들에게 취소 안내가 개별적으로 전달됐습니다.", "공대 목록으로", "/parties", "party") }}
+  {% else %}
+  {{ ui.empty("공대를 찾을 수 없습니다", "이미 삭제됐거나 잘못된 링크일 수 있습니다.", "공대 목록으로", "/parties", "party") }}
+  {% endif %}
+</div>
+{% else %}
+{% set is_admin_mode = user.is_admin and user.admin_mode %}
+{% set mid = party.message_id %}
+<div class="page-content page-wide pt-page" data-pt="detail" data-party="{{ mid }}">
+  {% if action_result and action_result.success and action_result.message %}
+  <div class="flash-data" hidden data-type="success" data-message="{{ action_result.message }}"></div>
+  {% endif %}
+  {% if action_result and not action_result.success %}
+  <div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
+  {% endif %}
+
+  <div class="pt-row">
+    <span class="num">{{ party.scheduled_time }}</span>
+    {% if not ended %}
+      {% if view.schedule.is_past %}{{ ui.chip("일정 지남", "danger") }}
+      {% elif view.schedule.countdown %}{{ ui.chip(view.schedule.countdown, view.schedule.tone) }}{% endif %}
+    {% endif %}
+    {% if period %}{{ ui.chip(period.label, period.tone) }}{% endif %}
+    <span class="pt-meta">최소 {{ party.min_level }}{% if party.memo %} · {{ party.memo }}{% endif %}{% if party.waitlist_count %} · 빈자리 알림 대기 {{ party.waitlist_count }}명{% endif %}</span>
+  </div>
+
+  {% if ended %}
+  {# ── 끝난 공대: 상태 한 줄, 조작 없음 ── #}
+  {% if party.status == "expired" %}
+  <div class="pt-statusline" role="status"><p><b>기한 만료</b> · 일정이 지나고도 클리어나 종료 처리가 되지 않아 보관됐습니다. 클리어로 집계되지 않습니다.</p></div>
+  {% elif party.cleared_at %}
+  <div class="pt-statusline is-ok" role="status"><p><b>클리어</b> · {{ party.cleared_at | kst_time }}에 클리어 처리됐고 참여자의 이번 주 완료 체크가 반영됐습니다.</p></div>
+  {% else %}
+  <div class="pt-statusline" role="status"><p><b>종료</b> · 관리자가 종료한 공대입니다. 클리어로 집계되지 않습니다.</p></div>
+  {% endif %}
+  {% endif %}
+
+  {% if not ended %}
+  {# ── 위쪽 버튼 줄: 파티장 조작 + 내 자리 ── #}
+  {% if is_leader or joined %}
+  <div class="pt-bar" role="toolbar" aria-label="공대 조작">
+    {% if is_leader %}
+    {% if party.status == "closed" %}
+    <form method="post" action="/parties/{{ mid }}/reopen"><button type="submit" class="btn" data-busy-text="처리 중">모집 재개</button></form>
     {% else %}
-    <p class="party-empty-icon">🔍</p>
-    <h1>공대를 찾을 수 없습니다</h1>
-    <p class="party-empty-desc">이미 삭제됐거나 잘못된 링크일 수 있습니다.</p>
+    <form method="post" action="/parties/{{ mid }}/close"><button type="submit" class="btn" data-busy-text="처리 중">모집 마감</button></form>
     {% endif %}
-    <a href="/parties" class="party-empty-link">&larr; 공대 목록으로</a>
-  </div>
-</div>
-{% else %}
-{% macro slot_row(s) %}
-  {% if s.filled %}
-  <div class="party-slot filled" data-discord-id="{{ s.discord_id }}" data-character-name="{{ s.character_name }}">
-    <span class="slot-number">{{ s.local_number if s.local_number is defined else s.slot_number }}</span>
-    <span class="slot-char">{{ s.character_name }}</span>
-    <span class="slot-class">{{ s.character_class }}</span>
-    <span class="role-badge role-{{ s.role }}">{{ "서포터" if s.role == "support" else "딜러" }}</span>
-    {% if s.is_guest %}<span class="guest-badge">게스트</span>{% endif %}
-  </div>
-  {% else %}
-  <div class="party-slot empty">
-    <span class="slot-number">{{ s.local_number if s.local_number is defined else s.slot_number }}</span>
-    <span class="slot-empty">빈 자리</span>
-  </div>
-  {% endif %}
-{% endmacro %}
-
-<div class="page-content">
-<a href="/parties" class="party-back-link">&larr; 목록으로</a>
-<div class="party-detail-header">
-  <h1>{{ party.raid_name }} {{ party.difficulty }} &middot; {{ party.proficiency }}</h1>
-  <span class="party-status status-{{ party.status }}">
-    {% if party.status == "recruiting" %}모집중{% elif party.status == "full" %}파티완성{% elif party.status == "closed" %}마감{% else %}종료{% endif %}
-  </span>
-</div>
-<p class="party-meta">{{ party.scheduled_time }} &middot; 최소 {{ party.min_level }}{% if party.waitlist_count %} &middot; 빈자리 알림 대기 {{ party.waitlist_count }}명{% endif %}{% if period %} {{ ui.chip(period.label, period.tone) }}{% endif %}</p>
-{% if party.memo %}<p class="party-memo">{{ party.memo }}</p>{% endif %}
-
-{% if action_result and action_result.success and action_result.message %}
-<div class="flash-data" hidden data-type="success" data-message="{{ action_result.message }}"></div>
-{% endif %}
-{% if action_result and not action_result.success %}
-<div class="flash-data" hidden data-type="error" data-message="{{ action_result.reason }}"></div>
-{% endif %}
-
-{% if party_groups %}
-<div class="party-groups">
-  {% for grp in party_groups %}
-  <div class="party-group">
-    <div class="party-group-header">
-      {{ grp.group_number }}파티 <span class="party-group-count">{{ grp.filled_count }}/{{ grp.total }}</span>
-    </div>
-    <div class="party-slots-column">
-      {% for s in grp.slots %}{{ slot_row(s) }}{% endfor %}
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% else %}
-<div class="party-slots">
-  {% for s in all_slots %}{{ slot_row(s) }}{% endfor %}
-</div>
-{% endif %}
-
-{% if joined %}
-<div class="party-member-actions">
-  {% if party.status != "disbanded" %}
-  <a href="/parties/{{ party.message_id }}/switch" class="party-switch-btn">캐릭터 변경</a>
-  {% if my_slot and my_slot.role == "support" %}
-  <form method="post" action="/parties/{{ party.message_id }}/switch-role">
-    <input type="hidden" name="new_role" value="dps">
-    <button type="submit" class="party-switch-btn">딜러로 변경</button>
-  </form>
-  {% elif can_switch_to_support %}
-  <form method="post" action="/parties/{{ party.message_id }}/switch-role">
-    <input type="hidden" name="new_role" value="support">
-    <button type="submit" class="party-switch-btn">서포터로 변경</button>
-  </form>
-  {% endif %}
-  {% endif %}
-  <form method="post" action="/parties/{{ party.message_id }}/leave"
-        data-confirm-title="이 공대에서 나갈까요?" data-confirm="자리가 비면 빈자리 알림을 켠 사람에게 안내가 갑니다." data-confirm-ok="나가기" data-confirm-danger>
-    <button type="submit" class="party-leave-btn">나가기</button>
-  </form>
-</div>
-{% elif eligibility and eligibility.can_join %}
-  {% if eligibility.qualifying %}
-  <form method="post" action="/parties/{{ party.message_id }}/join" class="party-join-form">
-    <select name="character_name" id="join-character-select" class="js-themed-select">
-      {% for q in eligibility.qualifying %}
-      <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
-      {% endfor %}
-    </select>
-    <select name="role" id="join-role-select" class="js-themed-select">
-      <option value="dps">딜러</option>
-      <option value="support">서포터</option>
-    </select>
-    {% if party_groups %}
-    <select name="party_group" id="join-group-select" class="js-themed-select">
-      {% for g in party_groups %}
-      <option value="{{ g.group_number }}" data-has-support="{{ 1 if g.has_support else 0 }}">{{ g.group_number }}파티</option>
-      {% endfor %}
-    </select>
-    {% endif %}
-    <button type="submit" data-busy-text="참여 중…">참여하기</button>
-  </form>
-  <script>
-    (function () {
-      var isSupportMap = {{ character_is_support | tojson }};
-      var charSelect = document.getElementById("join-character-select");
-      var roleSelect = document.getElementById("join-role-select");
-      var groupSelect = document.getElementById("join-group-select");
-      var supportOption = roleSelect.querySelector('option[value="support"]');
-
-      function syncRole() {
-        var isSupport = isSupportMap[charSelect.value];
-        supportOption.disabled = !isSupport;
-        if (isSupport) roleSelect.value = "support";
-        else if (roleSelect.value === "support") roleSelect.value = "dps";
-        // .value 대입만으로는 change 이벤트가 안 떠서 themed-select 라벨이 안 바뀐다.
-        roleSelect.dispatchEvent(new Event("change"));
-      }
-
-      // 서포터로 참여하면, 이미 서포터가 있는 파티를 피해 빈 파티를 먼저 골라준다
-      // (강제는 아니라 직접 바꿀 수 있음 — 그냥 기본값만 편하게).
-      function syncGroup() {
-        if (!groupSelect || roleSelect.value !== "support") return;
-        var current = groupSelect.selectedOptions[0];
-        if (current && current.dataset.hasSupport !== "1") return;
-        var openGroup = Array.prototype.find.call(
-          groupSelect.options, function (o) { return o.dataset.hasSupport !== "1"; }
-        );
-        if (openGroup) {
-          groupSelect.value = openGroup.value;
-          groupSelect.dispatchEvent(new Event("change"));
-        }
-      }
-
-      charSelect.addEventListener("change", function () { syncRole(); syncGroup(); });
-      roleSelect.addEventListener("change", syncGroup);
-      syncRole();
-      syncGroup();
-    })();
-  </script>
-  {% else %}
-  <div class="party-no-qualifying">
-    <p>참여 가능한 캐릭터가 없습니다.</p>
-    {% if eligibility.gold_done %}<p>이번 주 골드 완료: {{ eligibility.gold_done | join(', ') }}</p>{% endif %}
-    {% if eligibility.in_other_party %}<p>다른 공대 참여 중: {{ eligibility.in_other_party | join(', ') }}</p>{% endif %}
-    {% if eligibility.level_too_low %}
-    <p>레벨 미달 (최소 {{ eligibility.min_level }}):
-      {% for c in eligibility.level_too_low %}{{ c.name }} ({{ c.level }}){% if not loop.last %}, {% endif %}{% endfor %}
-    </p>
-    {% endif %}
-    {% if eligibility.no_cache %}<p>레벨 미확인: {{ eligibility.no_cache | join(', ') }} — 디스코드 <code>/원정대</code>에서 동기화해주세요.</p>{% endif %}
-  </div>
-  {% endif %}
-{% elif eligibility %}
-<p class="party-cannot-join">{{ eligibility.reason }}</p>
-{% endif %}
-
-{% if not joined and party.status != "disbanded" %}
-<form method="post" action="/parties/{{ party.message_id }}/waitlist" class="party-waitlist-form">
-  <button type="submit" class="party-switch-btn">
-    {% if on_waitlist %}🔕 빈자리 알림 취소{% else %}🔔 빈자리 알림 받기{% endif %}
-  </button>
-</form>
-{% endif %}
-
-{% if party.status == "disbanded" %}
-  {% if user.is_admin and user.admin_mode %}
-  <div class="leader-panel">
-    <h2 class="leader-panel-title">관리자</h2>
-    <p class="settings-desc">클리어 처리를 실수로 눌렀다면 되돌릴 수 있습니다. 파티원 전체의 이번 주 완료 체크도 함께 취소됩니다.</p>
-    <form method="post" action="/parties/{{ party.message_id }}/admin-revert-clear" data-confirm-title="클리어를 취소하고 공대를 되돌릴까요?" data-confirm="파티원들의 이번 주 완료 체크도 함께 취소됩니다." data-confirm-ok="되돌리기" data-busy-form>
-      <button type="submit" class="leader-btn">클리어 되돌리기</button>
+    <form method="post" action="/parties/{{ mid }}/clear"
+          data-confirm-title="클리어 처리할까요?" data-confirm="스레드가 잠기고 참여자 전원의 이번 주 완료 체크가 자동으로 반영됩니다." data-confirm-ok="클리어 처리">
+      <button type="submit" class="btn ok" data-busy-text="처리 중">클리어</button>
     </form>
-    <div class="leader-group">
-      <span class="leader-group-label">스레드</span>
-      <form method="post" action="/parties/{{ party.message_id }}/admin-unlock" class="leader-form">
-        <button type="submit" class="leader-btn">스레드 잠금 해제</button>
-      </form>
+    <button type="button" class="btn" data-pop-open="reschedule-pop" aria-haspopup="dialog" aria-expanded="false" aria-controls="reschedule-pop">일정 변경</button>
+    {% if viewing_as_admin %}<span class="pt-meta">관리자 권한으로 보는 중</span>{% endif %}
+    {% endif %}
+    {% if joined %}
+    <span class="pt-meta pt-end">내 자리: <b>{% if my_seat.multi %}{{ my_seat.group }}파티 {% endif %}{{ my_seat.number }}번 · {{ my_slot.character_name }}</b></span>
+    <div class="pt-menu-wrap">
+      <button type="button" class="btn sm" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="seat-menu">캐릭터·역할 변경</button>
+      <div class="menu" id="seat-menu" role="menu" aria-label="캐릭터·역할 변경" hidden>
+        <a class="menu-item" role="menuitem" href="/parties/{{ mid }}/switch">캐릭터 바꾸기</a>
+        {% if my_slot.role == "support" %}
+        <form method="post" action="/parties/{{ mid }}/switch-role"><input type="hidden" name="new_role" value="dps"><button type="submit" class="menu-item" role="menuitem">딜러로 변경</button></form>
+        {% elif can_switch_to_support %}
+        <form method="post" action="/parties/{{ mid }}/switch-role"><input type="hidden" name="new_role" value="support"><button type="submit" class="menu-item" role="menuitem">서포터로 변경</button></form>
+        {% endif %}
+      </div>
     </div>
-    <div class="leader-group">
-      <span class="leader-group-label">파티원 전체 DM</span>
-      <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" data-confirm-title="파티원 전원에게 DM을 보낼까요?" data-confirm="{content}" data-confirm-ok="보내기" data-busy-form>
-        <input type="text" name="content" maxlength="500" placeholder="보낼 내용" required aria-label="DM 내용">
-        <button type="submit" class="leader-btn">DM 보내기</button>
-      </form>
-    </div>
+    <form method="post" action="/parties/{{ mid }}/leave"
+          data-confirm-title="이 공대에서 나갈까요?" data-confirm="자리가 비면 빈자리 알림을 켠 사람에게 안내가 갑니다." data-confirm-ok="나가기" data-confirm-danger>
+      <button type="submit" class="btn sm danger" data-busy-text="처리 중">나가기</button>
+    </form>
+    {% endif %}
   </div>
   {% endif %}
-{% elif is_leader %}
-<div class="leader-panel">
-  <h2 class="leader-panel-title">파티장 관리</h2>
-  {% if viewing_as_admin %}<p class="settings-desc">관리자 권한으로 보는 중입니다.</p>{% endif %}
 
-  <div class="leader-group">
-    <span class="leader-group-label">모집 상태</span>
-    <div class="leader-actions-row">
-      {% if party.status == "closed" %}
-      <form method="post" action="/parties/{{ party.message_id }}/reopen">
-        <button type="submit" class="leader-btn">모집 재개</button>
-      </form>
-      {% else %}
-      <form method="post" action="/parties/{{ party.message_id }}/close">
-        <button type="submit" class="leader-btn">모집 마감</button>
-      </form>
+  {# ── 참여 줄: 아직 안 들어간 사람(파티장 포함)에게 ── #}
+  {% if not joined %}
+  <div class="pt-bar pt-bar-join" id="join" data-pt-joinbar>
+    {% if eligibility and eligibility.can_join and eligibility.qualifying %}
+    <form method="post" action="/parties/{{ mid }}/join" class="pt-row" id="join-form">
+      <select name="character_name" id="join-character-select" class="js-themed-select" aria-label="참여 캐릭터">
+        {% for q in eligibility.qualifying %}
+        <option value="{{ q.name }}">{{ q.name }} · {{ q['class'] }} {{ q.level }}</option>
+        {% endfor %}
+      </select>
+      <select name="role" id="join-role-select" class="js-themed-select" aria-label="역할">
+        <option value="dps">딜러</option>
+        <option value="support">서포터</option>
+      </select>
+      {% if multi_group %}
+      <select name="party_group" id="join-group-select" class="js-themed-select" aria-label="파티">
+        {% for g in groups %}
+        <option value="{{ g.group_number }}" data-has-support="{{ 1 if g.has_support else 0 }}"{% if g.free == 0 %} disabled{% endif %}>{{ g.group_number }}파티{% if g.free == 0 %} (가득 참){% endif %}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <button type="submit" class="btn pri" data-busy-text="참여 중">참여하기</button>
+    </form>
+    <script type="application/json" id="join-support-map">{{ character_is_support | tojson }}</script>
+    {% elif eligibility and eligibility.can_join %}
+    <div class="pt-why is-block">
+      <b class="pt-warn">참여할 수 있는 캐릭터가 없습니다</b>
+      {% if eligibility.gold_done %}<br>이번 주 완료: {{ eligibility.gold_done | join(', ') }}{% endif %}
+      {% if eligibility.in_other_party %}<br>다른 공대 참여 중: {{ eligibility.in_other_party | join(', ') }}{% endif %}
+      {% if eligibility.level_too_low %}<br>레벨 {{ eligibility.min_level | int }} 필요: {% for c in eligibility.level_too_low %}{{ c.name }} ({{ c.level }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+      {% if eligibility.no_cache %}<br>레벨 미확인: {{ eligibility.no_cache | join(', ') }} — 원정대 화면에서 동기화해 주세요.{% endif %}
+    </div>
+    {% elif eligibility %}
+    <span class="pt-why is-block">{{ eligibility.reason }}</span>
+    {% endif %}
+    <form method="post" action="/parties/{{ mid }}/waitlist" class="pt-end">
+      <button type="submit" class="btn sm ghost" data-busy-text="처리 중">{% if on_waitlist %}빈자리 알림 취소{% else %}빈자리 알림 받기{% endif %}</button>
+    </form>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <div class="pt-detail">
+    <div class="pt-main">
+      <div class="pt-groups{% if not multi_group %} is-single{% endif %}" id="slot-groups">
+        {% for g in groups %}
+        <div class="pt-group" data-group="{{ g.group_number }}">
+          <div class="pt-group-h">
+            <span>{% if multi_group %}{{ g.group_number }}파티{% else %}파티원{% endif %}</span><span class="num">{{ g.filled_count }}/{{ g.total }}</span>
+            {% if multi_group and not g.has_support and not ended %}<span class="pt-warn">서포터 없음</span>{% endif %}
+          </div>
+          {% for s in g.slots %}
+          {% if s.filled %}
+          <div class="pt-slot filled{% if s.discord_id == user.discord_id %} is-me{% endif %}" data-discord-id="{{ s.discord_id }}" data-character-name="{{ s.character_name }}">
+            <span class="pt-n">{{ s.local_number }}</span>
+            <b>{{ s.character_name }}</b>
+            {% if s.discord_id == party.leader_id %}{{ ui.chip("파티장") }}{% endif %}
+            {% if s.is_guest %}{{ ui.chip("게스트") }}{% endif %}
+            <span class="pt-meta pt-cls">{{ s.character_class }}</span>
+            {{ role_chip(s.role) }}
+            {% if is_leader and s.discord_id != user.discord_id and s.discord_id != party.leader_id %}
+            <button type="button" class="pt-dots" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="mm-{{ s.slot_number }}" aria-label="{{ s.character_name }} 메뉴">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+            </button>
+            <div class="menu" id="mm-{{ s.slot_number }}" role="menu" aria-label="{{ s.character_name }} 메뉴" hidden>
+              <form method="post" action="/parties/{{ mid }}/transfer-leader"
+                    data-confirm-title="{{ s.character_name }} 님에게 파티장을 넘길까요?" data-confirm="넘기면 이 공대의 관리 조작을 더 쓸 수 없습니다." data-confirm-ok="위임">
+                <input type="hidden" name="new_leader_discord_id" value="{{ s.discord_id }}">
+                <button type="submit" class="menu-item" role="menuitem">파티장 위임</button>
+              </form>
+              <hr>
+              <form method="post" action="/parties/{{ mid }}/kick"
+                    data-confirm-title="{{ s.character_name }} 님을 내보낼까요?" data-confirm="자리가 비고, 본인에게 DM으로 안내가 갑니다." data-confirm-ok="강제 퇴장" data-confirm-danger>
+                <input type="hidden" name="target_discord_id" value="{{ s.discord_id }}">
+                <button type="submit" class="menu-item d" role="menuitem">강제 퇴장</button>
+              </form>
+            </div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="pt-slot is-empty"{% if not is_leader and not joined and multi_group and not ended and g.free %} data-pick-group="{{ g.group_number }}" tabindex="0" role="button" aria-label="{{ g.group_number }}파티 빈 자리 선택"{% endif %}>
+            <span class="pt-n">{{ s.local_number }}</span>빈 자리
+            {% if is_leader and s.slot_number in invitable_slots %}
+            <button type="button" class="btn sm pt-sp" data-invite-slot="{{ s.slot_number }}" data-invite-label="{% if multi_group %}{{ g.group_number }}파티 {% endif %}{{ s.local_number }}번" aria-haspopup="dialog" aria-expanded="false" aria-controls="invite-pop">초대</button>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if is_leader %}
+      <details class="pt-set" id="party-settings">
+        <summary>공대 설정 <span class="pt-meta">난이도 · 메모 · 게스트 초대 · 공대 취소</span></summary>
+        <div class="pt-set-body">
+          {% if difficulty_options %}
+          <span class="pt-set-label">난이도 / 숙련도</span>
+          <form method="post" action="/parties/{{ mid }}/edit-difficulty" class="pt-row">
+            <select name="difficulty" class="js-themed-select" aria-label="난이도">
+              {% for d in difficulty_options %}<option value="{{ d }}"{% if d == party.difficulty %} selected{% endif %}>{{ d }}</option>{% endfor %}
+            </select>
+            <select name="proficiency" class="js-themed-select" aria-label="숙련도">
+              {% for p in proficiency_options %}<option value="{{ p.value }}" title="{{ p.description }}"{% if p.value == party.proficiency %} selected{% endif %}>{{ p.label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn" data-busy-text="저장 중">저장</button>
+          </form>
+          {% endif %}
+
+          <span class="pt-set-label">공지 / 메모</span>
+          <div class="pt-row"><span class="pt-grow trunc">{{ party.memo or "없음" }}</span><button type="button" class="btn sm" data-pop-open="reschedule-pop" aria-haspopup="dialog" aria-controls="reschedule-pop" aria-expanded="false">일정·메모 변경</button></div>
+
+          <span class="pt-set-label">게스트 초대</span>
+          <div class="pt-row">
+            <button type="button" class="btn sm" hx-get="/parties/{{ mid }}/guest-invite" hx-target="#guest-invite-form" hx-swap="innerHTML" hx-disabled-elt="this">게스트 초대 열기</button>
+            <span class="pt-meta">API 미등록 서버 멤버용 · 디스코드 DM에서 캐릭터를 입력하면 참여됩니다</span>
+          </div>
+          <div class="pt-guest-box" id="guest-invite-form"></div>
+
+          {% if is_admin_mode %}
+          <div class="pt-set-sec">관리자</div>
+          <span class="pt-set-label">파티원 전체 DM</span>
+          <form method="post" action="/parties/{{ mid }}/admin-notify" class="pt-row" data-confirm-title="파티원 전원에게 DM을 보낼까요?" data-confirm="{content}" data-confirm-ok="보내기" data-busy-form>
+            <input type="text" class="field pt-grow" name="content" maxlength="500" placeholder="보낼 내용" required aria-label="파티원 전체 DM 내용">
+            <button type="submit" class="btn">DM 보내기</button>
+          </form>
+          <span class="pt-set-label">스레드 · 종료</span>
+          <div class="pt-row">
+            <form method="post" action="/parties/{{ mid }}/admin-unlock"><button type="submit" class="btn" data-busy-text="처리 중">스레드 잠금 해제</button></form>
+            <form method="post" action="/parties/{{ mid }}/admin-disband" data-confirm-title="공대를 종료할까요?" data-confirm="스레드는 남고 클리어 체크는 되지 않습니다." data-confirm-ok="종료" data-confirm-danger>
+              <button type="submit" class="btn danger">파티 종료 (스레드 유지)</button>
+            </form>
+          </div>
+          {% endif %}
+
+          {% if not viewing_as_admin %}
+          <div class="pt-set-sec is-danger">위험 구역</div>
+          <span class="pt-set-label is-danger-label">공대 취소</span>
+          <form method="post" action="/parties/{{ mid }}/cancel" class="pt-row"
+                data-confirm-title="공대를 취소할까요?" data-confirm="디스코드 스레드가 삭제되고 파티원 전원에게 취소 안내가 갑니다. 되돌릴 수 없습니다." data-confirm-ok="공대 취소" data-confirm-danger>
+            <input type="text" class="field pt-grow" name="reason" maxlength="200" placeholder="취소 사유 (선택)" aria-label="취소 사유">
+            <button type="submit" class="btn danger" data-busy-text="취소 중">공대 취소</button>
+          </form>
+          {% endif %}
+        </div>
+      </details>
       {% endif %}
 
-      <form method="post" action="/parties/{{ party.message_id }}/clear"
-            data-confirm-title="클리어 처리할까요?" data-confirm="스레드가 잠기고 참여자 전원의 이번 주 완료 체크가 자동으로 반영됩니다." data-confirm-ok="클리어 처리">
-        <button type="submit" class="leader-btn leader-btn-success" data-busy-text="처리 중…">클리어</button>
-      </form>
+      {% if ended and is_admin_mode %}
+      <details class="pt-set" open>
+        <summary>관리자</summary>
+        <div class="pt-set-body">
+          {% if party.cleared_at %}
+          <span class="pt-set-label">클리어</span>
+          <div class="pt-row"><form method="post" action="/parties/{{ mid }}/admin-revert-clear" data-confirm-title="클리어를 취소하고 공대를 되돌릴까요?" data-confirm="이 클리어가 만든 파티원들의 이번 주 완료 체크가 함께 취소됩니다." data-confirm-ok="되돌리기" data-busy-form>
+            <button type="submit" class="btn">클리어 되돌리기</button></form>
+            <span class="pt-meta">수요일 리셋 전까지만 가능합니다</span></div>
+          {% endif %}
+          <span class="pt-set-label">스레드</span>
+          <div class="pt-row"><form method="post" action="/parties/{{ mid }}/admin-unlock"><button type="submit" class="btn" data-busy-text="처리 중">스레드 잠금 해제</button></form></div>
+          <span class="pt-set-label">파티원 전체 DM</span>
+          <form method="post" action="/parties/{{ mid }}/admin-notify" class="pt-row" data-confirm-title="파티원 전원에게 DM을 보낼까요?" data-confirm="{content}" data-confirm-ok="보내기" data-busy-form>
+            <input type="text" class="field pt-grow" name="content" maxlength="500" placeholder="보낼 내용" required aria-label="DM 내용">
+            <button type="submit" class="btn">DM 보내기</button>
+          </form>
+        </div>
+      </details>
+      {% endif %}
     </div>
+
+    {% include "_party_comments.html" %}
   </div>
 
-  {% if invitable_users and invitable_slots %}
-  <div class="leader-group">
-    <span class="leader-group-label">초대</span>
-    <form method="post" action="/parties/{{ party.message_id }}/invite" class="leader-form">
-      <select name="target_discord_id" class="js-themed-select" aria-label="초대할 유저">
-        {% for u in invitable_users %}
-        <option value="{{ u.discord_id }}">{{ u.representative or u.discord_id }}</option>
-        {% endfor %}
-      </select>
-      <select name="slot_number" class="js-themed-select" aria-label="슬롯">
-        {% for n in invitable_slots %}
-        <option value="{{ n }}">{{ n }}번 슬롯</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="leader-btn" data-busy-text="발송 중…">초대</button>
+  {% if is_leader %}
+  <div class="pt-pop" id="reschedule-pop" role="dialog" aria-label="일정 변경" hidden>
+    <form method="post" action="/parties/{{ mid }}/reschedule" id="reschedule-form">
+      <span class="pt-pop-title">일정 변경</span>
+      <label>새 일정<input type="text" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정" data-initial="{{ party.scheduled_datetime or '' }}"></label>
+      <div class="pt-quick" id="reschedule-quick-adjust">
+        <button type="button" class="btn sm" data-adjust-minutes="30">+30분</button>
+        <button type="button" class="btn sm" data-adjust-minutes="60">+1시간</button>
+        <button type="button" class="btn sm" data-adjust-minutes="1440">+1일</button>
+      </div>
+      <label>공지 / 메모 (비우면 삭제)<input type="text" class="field" name="memo" maxlength="150" value="{{ party.memo or '' }}" placeholder="예: 음성 필수"></label>
+      <span class="pt-meta">저장하면 파티원에게 일정 변경 DM이 갑니다.</span>
+      <div class="pt-pop-actions"><button type="button" class="btn sm" data-pop-close>닫기</button><button type="submit" class="btn sm pri" data-busy-text="변경 중">변경</button></div>
     </form>
   </div>
-  {% endif %}
-
-  {% if party.status != "disbanded" %}
-  <div class="leader-group" id="guest-invite-group">
-    <span class="leader-group-label">게스트 초대</span>
-    <p class="settings-desc">API를 등록하지 않은 서버 멤버도 초대할 수 있어요. 초대받은 사람은 디스코드 DM에서 캐릭터 닉네임만 입력하면 참여됩니다.</p>
-    <button type="button" class="leader-btn" hx-get="/parties/{{ party.message_id }}/guest-invite"
-            hx-target="#guest-invite-form" hx-swap="innerHTML" hx-disabled-elt="this">게스트 초대 열기</button>
-    <div id="guest-invite-form"></div>
-  </div>
-  {% endif %}
-
-  {% if other_members %}
-  <div class="leader-group">
-    <span class="leader-group-label">멤버 관리</span>
-    <div class="leader-form">
-      <select id="member-target-select" class="js-themed-select" aria-label="대상 멤버">
-        {% for m in other_members %}
-        <option value="{{ m.discord_id }}">{{ m.character_name }} ({{ m.character_class }})</option>
-        {% endfor %}
-      </select>
-      <button type="submit" form="kick-form" class="leader-btn leader-btn-danger">강제 퇴장</button>
-      <button type="submit" form="transfer-form" class="leader-btn">파티장 위임</button>
-    </div>
-    <form id="kick-form" method="post" action="/parties/{{ party.message_id }}/kick" hidden>
-      <input type="hidden" name="target_discord_id">
+  <div class="pt-pop" id="invite-pop" role="dialog" aria-label="초대" hidden>
+    {% if invitable_users %}
+    <form method="post" action="/parties/{{ mid }}/invite">
+      <span class="pt-pop-title" id="invite-title">자리 초대</span>
+      <input type="hidden" name="slot_number" id="invite-slot" value="">
+      <label>초대할 유저
+        <select name="target_discord_id" class="js-themed-select" aria-label="초대할 유저">
+          {% for u in invitable_users %}<option value="{{ u.discord_id }}">{{ u.representative or u.discord_id }}</option>{% endfor %}
+        </select>
+      </label>
+      <span class="pt-meta">상대가 1시간 안에 응답하면 이 자리가 채워집니다.</span>
+      <div class="pt-pop-actions"><button type="button" class="btn sm" data-pop-close>닫기</button><button type="submit" class="btn sm pri" data-busy-text="발송 중">초대 보내기</button></div>
     </form>
-    <form id="transfer-form" method="post" action="/parties/{{ party.message_id }}/transfer-leader" hidden>
-      <input type="hidden" name="new_leader_discord_id">
-    </form>
-  </div>
-  {% endif %}
-
-  {% if difficulty_options %}
-  <div class="leader-group">
-    <span class="leader-group-label">난이도/숙련도 수정</span>
-    <form method="post" action="/parties/{{ party.message_id }}/edit-difficulty" class="leader-form">
-      <select name="difficulty" class="js-themed-select">
-        {% for d in difficulty_options %}
-        <option value="{{ d }}" {% if d == party.difficulty %}selected{% endif %}>{{ d }}</option>
-        {% endfor %}
-      </select>
-      <select name="proficiency" class="js-themed-select">
-        {% for p in proficiency_options %}
-        <option value="{{ p.value }}" title="{{ p.description }}" {% if p.value == party.proficiency %}selected{% endif %}>{{ p.label }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="leader-btn">난이도/숙련도 수정</button>
-    </form>
-  </div>
-  {% endif %}
-
-  <div class="leader-group">
-    <span class="leader-group-label">일정 변경</span>
-    <form method="post" action="/parties/{{ party.message_id }}/reschedule" class="leader-form"
-          onsubmit="if (!this.scheduled_datetime.value) { if (window.showToast) window.showToast('일정을 선택해주세요.', 'error'); return false; } return true;">
-      <input type="text" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정">
-      <input type="text" name="memo" maxlength="150" placeholder="공지/메모 (비우면 삭제)" value="{{ party.memo or '' }}">
-      <button type="submit" class="leader-btn">일정 변경</button>
-    </form>
-    <div class="leader-quick-adjust" id="reschedule-quick-adjust">
-      <button type="button" class="leader-btn-sm" data-adjust-minutes="30">+30분</button>
-      <button type="button" class="leader-btn-sm" data-adjust-minutes="60">+1시간</button>
-      <button type="button" class="leader-btn-sm" data-adjust-minutes="1440">+1일</button>
-    </div>
-  </div>
-
-  {% if user.is_admin and user.admin_mode %}
-  <div class="leader-group">
-    <span class="leader-group-label">관리자 전용</span>
-    <form method="post" action="/parties/{{ party.message_id }}/admin-notify" class="leader-form" data-confirm-title="파티원 전원에게 DM을 보낼까요?" data-confirm="{content}" data-confirm-ok="보내기" data-busy-form>
-      <input type="text" name="content" maxlength="500" placeholder="파티원 전체 DM 내용" required aria-label="파티원 전체 DM 내용">
-      <button type="submit" class="leader-btn">DM 보내기</button>
-    </form>
-    <div class="leader-actions-row">
-      <form method="post" action="/parties/{{ party.message_id }}/admin-unlock">
-        <button type="submit" class="leader-btn">스레드 잠금 해제</button>
-      </form>
-      <form method="post" action="/parties/{{ party.message_id }}/admin-disband" data-confirm-title="공대를 종료할까요?" data-confirm="스레드는 남고 클리어 체크는 되지 않습니다." data-confirm-ok="종료" data-confirm-danger>
-        <button type="submit" class="leader-btn leader-btn-danger">파티 종료 (스레드 유지)</button>
-      </form>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if not viewing_as_admin %}
-  <div class="leader-group leader-group-danger">
-    <span class="leader-group-label">위험 구역</span>
-    <form method="post" action="/parties/{{ party.message_id }}/cancel" class="leader-form"
-          data-confirm-title="공대를 취소할까요?" data-confirm="디스코드 스레드가 삭제되고 파티원 전원에게 취소 안내가 갑니다. 되돌릴 수 없습니다." data-confirm-ok="공대 취소" data-confirm-danger>
-      <input type="text" name="reason" maxlength="200" placeholder="취소 사유 (선택)" aria-label="취소 사유">
-      <button type="submit" class="leader-btn leader-btn-danger" data-busy-text="취소 중…">파티 취소</button>
-    </form>
-  </div>
-  {% endif %}
-</div>
-<script src="/static/flatpickr.min.js"></script>
-<script src="/static/party-datetime.js?v={{ static_version }}"></script>
-<script>
-  (function () {
-    var picker = initPartyDatetimePicker("#reschedule-datetime-input", { minDate: null });
-    {% if party.scheduled_datetime %}
-    picker.setDate(new Date("{{ party.scheduled_datetime }}"), true);
+    {% else %}
+    <span class="pt-pop-title">초대할 수 있는 유저가 없습니다</span>
+    <span class="pt-meta">이미 모두 참여했거나 초대 중입니다. 서버 멤버는 공대 설정의 게스트 초대로 부를 수 있습니다.</span>
+    <div class="pt-pop-actions"><button type="button" class="btn sm" data-pop-close>닫기</button></div>
     {% endif %}
-    attachQuickAdjustButtons(picker, "#reschedule-quick-adjust");
-  })();
-
-  {% if other_members %}
-  (function () {
-    var select = document.getElementById("member-target-select");
-    var kickInput = document.querySelector('#kick-form input[name="target_discord_id"]');
-    var transferInput = document.querySelector('#transfer-form input[name="new_leader_discord_id"]');
-    function sync() {
-      kickInput.value = select.value;
-      transferInput.value = select.value;
-    }
-    select.addEventListener("change", sync);
-    sync();
-    function targetName() { return select.options[select.selectedIndex].textContent.trim(); }
-    window.uiConfirm.guardForm(document.getElementById("kick-form"), function () {
-      return { title: targetName() + " 님을 내보낼까요?", message: "자리가 비고, 본인에게 DM으로 안내가 갑니다.", ok: "내보내기", danger: true };
-    });
-    window.uiConfirm.guardForm(document.getElementById("transfer-form"), function () {
-      return { title: targetName() + " 님에게 파티장을 넘길까요?", message: "넘기면 이 관리 패널을 더 쓸 수 없습니다.", ok: "위임" };
-    });
-  })();
+  </div>
+  <script src="/static/flatpickr.min.js"></script>
+  <script src="/static/party-datetime.js?v={{ static_version }}"></script>
   {% endif %}
-</script>
-{% endif %}
 
-{% include "_party_comments.html" %}
-
-<div class="party-member-popover" id="party-member-popover"></div>
-<script src="/static/party-member-card.js?v={{ static_version }}"></script>
+  <div class="party-member-popover" id="party-member-popover"></div>
+  <script src="/static/party-member-card.js?v={{ static_version }}"></script>
+  <script src="/static/pages/party.js?v={{ static_version }}"></script>
 </div>
 {% endif %}
 {% endblock %}

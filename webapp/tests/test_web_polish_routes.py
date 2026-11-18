@@ -163,7 +163,6 @@ def test_party_list_and_detail_show_period_chip(client):
     with respx.mock:
         log_in(client)
         respx.get(f"{B}/parties").mock(return_value=httpx.Response(200, json=[PARTY]))
-        respx.get(f"{B}/user-characters").mock(return_value=httpx.Response(200, json=[]))
         respx.get(f"{B}/raids").mock(return_value=httpx.Response(200, json=RAIDS))
         list_resp = client.get("/parties")
 

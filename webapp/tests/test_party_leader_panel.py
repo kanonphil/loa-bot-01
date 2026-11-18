@@ -55,8 +55,8 @@ def test_leader_sees_management_panel(client):
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
-    assert "파티장 관리" in resp.text
-    assert "멤버캐릭" in resp.text  # 강제퇴장/위임 대상 목록에 다른 멤버가 보임
+    assert "공대 설정" in resp.text
+    assert "멤버캐릭 메뉴" in resp.text  # 멤버 줄의 ⋯ 메뉴(강제 퇴장·위임)
 
 
 def test_leader_sees_invite_form_with_candidates(client):
@@ -75,7 +75,7 @@ def test_leader_sees_invite_form_with_candidates(client):
     assert resp.status_code == 200
     assert "초대후보" in resp.text
     assert "/parties/p1/invite" in resp.text
-    assert "3번 슬롯" in resp.text
+    assert 'data-invite-slot="3"' in resp.text  # 빈 자리의 초대 버튼
 
 
 def test_leader_invite_form_hidden_when_no_candidates(client):
@@ -305,7 +305,7 @@ def test_cancel_success_shows_styled_confirmation_when_party_purged(client):
 
     assert resp2.status_code == 200
     assert "공대가 취소되었습니다" in resp2.text
-    assert "party-empty-card" in resp2.text
+    assert "공대 목록으로" in resp2.text
 
 
 def test_visiting_unknown_party_shows_not_found_not_cancelled_message(client):
