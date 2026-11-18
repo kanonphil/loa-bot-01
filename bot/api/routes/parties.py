@@ -1,9 +1,23 @@
+"""관리자 API(X-API-Key, Electron 관리자 앱) — 파티 관리.
+
+상태를 바꾸는 라우트는 웹/디스코드와 같은 bot/ui/views.py의 _xxx_core 함수를
+as_admin=True로 호출한다. 예전엔 여기서 db 함수를 직접 불러서, 클리어가 상태 확인
+없이 다시 실행되거나, 취소가 DB만 지우고 스레드를 남기거나, 강퇴/마감/재개/파티장 변경이
+DM·임베드 갱신 없이 처리되는 등 디스코드·웹과 결과가 달랐다."""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from bot.api.auth import verify_api_key
 import bot.database.manager as db
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])
+
+# as_admin 경로라 호출자 discord_id는 의미가 없다(권한은 X-API-Key로 이미 확인됨)
+_ADMIN_ACTOR = ""
+
+
+def _bot():
+  from bot.api import bot_ref
+  return bot_ref.get_bot()
 
 
 # ── 요청 바디 모델 ─────────────────────────────────────────
@@ -23,12 +37,7 @@ class LeaderBody(BaseModel):
 
 @router.get("")
 async def get_parties(guild_id: str):
-  parties = await db.get_guild_parties(guild_id)
-  result = []
-  for party in parties:
-    slots = await db.get_party_slots(party["message_id"])
-    result.append({**party, "slots": slots})
-  return result
+  return await db.get_guild_parties_with_slots(guild_id)
 
 
 # ── disbanded 이력 ────────────────────────────────────────
@@ -53,78 +62,42 @@ async def get_party(message_id: str):
 
 @router.patch("/{message_id}/close")
 async def close_party(message_id: str):
-  await db.close_party(message_id)
-  return {"success": True}
+  from bot.ui.views import _close_party_core
+  return await _close_party_core(_bot(), message_id, _ADMIN_ACTOR, as_admin=True)
 
 @router.patch("/{message_id}/reopen")
 async def reopen_party(message_id: str):
-  await db.reopen_party(message_id)
-  return {"success": True}
+  from bot.ui.views import _reopen_party_core
+  return await _reopen_party_core(_bot(), message_id, _ADMIN_ACTOR, as_admin=True)
 
 @router.patch("/{message_id}/disband")
 async def disband_party(message_id: str):
-  await db.disband_party(message_id)
-  return {"success": True}
+  from bot.ui.views import _admin_disband_party_core
+  return await _admin_disband_party_core(_bot(), message_id, _ADMIN_ACTOR, as_admin=True)
 
 
 # ── 클리어 ───────────────────────────────────────────────
 
 @router.patch("/{message_id}/clear")
 async def clear_party(message_id: str):
-  import discord as _discord
-  from bot.api import bot_ref
-  from bot.ui.embeds import party_embed
+  from bot.ui.views import _clear_party_core
 
-  party = await db.get_party(message_id)
-  if not party:
-    return {"success": False, "reason": "파티를 찾을 수 없습니다."}
-  slots = await db.get_party_slots(message_id)
-  if not slots:
-    return {"success": False, "reason": "파티원이 없습니다."}
-
-  count = await db.complete_raid_for_party(message_id)
-  await db.disband_party(message_id)
-
-  # Discord embed 갱신 + 클리어 메시지 발송
-  bot = bot_ref.get_bot()
-  if bot:
-    try:
-      channel = bot.get_channel(int(party["channel_id"]))
-      if channel is None:
-        channel = await bot.fetch_channel(int(party["channel_id"]))
-      # 잠긴/아카이브된 스레드는 먼저 열어야 메시지 발송 가능
-      if getattr(channel, 'locked', False) or getattr(channel, 'archived', False):
-        await channel.edit(archived=False, locked=False)
-      msg = await channel.fetch_message(int(message_id))
-      cleared_party = {**party, "status": "disbanded"}
-      await msg.edit(embed=party_embed(cleared_party, slots), view=None)
-      raid_title = f"{party['raid_name']} {party['difficulty']}"
-      mentions   = " ".join(f"<@{s['discord_id']}>" for s in slots)
-      await channel.send(
-        f"🏆 **{raid_title}** 클리어!\n{mentions}\n"
-        f"파티원 **{count}명**의 레이드 체크가 완료되었습니다."
-      )
-      try:
-        await channel.edit(archived=True, locked=True)
-      except _discord.HTTPException:
-        pass
-    except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
-      pass
-
-  return {"success": True, "count": count}
+  result = await _clear_party_core(_bot(), message_id, _ADMIN_ACTOR, as_admin=True)
+  if result.get("success"):
+    result["count"] = result.get("cleared_count", 0)  # 관리자 앱 하위호환 필드
+  return result
 
 
 # ── 스레드 잠금 해제 ──────────────────────────────────────
 
 @router.patch("/{message_id}/unlock")
 async def unlock_thread(message_id: str):
-  from bot.api import bot_ref
   from bot.ui.views import _unlock_party_thread
 
   party = await db.get_party(message_id)
   if not party:
     return {"success": False, "reason": "파티를 찾을 수 없습니다."}
-  bot = bot_ref.get_bot()
+  bot = _bot()
   if not bot:
     return {"success": False, "reason": "봇이 준비되지 않았습니다."}
   ok, reason = await _unlock_party_thread(bot, party)
@@ -135,8 +108,8 @@ async def unlock_thread(message_id: str):
 
 @router.delete("/{message_id}")
 async def cancel_party(message_id: str):
-  await db.purge_party(message_id, archived_status="cancelled")
-  return {"success": True}
+  from bot.ui.views import _cancel_party_core
+  return await _cancel_party_core(_bot(), message_id, _ADMIN_ACTOR, None, as_admin=True)
 
 
 # ── 일정 변경 ─────────────────────────────────────────────
@@ -145,10 +118,9 @@ async def cancel_party(message_id: str):
 async def update_schedule(message_id: str, body: ScheduleBody):
   await db.update_party_schedule(message_id, body.scheduled_time, body.scheduled_datetime)
 
-  from bot.api import bot_ref
   from bot.ui.views import _refresh_party_embed_with_reserved
 
-  bot = bot_ref.get_bot()
+  bot = _bot()
   if bot:
     party = await db.get_party(message_id)
     if party:
@@ -159,19 +131,12 @@ async def update_schedule(message_id: str, body: ScheduleBody):
 
 
 async def _rename_party_channel(bot, party: dict, scheduled_time: str) -> None:
-  """스레드 제목에도 일정이 들어가므로, 봇의 /일정변경 커맨드와 동일하게 같이 갱신."""
-  import discord as _discord
-  from bot.data.raids import RAIDS
+  """스레드 제목에도 일정이 들어가므로 같이 갱신(웹/디스코드 일정 변경과 같은 제목 형식)."""
+  from bot.ui.views import _rename_party_thread
 
   try:
-    channel = bot.get_channel(int(party["channel_id"]))
-    if channel is None:
-      channel = await bot.fetch_channel(int(party["channel_id"]))
-    raid_info = RAIDS.get(party["raid_name"], {})
-    short_name = raid_info.get("short_name", party["raid_name"])
-    new_name = f"{short_name} {party['difficulty']} {party['proficiency']} — {scheduled_time}"
-    await channel.edit(name=new_name)
-  except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
+    await _rename_party_thread(bot, {**party, "scheduled_time": scheduled_time})
+  except Exception:
     pass
 
 
@@ -181,10 +146,9 @@ async def _rename_party_channel(bot, party: dict, scheduled_time: str) -> None:
 async def update_memo(message_id: str, body: MemoBody):
   await db.update_party_memo(message_id, body.memo)
 
-  from bot.api import bot_ref
   from bot.ui.views import _refresh_party_embed_with_reserved
 
-  bot = bot_ref.get_bot()
+  bot = _bot()
   if bot:
     party = await db.get_party(message_id)
     if party:
@@ -197,13 +161,13 @@ async def update_memo(message_id: str, body: MemoBody):
 
 @router.delete("/{message_id}/slots/{discord_id}")
 async def kick_member(message_id: str, discord_id: str):
-  removed = await db.leave_slot(message_id, discord_id)
-  return {"success": removed}
+  from bot.ui.views import _kick_member_core
+  return await _kick_member_core(_bot(), message_id, _ADMIN_ACTOR, discord_id, as_admin=True)
 
 
 # ── 파티장 변경 ───────────────────────────────────────────
 
 @router.patch("/{message_id}/leader")
 async def change_leader(message_id: str, body: LeaderBody):
-  await db.transfer_leader(message_id, body.new_leader_id)
-  return {"success": True}
+  from bot.ui.views import _transfer_leader_core
+  return await _transfer_leader_core(_bot(), message_id, _ADMIN_ACTOR, body.new_leader_id, as_admin=True)

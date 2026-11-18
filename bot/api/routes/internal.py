@@ -15,16 +15,9 @@ from bot.services.expedition import (
   verify_and_register_api_key,
 )
 
+from bot.services.permissions import require_admin as _require_admin
+
 router = APIRouter(dependencies=[Depends(verify_webapp_key)])
-
-
-def _require_admin(discord_id: str) -> str | None:
-  """discord_id가 ADMIN_DISCORD_IDS에 없으면 에러 사유 문자열, 문제없으면 None.
-  X-Webapp-Key는 웹앱 전체를 인증할 뿐 관리자 여부를 모르므로, 관리자 전용 액션은
-  매 요청마다 여기서 다시 검증한다(웹앱 세션 쪽 검사만 믿지 않는다)."""
-  if discord_id not in config.ADMIN_DISCORD_IDS:
-    return "관리자 권한이 없습니다."
-  return None
 
 
 @router.get("/verify-user")
@@ -115,11 +108,20 @@ async def completions(discord_id: str, character_name: str):
 
 
 @router.get("/armory-detail")
-async def armory_detail(discord_id: str, character_name: str):
+async def armory_detail(discord_id: str, character_name: str, cache_only: bool = False):
   """캐릭터 상세 정보(스킬/트라이포드/룬/아크패시브/장신구 품질·연마/보석).
-  캐시가 있으면 그대로 반환 — 로스트아크 API를 매번 호출하지 않는다."""
+  캐시가 있으면 그대로 반환 — 로스트아크 API를 매번 호출하지 않는다.
+  cache_only=true면 캐시가 없어도 API를 부르지 않고 {"error", "not_cached": true}를 돌려준다
+  (파티원 카드처럼 여러 캐릭터를 한꺼번에 그리는 화면이 API 한도를 쓰지 않도록)."""
   from bot.services.armory import get_character_armory_detail
 
+  if cache_only:
+    cached = await db.get_character_armory_cache(discord_id, character_name)
+    if not cached:
+      return {"error": "아직 불러온 상세 정보가 없습니다.", "not_cached": True}
+    detail = cached["detail"]
+    detail["synced_at"] = cached["synced_at"]
+    return detail
   return await get_character_armory_detail(discord_id, character_name)
 
 
@@ -150,12 +152,32 @@ class ToggleCompletionBody(BaseModel):
   difficulty: str
 
 
+def _toggle_validation_error(raid_name: str, difficulty: str) -> str | None:
+  info = raids_module.RAIDS.get(raid_name)
+  if not info:
+    return "존재하지 않는 레이드입니다."
+  if difficulty not in (info.get("difficulties") or {}):
+    return "존재하지 않는 난이도입니다."
+  if info.get("is_extreme"):
+    # 익스트림은 원정대 단위 주 1회 — /completions/extreme/set으로만 체크한다
+    return "익스트림 레이드는 원정대 단위로 체크해주세요."
+  return None
+
+
 @router.post("/completions/toggle")
 async def toggle_completion(body: ToggleCompletionBody):
+  """캐릭터 레이드 완료 토글. 실패 시 {"success": False, "reason", "completed": False} —
+  예전엔 아무 검증 없이 임의 레이드명·남의 캐릭터·익스트림까지 기록돼 주간 클리어 랭킹이
+  부풀거나 익스트림 원정대 1회 제한을 우회할 수 있었다."""
+  err = _toggle_validation_error(body.raid_name, body.difficulty)
+  if err is None and body.character_name not in await db.get_user_characters(body.discord_id):
+    err = "본인 캐릭터만 체크할 수 있습니다."
+  if err:
+    return {"success": False, "reason": err, "completed": False}
   completed = await db.toggle_completion(
     body.discord_id, body.character_name, body.raid_name, body.difficulty
   )
-  return {"completed": completed}
+  return {"success": True, "completed": completed}
 
 
 @router.get("/raid-selection")
@@ -180,6 +202,9 @@ async def raid_progress(discord_id: str):
   # 캐시가 오래됐다고 레벨을 None으로 지우면 진행률이 0이 된다 —
   # /user-characters-grouped와 같은 기준으로 캐시 나이를 무시하고 읽는다.
   characters = await db.get_cached_characters(discord_id, max_age_hours=99999)
+  # 캐릭터마다 완료/선택을 따로 조회하면 캐릭터당 커넥션 2개 — 원정대 단위로 한 번씩만 읽는다
+  completions_by_char = await db.get_week_completions_by_character(discord_id, week_key)
+  selections = await db.get_all_selected_raids(discord_id)
 
   per_character = []
   for char in characters:
@@ -190,12 +215,12 @@ async def raid_progress(discord_id: str):
       if raid_name not in raid_names:
         raid_names.append(raid_name)
 
-    selected = await db.get_selected_raids(discord_id, name)
+    selected = selections.get(name)
     if selected is not None:
       chosen = set(selected)
       raid_names = [r for r in raid_names if r in chosen]
 
-    done = await db.get_completions(discord_id, name, week_key)
+    done = completions_by_char.get(name, set())
     done_raids = {key.rsplit("_", 1)[0] for key in done}
     done_count = sum(1 for r in raid_names if r in done_raids)
 
@@ -215,6 +240,69 @@ async def raid_progress(discord_id: str):
     "total":      sum(c["total_slots"] for c in per_character),
     # 익스트림은 캐릭터 총합에서 빠지고(원정대당 주 1회라 캐릭터 칸에 안 맞음) 원정대 단위로 따로
     "extreme":    await _extreme_status_payload(discord_id, week_key),
+  }
+
+
+@router.get("/raid-check-summary")
+async def raid_check_summary(discord_id: str):
+  """웹 레이드 체크 페이지 한 화면에 필요한 데이터를 한 번에 — 예전엔 캐릭터 목록·레이드·
+  카테고리·익스트림 상태에 더해 캐릭터마다 completions/raid-selection을 따로 불러 왕복이
+  2N+4번이었다. 응답은 기존 개별 엔드포인트 응답의 상위집합이다.
+
+  characters[]: user-characters-grouped 필드 + is_support, completions(이번 주 "레이드_난이도"
+  키 목록), selection({customized, selected_raids}), applicable_raids(입장 가능한 일반 레이드,
+  선택 필터 적용 전, RAIDS 순서: [{raid_name, short_name, icon, category, difficulties:[이름...]}]),
+  visible_raid_names(선택 필터 적용 후 카드에 보일 레이드명), done_count, total_slots."""
+  from bot.data.raids import RAIDS, SUPPORT_CLASSES, get_applicable_raids
+
+  week_key = db.get_week_key()
+  characters = await db.get_cached_characters_with_account(discord_id, max_age_hours=99999)
+  completions_by_char = await db.get_week_completions_by_character(discord_id, week_key)
+  selections = await db.get_all_selected_raids(discord_id)
+
+  out = []
+  for char in characters:
+    name = char["character_name"]
+    by_raid: dict[str, dict] = {}
+    for raid_name, diff_name, _info in get_applicable_raids(char.get("item_level") or 0):
+      info = RAIDS.get(raid_name, {})
+      entry = by_raid.setdefault(raid_name, {
+        "raid_name": raid_name,
+        "short_name": info.get("short_name") or raid_name,
+        "icon": info.get("icon"),
+        "category": info.get("category"),
+        "difficulties": [],
+      })
+      entry["difficulties"].append(diff_name)
+    applicable = list(by_raid.values())
+
+    selected = selections.get(name)
+    visible = [r["raid_name"] for r in applicable]
+    if selected is not None:
+      chosen = set(selected)
+      visible = [r for r in visible if r in chosen]
+
+    done = completions_by_char.get(name, set())
+    done_raids = {key.rsplit("_", 1)[0] for key in done}
+    done_count = sum(1 for r in visible if r in done_raids)
+    out.append({
+      **char,
+      "is_support": char.get("character_class") in SUPPORT_CLASSES,
+      "completions": sorted(done),
+      "selection": {"customized": selected is not None, "selected_raids": selected or []},
+      "applicable_raids": applicable,
+      "visible_raid_names": visible,
+      "done_count": done_count,
+      "total_slots": len(visible),
+    })
+
+  return {
+    "week_key": week_key,
+    "characters": out,
+    "raids": await db.get_raids_dict(),
+    "categories": await db.get_categories(),
+    "support_classes": sorted(SUPPORT_CLASSES),
+    "extreme": await _extreme_status_payload(discord_id, week_key),
   }
 
 
@@ -337,10 +425,9 @@ class JoinPartyBody(BaseModel):
 
 @router.post("/parties/{message_id}/join")
 async def join_party(message_id: str, body: JoinPartyBody):
-  import discord as _discord
   from bot.api import bot_ref
   from bot.data.raids import SUPPORT_CLASSES
-  from bot.ui.views import _notify_members_web, _party_url, _refresh_party_embed_with_reserved, _send_dm
+  from bot.ui.views import _after_join_core
 
   result = await db.get_party_join_eligibility(message_id, body.discord_id)
   if not result["can_join"]:
@@ -372,35 +459,11 @@ async def join_party(message_id: str, body: JoinPartyBody):
   )
 
   if success:
-    # 디스코드 참여하기 버튼(bot/ui/views.py _auto_join_dps, RoleSelectView)과 동일한
-    # 후처리 — 이전에는 웹 참여가 waitlist를 안 지워서 이미 참여한 사람에게 나중에
-    # 빈자리 알림 DM이 갈 수 있었고, 만석 공지·리더 DM도 전혀 발송되지 않았다.
-    await db.remove_waitlist(message_id, body.discord_id)
-    bot = bot_ref.get_bot()
-    party = await db.get_party(message_id)
-    if bot and party:
-      await _refresh_party_embed_with_reserved(bot, party)
-      if party["status"] == "full":
-        try:
-          slots = await db.get_party_slots(message_id)
-          channel = bot.get_channel(int(party["channel_id"])) or await bot.fetch_channel(int(party["channel_id"]))
-          mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
-          await channel.send(
-            f"🎉 **{party['raid_name']} {party['difficulty']}** 파티가 완성되었습니다!\n{mentions}"
-          )
-        except (_discord.NotFound, _discord.Forbidden, _discord.HTTPException):
-          pass
-        await _notify_members_web(
-          message_id, "party_full", f"{party['raid_name']} {party['difficulty']} 파티가 완성되었습니다.",
-        )
-      if party["leader_id"] != body.discord_id:
-        raid_title = f"{party['raid_name']} {party['difficulty']}"
-        role_icon = "🛡️" if role == "support" else "⚔️"
-        await _send_dm(
-          bot, party["leader_id"],
-          f"{role_icon} **{raid_title}** 공대에 **{body.character_name}**({char_info['class']})이(가) 참여했습니다!\n{_party_url(party)}",
-          kind="member_joined", message_id=message_id,
-        )
+    # 디스코드 참여하기 버튼(_auto_join_dps, RoleSelectView)과 같은 공용 후처리 —
+    # 대기열 제거, 임베드 갱신, 만석 공지·웹 알림, 파티장 DM.
+    await _after_join_core(
+      bot_ref.get_bot(), message_id, body.discord_id, body.character_name, char_info["class"], role,
+    )
 
   return {"success": success, "slot_number": slot_number, "message": message}
 
@@ -752,8 +815,15 @@ async def sync_characters(body: SyncCharactersBody):
     return {"success": False, "reason": "먼저 /api등록으로 API 키를 등록해주세요."}
 
   # 계정(부계정 포함)별로 그룹핑해서 동기화 — Discord "동기화" 버튼, 일일 자동 동기화와
-  # 동일한 공용 로직.
-  updated, total = await sync_characters_for_discord_id(body.discord_id)
+  # 동일한 공용 로직. 캐릭터가 많으면 웹 타임아웃(20초)을 넘기므로 백그라운드로 돌리고
+  # 최대 15초만 기다린다. 같은 유저의 동기화가 이미 돌고 있으면 새로 시작하지 않고 그걸 기다린다.
+  from bot.services.expedition import sync_characters_shared
+
+  result = await sync_characters_shared(body.discord_id, wait_seconds=15.0)
+  if result is None:
+    total = len(await db.get_user_characters(body.discord_id))
+    return {"success": True, "pending": True, "updated": 0, "total": total}
+  updated, total = result
   return {"success": True, "updated": updated, "total": total}
 
 
@@ -947,7 +1017,10 @@ async def admin_set_raid_period(body: AdminRaidPeriodBody):
   err = _require_admin(body.discord_id)
   if err:
     return {"success": False, "reason": err}
-  updated = await db.set_raid_period(body.name, body.available_from or None, body.available_until or None)
+  start, end, err = raids_module.normalize_period(body.available_from, body.available_until)
+  if err:
+    return {"success": False, "reason": err}
+  updated = await db.set_raid_period(body.name, start, end)
   await raids_module.reload()
   return {"success": updated}
 
@@ -980,6 +1053,9 @@ async def admin_delete_raid(body: AdminRaidNameBody):
   err = _require_admin(body.discord_id)
   if err:
     return {"success": False, "reason": err}
+  live = await db.count_live_parties_for_raid(body.name)
+  if live:
+    return {"success": False, "reason": f"진행 중인 공대가 {live}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_raid(body.name)
   await raids_module.reload()
   return {"success": removed}
@@ -1122,7 +1198,11 @@ async def admin_list_parties(guild_id: str, discord_id: str):
     # purge된 이력은 party_slots가 이미 지워져 있어(슬롯을 조회해도 항상 빈 배열) —
     # 아직 살아있는 것만 조회한다.
     slots = await db.get_party_slots(p["message_id"]) if is_live else []
-    closed_out.append({**p, "slots": slots, "is_live": is_live})
+    # can_revert: 클리어로 끝났고 아직 purge 전인 공대만 되돌리기 가능(파티원 전원 이탈/관리자
+    # 종료로 끝난 'disbanded'는 클리어가 아니라 되돌릴 대상이 아님)
+    closed_out.append({
+      **p, "slots": slots, "is_live": is_live, "can_revert": bool(is_live and p.get("cleared_at")),
+    })
 
   return {"open": open_out, "closed": closed_out}
 
@@ -1237,10 +1317,13 @@ class AdminDeleteUserBody(BaseModel):
 
 @router.post("/admin/users/{target_discord_id}/delete")
 async def admin_delete_user(target_discord_id: str, body: AdminDeleteUserBody):
+  from bot.api import bot_ref
+  from bot.services.expedition import delete_user_and_leave_parties
+
   err = _require_admin(body.discord_id)
   if err:
     return {"success": False, "reason": err}
-  await db.delete_user(target_discord_id)
+  await delete_user_and_leave_parties(bot_ref.get_bot(), target_discord_id)
   return {"success": True}
 
 
@@ -1315,9 +1398,12 @@ class AdminBroadcastBody(BaseModel):
 
 @router.post("/admin/notify-all")
 async def admin_notify_all(body: AdminBroadcastBody):
-  """등록 유저 전원 공지 DM — 관리자 앱의 📢 전체 공지."""
+  """등록 유저 전원 공지 DM — 관리자 앱의 📢 전체 공지.
+  발송은 백그라운드로 돌고 최대 15초만 기다린다 — 그 안에 끝나면 sent/total, 아니면
+  queued=True(발송 계속 진행 중, 진행 상황은 GET /admin/notify-all/status). 같은 내용을
+  10분 안에 다시 보내면 거부한다(타임아웃 뒤 재시도로 전원이 두 번 받던 문제)."""
   from bot.api import bot_ref
-  from bot.services.broadcast import dm_all_users
+  from bot.services.broadcast import start_broadcast_and_wait
 
   err = _require_admin(body.discord_id)
   if err:
@@ -1328,8 +1414,15 @@ async def admin_notify_all(body: AdminBroadcastBody):
   bot = bot_ref.get_bot()
   if not bot:
     return {"success": False, "reason": "봇이 준비되지 않았습니다."}
-  sent, total = await dm_all_users(bot, content)
-  return {"success": True, "sent": sent, "total": total}
+  return await start_broadcast_and_wait(bot, content)
+
+
+@router.get("/admin/notify-all/status")
+async def admin_notify_all_status(discord_id: str):
+  from bot.services.broadcast import broadcast_status
+
+  _admin_or_403(discord_id)
+  return broadcast_status()
 
 
 @router.get("/admin/completions")
