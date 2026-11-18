@@ -413,3 +413,16 @@ def test_nav_badges_home_counts_invites_and_overdue(client):
         respx.get(f"{B}/my-invites").mock(return_value=httpx.Response(200, json=[INVITE]))
         resp = client.get("/nav-badges")
     assert resp.json() == {"parties": 1, "invites": 1, "home": 2}
+
+
+def test_upcoming_maintenance_notice_shows_info_banner():
+    """시각 없는 임시 점검 공지(active=False)도 당일엔 안내 배너로 보여야 한다 — 실제 공지 형식."""
+    from webapp.routes.dashboard import build_maintenance
+
+    m = build_maintenance({"maintenance": {"active": False, "title": "11월 19일(목) 로스트아크 임시 점검 안내",
+                                           "starts_at": None, "ends_at": None,
+                                           "link": "https://lostark.game.onstove.com/News/Notice/Views/13600"}})
+    assert m and m["active"] is False and "임시 점검" in m["title"] and m["period"] == ""
+    assert build_maintenance({"maintenance": None}) is None
+    active = build_maintenance({"maintenance": {"active": True, "title": "점검 중"}})
+    assert active["active"] is True

@@ -270,11 +270,15 @@ def _safe_url(value) -> str | None:
 
 
 def build_maintenance(overview: dict) -> dict | None:
+    """점검 배너 — 진행 중(active)이면 경고, 오늘·곧 있을 점검 공지면 안내로 보여준다.
+    임시 점검 공지는 제목에 시각이 없는 경우가 많아(예: "11월 19일(목) 로스트아크 임시 점검 안내")
+    봇이 active=False로 넘기는데, 예전엔 그걸 버려서 점검 당일에도 안내가 안 떴다."""
     m = overview.get("maintenance")
-    if not isinstance(m, dict) or not m.get("active"):
+    if not isinstance(m, dict) or not m.get("title"):
         return None
     start, end = _hm(m.get("starts_at")), _hm(m.get("ends_at"))
     return {
+        "active": bool(m.get("active")),
         "title": m.get("title") or "점검 중",
         "period": f"{start} ~ {end}" if start and end else "",
         "link": _safe_url(m.get("link")),

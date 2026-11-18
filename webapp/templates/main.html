@@ -7,8 +7,8 @@
 <div class="page-content page-wide home" id="home">
 
 {% if maintenance %}
-<div class="banner warn" role="status">
-  <b class="banner-mark" aria-hidden="true">!</b>
+<div class="banner {{ 'warn' if maintenance.active else 'info' }}" role="status">
+  <b class="banner-mark" aria-hidden="true">{{ '!' if maintenance.active else 'i' }}</b>
   <span>{{ maintenance.title }}{% if maintenance.period %} · {{ maintenance.period }}{% endif %}</span>
   {% if maintenance.link %}<a class="lnk sp" href="{{ maintenance.link }}" target="_blank" rel="noopener noreferrer">공지 보기</a>{% endif %}
 </div>
