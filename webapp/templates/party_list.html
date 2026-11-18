@@ -62,7 +62,7 @@
             </select>
             <input type="hidden" name="role" value="{{ j.options[0].role }}">
             <input type="hidden" name="party_group" value="{{ j.options[0].group or '' }}"{% if not j.options[0].group %} disabled{% endif %}>
-            <button type="submit" class="btn sm pri" data-busy-text="참여 중">참여</button>
+            <button type="submit" class="btn pri" data-busy-text="참여 중">참여</button>
           </form>
           {% elif j.state == "joined" %}
           <span class="pt-why">{{ "내가 연 공대" if p.leader_id == user.discord_id else "참여 중" }}</span> <a class="lnk pt-reason-lnk" href="/parties/{{ p.message_id }}">상세</a>

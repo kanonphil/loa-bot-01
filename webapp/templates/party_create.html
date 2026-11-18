@@ -58,7 +58,7 @@
           <span class="pt-meta" id="reset-label">{{ reset.label }}</span>
         </div>
         <div class="pt-when-custom" id="custom-when" hidden>
-          <input type="text" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" value="{{ preset.scheduled_datetime }}" aria-label="일정">
+          <input type="text" class="field" id="scheduled-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" value="{{ preset.scheduled_datetime }}" aria-label="일정">
         </div>
         <div id="warn-reset" hidden>{{ ui.banner("다음 주 숙제로 집계됩니다. 일정이 수요일 06:00 리셋 이후라서, 클리어하면 다음 주 레이드 체크에 반영됩니다.", "warn") }}</div>
         <div id="warn-dup" class="banner info" role="status" hidden><span></span><a class="btn sm pri sp" href="#">그 공대 보기</a></div>
@@ -91,7 +91,7 @@
         </div>
         <div class="pt-row"><span class="pt-meta">구성</span><span class="pt-meta pt-end" id="prev-comp">딜 0/0 · 폿 0/0</span></div>
         <div class="pt-bal" id="prev-bal" aria-hidden="true"></div>
-        <span class="pt-meta">열면 이 레이드를 구독한 길드원에게 DM이 갑니다</span>
+        <span class="pt-meta">열면 이 레이드 구독자에게 DM이 갑니다</span>
         <button type="submit" class="btn pri block" id="party-create-submit" data-busy-text="개설 중" disabled>공대 열기</button>
         <span class="pt-meta" id="submit-hint">레이드와 일정을 고르면 열 수 있습니다</span>
       </div>

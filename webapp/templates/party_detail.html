@@ -41,7 +41,7 @@
   {% if party.status == "expired" %}
   <div class="pt-statusline" role="status"><p><b>기한 만료</b> · 일정이 지나고도 클리어나 종료 처리가 되지 않아 보관됐습니다. 클리어로 집계되지 않습니다.</p></div>
   {% elif party.cleared_at %}
-  <div class="pt-statusline is-ok" role="status"><p><b>클리어</b> · {{ party.cleared_at | kst_time }}에 클리어 처리됐고 참여자의 이번 주 완료 체크가 반영됐습니다.</p></div>
+  <div class="pt-statusline is-ok" role="status"><p><b>클리어</b> · {{ party.cleared_at | kst_time("%m/%d %H:%M") }}에 클리어 처리됐고 참여자의 이번 주 완료 체크가 반영됐습니다.</p></div>
   {% else %}
   <div class="pt-statusline" role="status"><p><b>종료</b> · 관리자가 종료한 공대입니다. 클리어로 집계되지 않습니다.</p></div>
   {% endif %}
@@ -65,9 +65,9 @@
     {% if viewing_as_admin %}<span class="pt-meta">관리자 권한으로 보는 중</span>{% endif %}
     {% endif %}
     {% if joined %}
-    <span class="pt-meta pt-end">내 자리: <b>{% if my_seat.multi %}{{ my_seat.group }}파티 {% endif %}{{ my_seat.number }}번 · {{ my_slot.character_name }}</b></span>
+    <span class="pt-meta{% if is_leader %} pt-end{% endif %}">내 자리: <b>{% if my_seat.multi %}{{ my_seat.group }}파티 {% endif %}{{ my_seat.number }}번 · {{ my_slot.character_name }}</b></span>
     <div class="pt-menu-wrap">
-      <button type="button" class="btn sm" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="seat-menu">캐릭터·역할 변경</button>
+      <button type="button" class="btn" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="seat-menu">캐릭터·역할 변경</button>
       <div class="menu" id="seat-menu" role="menu" aria-label="캐릭터·역할 변경" hidden>
         <a class="menu-item" role="menuitem" href="/parties/{{ mid }}/switch">캐릭터 바꾸기</a>
         {% if my_slot.role == "support" %}
@@ -79,7 +79,7 @@
     </div>
     <form method="post" action="/parties/{{ mid }}/leave"
           data-confirm-title="이 공대에서 나갈까요?" data-confirm="자리가 비면 빈자리 알림을 켠 사람에게 안내가 갑니다." data-confirm-ok="나가기" data-confirm-danger>
-      <button type="submit" class="btn sm danger" data-busy-text="처리 중">나가기</button>
+      <button type="submit" class="btn danger" data-busy-text="처리 중">나가기</button>
     </form>
     {% endif %}
   </div>
@@ -121,7 +121,7 @@
     <span class="pt-why is-block">{{ eligibility.reason }}</span>
     {% endif %}
     <form method="post" action="/parties/{{ mid }}/waitlist" class="pt-end">
-      <button type="submit" class="btn sm ghost" data-busy-text="처리 중">{% if on_waitlist %}빈자리 알림 취소{% else %}빈자리 알림 받기{% endif %}</button>
+      <button type="submit" class="btn ghost" data-busy-text="처리 중">{% if on_waitlist %}빈자리 알림 취소{% else %}빈자리 알림 받기{% endif %}</button>
     </form>
   </div>
   {% endif %}
@@ -262,12 +262,12 @@
   <div class="pt-pop" id="reschedule-pop" role="dialog" aria-label="일정 변경" hidden>
     <form method="post" action="/parties/{{ mid }}/reschedule" id="reschedule-form">
       <span class="pt-pop-title">일정 변경</span>
-      <label>새 일정<input type="text" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정" data-initial="{{ party.scheduled_datetime or '' }}"></label>
       <div class="pt-quick" id="reschedule-quick-adjust">
         <button type="button" class="btn sm" data-adjust-minutes="30">+30분</button>
         <button type="button" class="btn sm" data-adjust-minutes="60">+1시간</button>
         <button type="button" class="btn sm" data-adjust-minutes="1440">+1일</button>
       </div>
+      <label>새 일정<input type="text" class="field" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정" data-initial="{{ party.scheduled_datetime or '' }}"></label>
       <label>공지 / 메모 (비우면 삭제)<input type="text" class="field" name="memo" maxlength="150" value="{{ party.memo or '' }}" placeholder="예: 음성 필수"></label>
       <span class="pt-meta">저장하면 파티원에게 일정 변경 DM이 갑니다.</span>
       <div class="pt-pop-actions"><button type="button" class="btn sm" data-pop-close>닫기</button><button type="submit" class="btn sm pri" data-busy-text="변경 중">변경</button></div>

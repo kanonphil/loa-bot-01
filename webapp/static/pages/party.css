@@ -11,7 +11,7 @@
 .pt-crumb { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
 .pt-crumb h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.pt-page { display: flex; flex-direction: column; gap: var(--sp-3); }
+.pt-page { display: flex; flex-direction: column; gap: var(--sp-3); font-size: var(--fs-body); }
 .pt-page > .banner { margin-bottom: 0; }
 .pt-meta { font-size: var(--fs-meta); color: var(--text-muted); }
 .pt-meta b { color: var(--text); font-weight: 600; }
@@ -63,7 +63,8 @@
   .pt-table .pt-cell-join { grid-column: 1 / -1; padding-top: var(--sp-2); border-top: 1px solid var(--border-soft); white-space: normal; }
   .pt-join { width: 100%; }
   .pt-join .themed-select, .pt-join select { flex: 1; width: auto; min-width: 0; }
-  .pt-join .btn { height: 44px; padding: 0 var(--sp-4); }
+  .pt-join .btn, .pt-join .themed-select-trigger { height: 44px; }
+  .pt-join .btn { padding: 0 var(--sp-4); }
   .pt-sub { max-width: none; white-space: normal; }
 }
 

@@ -21,7 +21,7 @@ def wait(url, tries=60):
 
 JS = r"""
 () => {
-  const ctrlSel = 'button, a.ui-btn, a.party-create-link, a.party-switch-btn, a.calendar-today-btn, a.dash-card-link, input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select:not(.themed-select-native), textarea, .themed-select-trigger';
+  const ctrlSel = 'a.btn, a.chip-btn, button, a.ui-btn, a.party-create-link, a.party-switch-btn, a.calendar-today-btn, a.dash-card-link, input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select:not(.themed-select-native), textarea, .themed-select-trigger';
   const ctrls = Array.from(document.querySelectorAll(ctrlSel)).filter(el => el.offsetParent !== null && el.getBoundingClientRect().height > 0);
   // 같은 줄 판정: 가장 가까운 flex/grid 부모
   function rowOf(el) {
@@ -70,7 +70,7 @@ try:
     from itsdangerous import TimestampSigner
     cookie = TimestampSigner(SECRET).sign(base64.b64encode(json.dumps({"user": {"discord_id": "111", "username": "발키리", "is_admin": True, "avatar_url": None, "admin_mode": True}}).encode())).decode()
     from playwright.sync_api import sync_playwright
-    PAGES = ["/main", "/parties", "/parties/p1", "/parties/p2", "/parties/create", "/parties/history", "/expedition", "/raid-check", "/raid-check/select/발키리",
+    PAGES = ["/main", "/parties", "/parties?filter=all", "/parties/p1", "/parties/p2", "/parties/p6", "/parties/p7", "/parties/create", "/parties/history", "/expedition", "/raid-check", "/raid-check/select/발키리",
              "/raid-check/history", "/invites", "/ranking", "/calendar", "/characters/발키리", "/settings", "/parties/p1/switch",
              "/admin/raids?tab=raids", "/admin/raids?tab=categories", "/admin/raids?tab=difficulties&raid=종막", "/admin/parties", "/admin/classes", "/admin/users", "/admin/notifications", "/tools/auction-calculator", "/more", "/guide"]
     with sync_playwright() as pw:
@@ -84,6 +84,7 @@ try:
                 if path.startswith("/admin/raids"):
                     page.evaluate("document.querySelectorAll('details.admin-row-extra').forEach((d,i)=>{ if(i<2) d.open=true; })"); page.wait_for_timeout(150)
                 if path == "/parties/p1":
+                    page.evaluate("document.querySelectorAll('details.pt-set').forEach(d => d.open = true)")  # 공대 설정은 접혀 있다
                     page.click("text=게스트 초대 열기"); page.wait_for_timeout(600)
                 issues = page.evaluate(JS)
                 if issues:
