@@ -42,10 +42,6 @@ async def reload() -> None:
 
 # ── 헬퍼 함수 (기존 인터페이스 유지) ────────────────────
 
-def get_raid(name: str) -> dict | None:
-    return RAIDS.get(name)
-
-
 def get_difficulty_info(raid_name: str, difficulty: str) -> dict | None:
     raid = RAIDS.get(raid_name)
     if raid:
@@ -64,6 +60,27 @@ def _parse_aware(value: str | None) -> datetime | None:
     except (TypeError, ValueError):
         return None
     return dt.replace(tzinfo=KST) if dt.tzinfo is None else dt
+
+
+def normalize_period(
+    available_from: str | None, available_until: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    """운영 기간 저장 전 검증 — (from_iso, until_iso, 에러). 빈 값은 None(경계 없음).
+    파싱 안 되는 문자열을 그대로 저장하면 이후 비교가 조용히 무시되고, naive 값은 aware와
+    비교하다 TypeError가 났다 — 저장 시점에 KST 오프셋이 붙은 ISO로 맞춘다."""
+    parsed = []
+    for label, value in (("시작", available_from), ("종료", available_until)):
+        if value is None or not str(value).strip():
+            parsed.append(None)
+            continue
+        dt = _parse_aware(str(value).strip())
+        if dt is None:
+            return None, None, f"{label} 시각 형식이 올바르지 않습니다."
+        parsed.append(dt)
+    start, end = parsed
+    if start and end and start >= end:
+        return None, None, "시작 시각이 종료 시각보다 늦습니다."
+    return (start.isoformat() if start else None), (end.isoformat() if end else None), None
 
 
 def is_extreme_available(raid_info: dict, now: datetime | None = None) -> bool:
