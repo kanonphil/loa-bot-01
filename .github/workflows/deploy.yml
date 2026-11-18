@@ -1,15 +1,18 @@
 name: 테스트 · 배포
 
-# main에 push하면: 봇/웹 테스트 → 둘 다 통과하면 봇 서버 → 웹 서버 순으로 배포.
+# 브랜치 규칙: 개발은 develop, 배포는 main.
+#   develop에 push → 봇/웹 테스트만 (서버는 건드리지 않음)
+#   main에 push(= develop을 main에 머지) → 테스트 → 둘 다 통과하면 봇 서버 → 웹 서버 순으로 배포
 # 서버 쪽 동작(바뀐 쪽만 재시작, 헬스체크, 실패 시 롤백)은 scripts/deploy.sh 참고.
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
-# 배포가 겹치지 않게 한 번에 하나씩. 진행 중인 배포는 취소하지 않는다(중간에 끊기면 반쯤 배포된 상태가 됨).
+# 브랜치별로 한 번에 하나씩 — main 배포끼리 겹치지 않고, develop 테스트가 main 배포를 기다리지도 않는다.
+# 진행 중인 실행은 취소하지 않는다(배포가 중간에 끊기면 반쯤 배포된 상태가 됨).
 concurrency:
-  group: deploy-main
+  group: ci-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:

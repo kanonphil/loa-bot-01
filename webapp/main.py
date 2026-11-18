@@ -71,7 +71,10 @@ async def lifespan(app: FastAPI):
         await bot_client.aclose()
 
 
-app = FastAPI(title="로아봇 웹", lifespan=lifespan)
+# /docs·/redoc·/openapi.json은 끈다 — 로그인 없이 전체 라우트 목록(관리자 경로 포함)이 그대로
+# 공개되고 있었고, 30일 접근 로그에서 스캐너가 실제로 받아가고 있었다. 이 앱은 사람이 쓰는 HTML
+# 사이트라 API 문서가 필요 없다.
+app = FastAPI(title="로아봇 웹", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 templates.env.globals["get_guild_name"] = guild_info.get_name
 templates.env.globals["get_guild_icon_url"] = guild_info.get_icon_url

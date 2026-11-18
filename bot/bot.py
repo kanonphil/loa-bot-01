@@ -15,6 +15,7 @@ from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
 
 import asyncio
+import traceback
 import uvicorn
 
 KST = timezone(timedelta(hours=9))
@@ -144,7 +145,19 @@ class LoABot(commands.Bot):
 
     @tasks.loop(seconds=30)
     async def party_notification_task(self) -> None:
-        """30초마다 일정 알림 발송 + 24시간 지난 파티 자동 정리"""
+        """30초마다 일정 알림 발송 + 24시간 지난 파티 자동 정리.
+
+        tasks.loop은 본문에서 예외가 한 번 새어나가면 루프를 영영 멈춘다(다음 on_ready까지
+        시작 알림·사전 DM·초대 만료·주간 리셋 전부 정지). 디스코드 5xx나 "database is locked"
+        한 번으로 그렇게 되지 않도록 한 주기를 통째로 감싸고, 실패한 주기는 로그만 남기고
+        30초 뒤 다음 주기에서 다시 시도한다."""
+        try:
+            await self._party_notification_tick()
+        except Exception:
+            traceback.print_exc()
+            print("[LoABot] 일정 알림 주기 처리 중 오류 — 다음 주기에 재시도")
+
+    async def _party_notification_tick(self) -> None:
         now     = datetime.now(KST)
         now_iso = now.isoformat()
 

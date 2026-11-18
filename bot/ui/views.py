@@ -2032,21 +2032,6 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
             f"📅 일정이 **{result['scheduled_time']}**으로 변경되었습니다.", ephemeral=True
         )
 
-        # 파티원(파티장 제외)에게 DM
-        raid_title = f"{party['raid_name']} {party['difficulty']}"
-        link = _party_url(party)
-        leader_id = party["leader_id"]
-        for s in slots:
-            if s["discord_id"] != leader_id:
-                reason = self.memo_input.value.strip()
-                reason_text = f"\n📝 사유: {reason}" if reason else ""
-                await _send_dm(
-                    interaction.client, s["discord_id"],
-                    f"📅 **{raid_title}** 공대 일정이 변경되었습니다.\n"
-                    f"새 일정: **{scheduled_time}**{reason_text}\n{link}",
-                    kind="rescheduled", message_id=self.party["message_id"],
-                )
-
 
 async def _create_party_core(
     bot,

@@ -1,3 +1,4 @@
+import asyncio
 import aiohttp
 from urllib.parse import quote
 from typing import Optional
@@ -48,7 +49,9 @@ async def _get(api_key: str, path: str, params: dict = None) -> Optional[dict | 
             raise RuntimeError(f"API 오류 {resp.status}: {body[:200]}")
     except aiohttp.ClientError as e:
         raise RuntimeError(f"네트워크 오류: {e}") from e
-    except TimeoutError as e:
+    # Python 3.10(봇 서버)에서는 asyncio.TimeoutError가 내장 TimeoutError와 별개 클래스라
+    # 둘 다 잡아야 한다 — 하나만 잡으면 타임아웃이 그대로 새어나가 호출부가 500/무응답이 된다.
+    except (asyncio.TimeoutError, TimeoutError) as e:
         raise RuntimeError("API 응답 시간 초과 (10초). 잠시 후 다시 시도해주세요.") from e
 
 
