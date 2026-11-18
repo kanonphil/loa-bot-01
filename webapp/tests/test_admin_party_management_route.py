@@ -202,11 +202,11 @@ def test_admin_parties_page_shows_open_and_closed_tabs(client, monkeypatch):
 
     assert open_resp.status_code == 200
     assert "아르모체(4막)" in open_resp.text
-    assert 'data-filter-target="#admin-open-list"' in open_resp.text
+    assert 'id="open-table"' in open_resp.text
+    assert "리더캐릭" in open_resp.text  # 표에 파티장 캐릭터명이 보임
     assert closed_resp.status_code == 200
     assert "리더캐릭" in closed_resp.text  # 종료 탭에도 파티장 캐릭터명이 보임
-    assert "되돌리기 가능" in closed_resp.text
-    assert 'data-filter-target="#admin-closed-list"' in closed_resp.text
+    assert 'id="closed-table"' in closed_resp.text
 
 
 def test_admin_parties_page_hides_search_when_tab_is_empty(client, monkeypatch):
@@ -248,9 +248,9 @@ def test_admin_parties_page_shows_status_cards_and_flags_overdue(client, monkeyp
         )
         resp = client.get("/admin/parties")
     body = resp.text
-    assert "문제 공대" in body
-    assert "일정 지남" in body
-    assert "일정이 지났는데 아직 모집중/파티완성인 공대가 1개" in body
+    assert body.count('data-problem="1"') == 1  # 일정이 지난 공대만
+    assert "<b>1</b>일정 지남" in body  # KPI 숫자
+    assert 'data-ad-kpi="#open-table"' in body
 
 
 def test_admin_parties_closed_tab_offers_unlock_for_live_party(client, monkeypatch):
@@ -268,7 +268,8 @@ def test_admin_parties_closed_tab_offers_unlock_for_live_party(client, monkeypat
             })
         )
         resp = client.get("/admin/parties?tab=closed")
-    assert resp.text.count("/admin-unlock") == 1  # 살아있는 파티에만
+    assert resp.text.count("/admin/parties/p1/unlock") == 1  # 살아있는 파티에만
+    assert "/admin/parties/old/unlock" not in resp.text
 
 
 def test_admin_disband_route_forwards_and_redirects(client, monkeypatch):
@@ -341,7 +342,7 @@ def test_admin_parties_page_warns_when_forum_unset(client, monkeypatch):
         respx.get(ADMIN_FORUM_URL).mock(return_value=httpx.Response(200, json={**FORUM, "forum_channel_id": None, "forum_channel_name": None}))
         respx.get(ADMIN_PARTIES_URL).mock(return_value=httpx.Response(200, json={"open": [], "closed": []}))
         resp = client.get("/admin/parties")
-    assert "아직 설정되지 않아 공대 개설이 막혀 있습니다" in resp.text
+    assert "미설정" in resp.text and "공대 개설이 막혀 있습니다" in resp.text
 
 
 def test_admin_set_forum_channel_posts_to_bot_and_redirects(client, monkeypatch):

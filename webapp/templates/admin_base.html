@@ -1,0 +1,31 @@
+{#
+  관리 화면 공통 틀 — 제목 줄("관리" + 봇 상태 칩)과 묶음 탭을 한 곳에서 그린다.
+  각 탭은 `{% extends "admin_base.html" %}` 후 `{% block admin_body %}`만 채운다.
+  이 화면 전용 CSS/JS는 static/pages/admin.css · admin.js 한 벌(새 규칙을 style.css에 넣지 않는다).
+#}
+{% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="/static/pages/admin.css?v={{ static_version }}">
+{% endblock %}
+{% block page_top %}
+<div class="ad-top">
+  <h1>관리</h1>
+  {% if bot_status %}
+  <span class="ui-chip {{ 'is-ok' if bot_status.is_online else 'is-danger' }}">봇 {{ "온라인" if bot_status.is_online else "오프라인" }}</span>
+  <span class="ad-meta ad-top-meta">
+    {%- if bot_status.uptime_str %}업타임 {{ bot_status.uptime_str }}{% endif %}
+    {%- if bot_status.latency_ms is defined and bot_status.latency_ms is not none %} · 지연 <span class="num">{{ bot_status.latency_ms | round | int }}ms</span>{% endif %}
+    {%- if bot_status.user_count is defined %} · 유저 <span class="num">{{ bot_status.user_count }}</span>{% endif %}
+  </span>
+  {% else %}
+  <span class="ui-chip is-warn">봇 상태를 확인하지 못했습니다</span>
+  {% endif %}
+</div>
+{% endblock %}
+{% block content %}
+<div class="page-content admin-page">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
+{% block admin_body %}{% endblock %}
+</div>
+<script defer src="/static/pages/admin.js?v={{ static_version }}"></script>
+{% endblock %}

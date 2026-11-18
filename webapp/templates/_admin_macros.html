@@ -1,0 +1,17 @@
+{# 관리 화면 공용 조각 — 검색 입력, 모달 대화상자 틀. #}
+{% macro search(placeholder, target, id="", item="[data-row]", width="") -%}
+<input type="search" class="field ad-search"{% if id %} id="{{ id }}"{% endif %} placeholder="{{ placeholder }}" aria-label="{{ placeholder }}" autocomplete="off"
+       data-ad-filter="{{ target }}" data-ad-item="{{ item }}">
+{%- endmacro %}
+
+{# 모달 — 버튼의 data-dlg-open="#id"로 열고 Esc·바깥 클릭·[data-dlg-close]로 닫는다. caller()가 본문.
+   닫혀 있는 동안은 숨겨진 보관함(.ad-modal)에 두고, 열 때만 .dlg-back으로 감싸 body에 붙인다 — 공용 ui.js가 "화면에 .dlg-back이
+   있으면 팝업 Esc를 양보"하므로 숨겨진 .dlg-back을 상주시키면 ⋯ 메뉴·드롭다운의 Esc가 먹지 않는다. #}
+{% macro modal(id, title, width="") %}
+<div class="ad-modal" id="{{ id }}" hidden>
+  <div class="dlg ad-dlg" role="dialog" aria-modal="true" aria-labelledby="{{ id }}-t"{% if width %} style="width: {{ width }}"{% endif %}>
+    <h2 id="{{ id }}-t">{{ title }}</h2>
+    {{ caller() }}
+  </div>
+</div>
+{% endmacro %}

@@ -152,6 +152,8 @@ async def adm_refs(): return j({"parties_live": 1, "parties_all": 2, "party_hist
 @app.get("/api/internal/job-classes")
 async def jobs(): return j([{"name": "홀리나이트", "is_support": 1}, {"name": "워로드", "is_support": 0}, {"name": "바드", "is_support": 1}, {"name": "리퍼", "is_support": 0}])
 
+import stub_admin; stub_admin.register(app, globals())  # 관리 화면용 응답(새 파일)
+
 @app.api_route("/api/internal/{rest:path}", methods=["GET", "POST"])
 async def catch_all(rest: str, request: Request):
     return j({"success": True} if request.method == "POST" else {})

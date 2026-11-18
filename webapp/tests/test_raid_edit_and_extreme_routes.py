@@ -56,17 +56,13 @@ def test_admin_tabs_render_edit_forms(client, monkeypatch):
     with respx.mock:
         _admin(client, monkeypatch)
         _mock_admin_reads()
-        cats = client.get("/admin/raids?tab=categories").text
-        raids = client.get("/admin/raids?tab=raids").text
-        diffs = client.get("/admin/raids?tab=difficulties&raid=카멘익스").text
-    assert 'action="/admin/raids/categories/rename"' in cats
-    assert 'action="/admin/raids/update"' in raids
-    assert 'action="/admin/raids/rename"' in raids
-    assert 'hx-get="/admin/raids/references?name=' in raids
-    assert 'action="/admin/raids/difficulties/update"' in diffs
-    assert 'action="/admin/raids/difficulties/rename"' in diffs
-    assert 'value="1730"' in diffs
-    assert "이미 개설된 공대에는 적용되지 않습니다" in diffs
+        page = client.get("/admin/raids?raid=카멘익스").text
+    assert 'action="/admin/raids/categories/rename"' in page
+    assert 'action="/admin/raids/save"' in page  # 이름·약칭·아이콘·카테고리 한 번에
+    assert 'data-confirm-skip-same="name"' in page  # 이름이 바뀔 때만 확인
+    assert 'action="/admin/raids/difficulties/save"' in page
+    assert 'data-min-level="1730"' in page
+    assert "이미 개설된 공대에는 적용되지 않습니다" in page
 
 
 def test_update_raid_forwards_and_redirects(client, monkeypatch):
@@ -74,7 +70,7 @@ def test_update_raid_forwards_and_redirects(client, monkeypatch):
         _admin(client, monkeypatch)
         route = respx.post(f"{B}/admin/raids/update").mock(return_value=httpx.Response(200, json={"success": True}))
         resp = client.post("/admin/raids/update", data={"name": "카멘익스", "short_name": " 익스2 ", "icon": ""})
-    assert resp.status_code == 303 and without_toast(resp.headers["location"]) == "/admin/raids?tab=raids"
+    assert resp.status_code == 303 and without_toast(resp.headers["location"]) == "/admin/raids?raid=%EC%B9%B4%EB%A9%98%EC%9D%B5%EC%8A%A4"
     assert json.loads(route.calls[0].request.content) == {"discord_id": "111", "name": "카멘익스", "short_name": "익스2", "icon": "⚔️"}
 
 
@@ -111,7 +107,7 @@ def test_rename_difficulty_renames_web_filter_but_keeps_all_difficulty_filter(cl
         respx.post(f"{B}/admin/difficulties/rename").mock(return_value=httpx.Response(200, json={"success": True}))
         resp = client.post("/admin/raids/difficulties/rename",
                            data={"raid_name": "카멘익스", "old_difficulty": "노말", "new_difficulty": "일반"})
-    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=difficulties&raid=%EC%B9%B4%EB%A9%98%EC%9D%B5%EC%8A%A4"
+    assert without_toast(resp.headers["location"]) == "/admin/raids?raid=%EC%B9%B4%EB%A9%98%EC%9D%B5%EC%8A%A4"
     assert asyncio.run(notification_store.get_preferences("111"))["raid_filters"][0]["difficulty"] == "일반"
     assert asyncio.run(notification_store.get_preferences("222"))["raid_filters"][0]["difficulty"] is None
 
@@ -132,7 +128,7 @@ def test_rename_category_forwards(client, monkeypatch):
         _admin(client, monkeypatch)
         route = respx.post(f"{B}/admin/categories/rename").mock(return_value=httpx.Response(200, json={"success": True}))
         resp = client.post("/admin/raids/categories/rename", data={"old_name": "카제로스", "new_name": "군단장"})
-    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=categories"
+    assert without_toast(resp.headers["location"]) == "/admin/raids"
     assert json.loads(route.calls[0].request.content)["new_name"] == "군단장"
 
 

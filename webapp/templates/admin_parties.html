@@ -1,133 +1,132 @@
-{% extends "base.html" %}
+{% extends "admin_base.html" %}
 {% import "_ui.html" as ui %}
-{% block content %}
-<div class="page-content">
-{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
-<h1>공대 관리</h1>
-<p class="settings-desc">
-  길드 전체 공대를 파티장 없이도 관리할 수 있습니다. 목록에서 공대를 눌러 상세 페이지로
-  들어가면 마감/재개/강제퇴장/파티장위임/일정변경을 그대로 쓸 수 있고, 종료된(클리어)
-  공대는 실수로 처리했을 때 되돌리는 기능도 거기 있습니다.
-</p>
-
-{% if bot_status %}
-<div class="admin-status-card">
-  <span class="admin-status-dot{% if bot_status.is_online %} is-online{% endif %}"></span>
-  <b>봇 {{ "온라인" if bot_status.is_online else "오프라인" }}</b>
-  <span class="admin-status-meta">업타임 {{ bot_status.uptime_str }}</span>
-  {% if bot_status.latency_ms is not none %}<span class="admin-status-meta">지연 {{ bot_status.latency_ms }}ms</span>{% endif %}
-  <span class="ui-spacer"></span>
-  {{ ui.chip("유저 " ~ bot_status.user_count) }}
-  {{ ui.chip("진행 공대 " ~ bot_status.active_party_count) }}
-  {{ ui.chip("구독 " ~ bot_status.subscription_count) }}
-</div>
-{% endif %}
-
-<div class="settings-card admin-forum-card">
-  <h2 class="leader-panel-title">공대 모집 포럼 채널</h2>
-  <p class="settings-desc">
-    웹·디스코드에서 개설한 공대 모집글이 올라가는 포럼 채널입니다(디스코드 <code>/공대채널설정</code>과 같은 설정).
-    {% if forum.forum_channel_id %}현재: <b>#{{ forum.forum_channel_name or forum.forum_channel_id }}</b>{% else %}<b>아직 설정되지 않아 공대 개설이 막혀 있습니다.</b>{% endif %}
-  </p>
-  {% if forum.channels %}
-  <form method="post" action="/admin/forum-channel" class="settings-filter-add">
-    <select name="channel_id" class="settings-select js-themed-select" aria-label="포럼 채널">
-      {% for ch in forum.channels %}
-      <option value="{{ ch.id }}" {% if ch.id == forum.forum_channel_id %}selected{% endif %}># {{ ch.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="settings-toggle-btn">저장</button>
-  </form>
-  {% else %}
-  <p class="settings-desc">봇이 볼 수 있는 포럼 채널이 없습니다. 디스코드에서 포럼 채널을 만들고 봇에게 보기 권한을 주세요.</p>
-  {% endif %}
-</div>
-
+{% import "_admin_macros.html" as m %}
+{% macro row_menu(id, label) %}
+<span class="ad-menu-wrap">
+  <button type="button" class="btn sm ghost" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="{{ id }}" aria-label="{{ label }} 더 보기">⋯</button>
+  <div class="menu" id="{{ id }}" role="menu" hidden>{{ caller() }}</div>
+</span>
+{% endmacro %}
+{% block admin_body %}
 {% if tab == "open" %}
-<div class="admin-stat-grid">
-  {{ ui.stat(counts.recruiting, "모집중") }}
-  {{ ui.stat(counts.full, "파티완성") }}
-  {{ ui.stat(counts.closed, "마감") }}
-  {{ ui.stat(counts.problem, "문제 공대", tone="danger") }}
+<div class="ad-kpi" role="group" aria-label="상태별 걸러보기" data-ad-kpi="#open-table">
+  <button type="button" data-key="recruiting" aria-pressed="false"><b>{{ counts.recruiting }}</b>모집중</button>
+  <button type="button" data-key="full" aria-pressed="false"><b>{{ counts.full }}</b>파티완성</button>
+  <button type="button" data-key="closed" aria-pressed="false"><b>{{ counts.closed }}</b>마감</button>
+  <button type="button" data-key="problem" aria-pressed="false" class="is-danger"><b>{{ counts.problem }}</b>일정 지남</button>
 </div>
-{% if counts.problem %}
-<p class="admin-problem-banner">일정이 지났는데 아직 모집중/파티완성인 공대가 {{ counts.problem }}개 있습니다. 파티장이 클리어나 취소를 안 눌렀을 수 있으니 확인해주세요.</p>
-{% endif %}
 {% endif %}
 
-{% call ui.toolbar() %}
-  {{ ui.filter_link("진행 중", "/admin/parties?tab=open", tab == "open", open_parties | length) }}
-  {{ ui.filter_link("종료됨", "/admin/parties?tab=closed", tab == "closed", closed_parties | length) }}
-  {% if tab == "open" and open_parties %}
-  <label class="raid-search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-    <input type="search" class="js-list-filter" placeholder="레이드명으로 검색" aria-label="공대 검색" autocomplete="off"
-           data-filter-target="#admin-open-list" data-filter-item=".ui-card" data-filter-text=".ui-card-title"
-           data-filter-no-result="#admin-open-noresult">
-  </label>
-  {% elif tab == "closed" and closed_parties %}
-  <label class="raid-search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-    <input type="search" class="js-list-filter" placeholder="레이드명 또는 파티장으로 검색" aria-label="종료된 공대 검색" autocomplete="off"
-           data-filter-target="#admin-closed-list" data-filter-item=".admin-row" data-filter-text=".admin-row-name"
-           data-filter-no-result="#admin-closed-noresult">
-  </label>
-  {% endif %}
-{% endcall %}
+<div class="ad-row ad-toolbar">
+  {% if tab == "open" %}{{ m.search("레이드 · 파티장 검색", "#open-table", item="tr[data-row]") }}{% else %}{{ m.search("레이드 · 파티장 검색", "#closed-table", item="tr[data-row]") }}{% endif %}
+  <a class="chip-btn{% if tab == 'open' %} on{% endif %}" href="/admin/parties"{% if tab == 'open' %} aria-current="page"{% endif %}>진행 중 {{ open_parties | length }}</a>
+  <a class="chip-btn{% if tab == 'closed' %} on{% endif %}" href="/admin/parties?tab=closed"{% if tab == 'closed' %} aria-current="page"{% endif %}>종료됨 {{ closed_parties | length }}</a>
+  <span class="ad-spacer ad-row">
+    <span class="ad-meta">모집 포럼 채널
+      {% if forum.forum_channel_id %}<b class="ad-strong">#{{ forum.forum_channel_name or forum.forum_channel_id }}</b>
+      {% else %}<span class="ui-chip is-warn">미설정 — 공대 개설이 막혀 있습니다</span>{% endif %}
+    </span>
+    <button type="button" class="btn sm" data-dlg-open="#dlg-forum">{{ "변경" if forum.forum_channel_id else "설정" }}</button>
+  </span>
+</div>
 
 {% if tab == "open" %}
   {% if not open_parties %}
-  {{ ui.empty("진행 중인 공대가 없습니다", icon="⚔️") }}
+  <div class="ad-card">{{ ui.empty("진행 중인 공대가 없습니다", "공대가 개설되면 여기에 표시됩니다.", icon="party") }}</div>
   {% else %}
-  <div class="ui-list" id="admin-open-list">
-    {% for p in open_parties %}
-    {% call ui.card(href="/parties/" ~ p.message_id, stripe=("danger" if p.is_problem else p.status_tone)) %}
-      <div class="ui-row">
-        <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
-        {{ ui.chip(p.proficiency) }}
-        {% if p.is_problem %}{{ ui.chip("일정 지남", "danger") }}{% endif %}
-        <span class="ui-spacer"></span>
-        {{ ui.chip(p.status_label, p.status_tone) }}
-      </div>
-      <div class="ui-row">
-        <span class="ui-card-meta">{{ p.schedule.when }}</span>
-        <span class="ui-spacer"></span>
-        <span class="ui-card-meta">최소 {{ p.min_level }}</span>
-      </div>
-      {{ ui.slotbar(p.slots, p.total_slots, p.pct) }}
-    {% endcall %}
-    {% endfor %}
+  <div class="ad-card ad-tcard">
+    <table class="ad-t" id="open-table">
+      <thead><tr><th>레이드</th><th>일정</th><th>파티장</th><th>인원</th><th>상태</th><th></th></tr></thead>
+      <tbody>
+        {% for p in open_parties %}
+        <tr data-row data-status="{{ p.status }}" data-problem="{{ 1 if p.is_problem else 0 }}" data-text="{{ p.raid_name }} {{ p.difficulty }} {{ p.leader_name or '' }}">
+          <td data-label="레이드"><b>{{ p.raid_name }} {{ p.difficulty }}</b> {{ ui.chip(p.proficiency) }}</td>
+          <td data-label="일정">{{ p.schedule.when }}{% if p.is_problem %} {{ ui.chip("일정 지남", "danger") }}{% endif %}</td>
+          <td data-label="파티장">{{ p.leader_name or "-" }}</td>
+          <td class="num" data-label="인원">{{ p.filled }}/{{ p.total_slots }}</td>
+          <td data-label="상태">{{ ui.chip(p.status_label, p.status_tone) }}</td>
+          <td class="r">
+            <a class="btn sm" href="/parties/{{ p.message_id }}">열기</a>
+            {% if p.status == "closed" %}
+            <form method="post" action="/admin/parties/{{ p.message_id }}/reopen" class="ad-inline"
+                  data-confirm-title="{{ p.raid_name }} {{ p.difficulty }} 모집을 다시 열까요?" data-confirm="다시 모집중으로 바뀌고 디스코드 모집글도 갱신됩니다." data-confirm-ok="재개">
+              <button type="submit" class="btn sm ghost ad-w">재개</button>
+            </form>
+            {% else %}
+            <form method="post" action="/admin/parties/{{ p.message_id }}/close" class="ad-inline"
+                  data-confirm-title="{{ p.raid_name }} {{ p.difficulty }} 모집을 마감할까요?" data-confirm="신규 참가가 막힙니다. 작업 기록에서 다시 열 수 있습니다." data-confirm-ok="강제 마감" data-confirm-danger>
+              <button type="submit" class="btn sm ghost ad-w">강제 마감</button>
+            </form>
+            {% endif %}
+            {% call row_menu("pm-" ~ p.message_id, p.raid_name ~ " " ~ p.difficulty) %}
+              <a class="menu-item" role="menuitem" href="/parties/{{ p.message_id }}">일정 변경 · 강퇴 · 파티장 위임</a>
+              <a class="menu-item" role="menuitem" href="/parties/{{ p.message_id }}#comments">댓글 보기</a>
+            {% endcall %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="ad-noresult" id="open-noresult" hidden>조건에 맞는 공대가 없습니다.</p>
   </div>
-  <p class="raid-picker-noresult" id="admin-open-noresult" hidden>검색 결과가 없습니다.</p>
   {% endif %}
 
 {% else %}
   {% if not closed_parties %}
-  {{ ui.empty("종료된 공대 이력이 없습니다", icon="🗂️") }}
+  <div class="ad-card">{{ ui.empty("종료된 공대 이력이 없습니다", "클리어하거나 종료한 공대가 여기에 남습니다.", icon="box") }}</div>
   {% else %}
-  <ul class="admin-list" id="admin-closed-list">
-    {% for p in closed_parties %}
-    <li class="admin-row">
-      <span class="admin-row-name">
-        {% if p.is_live %}<a href="/parties/{{ p.message_id }}">{{ p.raid_name }} {{ p.difficulty }}</a>{% else %}{{ p.raid_name }} {{ p.difficulty }}{% endif %}
-        <span class="admin-row-sub">
-          {{ p.leader_character_name or "파티장 정보 없음" }} · {{ p.scheduled_time or "일정 미정" }}
-        </span>
-      </span>
-      <span class="admin-row-actions">
-        {{ ui.chip(p.status_label, p.status_tone) }}
-        {% if p.is_live %}
-        {{ ui.chip("되돌리기 가능", "accent") }}
-        <form method="post" action="/parties/{{ p.message_id }}/admin-unlock">
-          <button type="submit" class="admin-toggle-link" data-tip="클리어로 잠긴 디스코드 스레드를 다시 엽니다">스레드 잠금 해제</button>
-        </form>
-        {% else %}{{ ui.chip("기록만 남음", "") }}{% endif %}
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-  <p class="raid-picker-noresult" id="admin-closed-noresult" hidden>검색 결과가 없습니다.</p>
+  <div class="ad-card ad-tcard">
+    <table class="ad-t" id="closed-table">
+      <thead><tr><th>레이드</th><th>일정</th><th>파티장</th><th>인원</th><th>상태</th><th></th></tr></thead>
+      <tbody>
+        {% for p in closed_parties %}
+        <tr data-row data-text="{{ p.raid_name }} {{ p.difficulty }} {{ p.leader_character_name or '' }}">
+          <td data-label="레이드"><b>{{ p.raid_name }} {{ p.difficulty }}</b></td>
+          <td data-label="일정">{{ p.scheduled_time or "미정" }}</td>
+          <td data-label="파티장">{{ p.leader_character_name or "-" }}</td>
+          <td class="num" data-label="인원">{% if p.is_live %}{{ (p.slots or []) | length }}/{{ p.total_slots }}{% else %}<span class="ad-muted">-</span>{% endif %}</td>
+          <td data-label="상태">{{ ui.chip(p.status_label, p.status_tone) }}{% if not p.is_live %} <span class="ad-muted ad-small">기록만 남음</span>{% endif %}</td>
+          <td class="r">
+            {% if p.is_live %}
+            <a class="btn sm" href="/parties/{{ p.message_id }}">열기</a>
+            {% call row_menu("pm-" ~ p.message_id, p.raid_name ~ " " ~ p.difficulty) %}
+              {% if p.can_revert %}
+              <form method="post" action="/admin/parties/{{ p.message_id }}/revert-clear"
+                    data-confirm-title="{{ p.raid_name }} {{ p.difficulty }} 클리어를 되돌릴까요?" data-confirm="이 클리어로 체크된 참여자의 이번 주 완료 체크가 해제되고 공대가 다시 열립니다." data-confirm-ok="되돌리기" data-confirm-danger>
+                <button type="submit" class="menu-item d" role="menuitem">클리어 되돌리기</button>
+              </form>
+              {% endif %}
+              <form method="post" action="/admin/parties/{{ p.message_id }}/unlock">
+                <button type="submit" class="menu-item" role="menuitem">스레드 잠금 해제</button>
+              </form>
+            {% endcall %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="ad-noresult" id="closed-noresult" hidden>조건에 맞는 공대가 없습니다.</p>
+  </div>
   {% endif %}
 {% endif %}
-</div>
+
+{# 포럼 채널 변경 #}
+{% call m.modal("dlg-forum", "공대 모집 포럼 채널", "440px") %}
+<p>웹·디스코드에서 개설한 공대 모집글이 올라가는 포럼 채널입니다. 디스코드 <code>/공대채널설정</code>과 같은 설정입니다.</p>
+{% if forum.channels %}
+<form method="post" action="/admin/forum-channel" class="ad-dlg-form">
+  <select name="channel_id" class="js-themed-select" aria-label="포럼 채널">
+    {% for ch in forum.channels %}<option value="{{ ch.id }}"{% if ch.id == forum.forum_channel_id %} selected{% endif %}># {{ ch.name }}</option>{% endfor %}
+  </select>
+  <div class="acts">
+    <button type="button" class="btn" data-dlg-close>취소</button>
+    <button type="submit" class="btn pri">저장</button>
+  </div>
+</form>
+{% else %}
+<p class="ad-meta">봇이 볼 수 있는 포럼 채널이 없습니다. 디스코드에서 포럼 채널을 만들고 봇에게 보기 권한을 주세요.</p>
+<div class="acts"><button type="button" class="btn" data-dlg-close>닫기</button></div>
+{% endif %}
+{% endcall %}
 {% endblock %}
