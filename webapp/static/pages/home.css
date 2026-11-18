@@ -1,0 +1,198 @@
+/* 홈(/main) 전용 — 공용 컴포넌트(.ui-card .btn .chip-btn .menu .banner …)에 없는 것만 여기서 만든다.
+   색·간격·글자는 전부 style.css의 토큰. 개편안 "홈" 탭 치수: 오른쪽 열 300px, 난이도 버튼 58×40(모바일 64×44). */
+
+.home { position: relative; }
+.home-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--sp-4); align-items: start;
+}
+.home-main, .home-side { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+
+/* 카드 안쪽 여백·간격은 개편안 값(14/16, 10) */
+.home .ui-card { padding: 14px var(--sp-4); gap: 10px; }
+.home .ui-card.has-stripe { padding-left: calc(var(--sp-4) + 3px); }
+.home .ui-card-title { margin: 0; }
+.home .banner { margin-bottom: var(--sp-3); }
+.hc-muted { margin: 0; font-size: var(--fs-meta); color: var(--text-muted); }
+.home .nowrap { flex-wrap: nowrap; }
+.home .item-end { margin-left: auto; }
+.home .meta { font-size: var(--fs-meta); color: var(--text-muted); }
+.home .muted { color: var(--text-muted); }
+
+/* ── 숙제표 ───────────────────────────────────────────── */
+.hw-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.hw-head-spacer { flex: 1; }
+.hw-count { display: inline-flex; align-items: baseline; gap: 4px; font-size: var(--fs-body); }
+.hw-count b { font-size: var(--fs-card); }
+.hw-menu-wrap { position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; }
+.hw-menu-wrap > .menu { top: calc(100% + 4px); left: 0; min-width: 180px; }
+.hw-head .hw-menu-wrap > .menu { left: auto; right: 0; }
+.hw-select-menu { max-height: 320px; overflow-y: auto; }
+
+.hw-scroll { overflow-x: auto; padding-bottom: 2px; }
+.hw {
+  display: grid; grid-template-columns: minmax(140px, 1fr) var(--hw-cols); column-gap: var(--sp-2); align-items: center;
+  min-width: 100%;
+}
+.hw-scroll.is-wide .hw { width: max-content; grid-template-columns: 160px var(--hw-cols); }
+.hw-row { display: contents; }
+.hw-row[hidden] { display: none; }
+.hw .hd, .hw-row > div { padding: var(--sp-2) 0; min-width: 0; }
+.hw .hd { padding: 0 0 6px; font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); }
+.hw .ln { grid-column: 1 / -1; padding: 0; height: 0; border-top: 1px solid var(--border-soft); }
+.hw .ln.dash { border-top-style: dashed; border-top-color: var(--border); }
+/* 가로로 스크롤될 때 캐릭터 열은 제자리 */
+.hw .hd:first-child, .hw .who { position: sticky; left: 0; z-index: 1; background: var(--panel); padding-right: var(--sp-2); }
+.who { display: flex; flex-direction: column; white-space: nowrap; min-width: 0; }
+.who > b { font-size: 14px; }
+.who > span { font-size: var(--fs-meta); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+.hw .na { color: var(--text-muted); opacity: 0.45; padding-left: 24px; }
+.hw-x-note { grid-column: 3 / -1; font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; }
+.hw-x-note b { color: var(--text); font-weight: 600; }
+
+/* 난이도 토글 — 누르면 완료, 다시 누르면 취소 */
+.seg {
+  display: inline-flex; vertical-align: middle; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--sunken);
+}
+.seg button {
+  --spin: var(--accent);
+  flex: none; box-sizing: border-box; width: 58px; height: 40px; padding: 0;
+  border: 0; border-left: 1px solid var(--border); border-radius: 0; background: transparent;
+  color: var(--text-muted); font: inherit; font-size: var(--fs-body); white-space: nowrap; cursor: pointer;
+}
+.seg button:first-child { border-left: 0; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.seg button.on::before { content: "✓ "; }
+@media (hover: hover) {
+  .seg button:hover:not(:disabled):not(.on):not(.locked) { background: var(--hover); color: var(--text); }
+  .seg button.on:hover { background: rgba(53, 214, 196, 0.24); }
+}
+.seg button:active:not(:disabled):not(.locked) { background: var(--press); transform: none; filter: none; }
+.seg button:focus-visible { box-shadow: var(--ring-in); position: relative; z-index: 1; }
+.seg button[aria-busy="true"]::before { content: none; }
+.seg button.err { background: var(--danger-soft); color: var(--danger); animation: hw-shake 0.3s; }
+.seg button.err::before { content: "! "; }
+.seg button.locked {
+  cursor: not-allowed; color: var(--text-muted);
+  background: repeating-linear-gradient(135deg, transparent 0 5px, rgba(130, 160, 157, 0.12) 5px 6px);
+}
+@keyframes hw-shake { 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+
+/* ── 모바일 숙제 카드(데스크톱에서는 숨김) ── */
+.hw-mobile { display: none; }
+.hm-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.hm-head > b { font-size: 14px; flex: none; max-width: 40%; }
+.hm-head > .meta { flex: 1; min-width: 0; }
+.hm-count { margin-left: auto; flex: none; }
+.mrow { display: flex; align-items: center; gap: 10px; padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); }
+.mrow > b { flex: 1; min-width: 0; font-weight: 600; }
+.mrow .hw-menu-wrap { flex: none; }
+.mrow .seg button { height: 44px; width: 64px; }
+
+/* ── 할 일 ── */
+.hc-todo .item { display: flex; flex-direction: column; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--border-soft); min-width: 0; }
+.hc-todo > .ui-row:first-child + .item { border-top: 0; padding-top: 0; }
+.hc-todo .ui-row > form { margin: 0; display: contents; }
+.hc-todo .ui-row > b { min-width: 0; font-size: 14px; }
+.isle .what-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.inv-form { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; }
+.inv-pick { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: var(--sp-2); }
+.inv-pick[hidden] { display: none; }
+.inv-pick .themed-select { min-width: 0; }
+
+/* ── 한 줄 목록(내 일정·들어갈 만한 공대·이벤트·시세) ── */
+.tl-list { display: flex; flex-direction: column; }
+.tl {
+  display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 9px 0; border-top: 1px solid var(--border-soft); color: var(--text); text-decoration: none; white-space: nowrap;
+}
+.tl-list > .tl:first-child { border-top: 0; padding-top: 0; }
+.tl-list > .tl:last-child { padding-bottom: 0; }
+.tl .when { display: flex; flex-direction: column; font-size: var(--fs-meta); color: var(--text-muted); }
+.tl .when .num { color: var(--text); font-size: var(--fs-body); }
+.tl .what, .isle .what, .price .what { display: flex; flex-direction: column; min-width: 0; }
+.tl .what b, .isle .what b, .price .what b { font-size: var(--fs-body); }
+@media (hover: hover) { a.tl:hover .what b { color: var(--accent); } }
+a.tl:focus-visible { box-shadow: var(--ring); border-radius: var(--r-sm); }
+
+/* ── 오늘의 콘텐츠 ── */
+.isle { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); white-space: nowrap; }
+.isle-list > .isle:first-child { border-top: 0; padding-top: 0; }
+.isle-list[hidden] { display: none; }
+.isle .thumb {
+  width: 52px; height: 36px; border-radius: var(--r-sm); overflow: hidden; display: grid; place-items: center;
+  background: linear-gradient(135deg, #1d3a3c, #0f2224); font-size: var(--fs-label); color: var(--text-muted);
+}
+.isle .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.isle-when { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: var(--fs-body); }
+.hc-switch-row { padding-top: 10px; border-top: 1px dashed var(--border); }
+
+/* 켜짐/꺼짐 스위치 */
+.sw {
+  display: inline-flex; align-items: center; gap: var(--sp-2); padding: 0; border: 0; background: none;
+  color: var(--text); font: inherit; font-size: var(--fs-body); white-space: nowrap; cursor: pointer; border-radius: var(--r-sm);
+}
+.sw i { position: relative; width: 36px; height: 20px; border-radius: var(--r-pill); background: var(--sunken); border: 1.5px solid var(--line-in); box-sizing: border-box; }
+.sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--text-muted); transition: left var(--t), background var(--t); }
+.sw.on i { background: var(--accent-dim); border-color: var(--accent); }
+.sw.on i::after { left: 18px; background: var(--accent); }
+@media (hover: hover) { .sw:hover:not(:disabled) i { border-color: var(--line-in-hover); } .sw.on:hover:not(:disabled) i { border-color: var(--accent); } }
+.sw:focus-visible { box-shadow: none; }
+.sw:focus-visible i { box-shadow: var(--ring); }
+.sw:disabled, .sw[aria-busy="true"] { opacity: 0.45; cursor: progress; }
+/* 스위치는 스피너 대신 흐리게만(글자가 사라지면 안 된다) */
+.sw[aria-busy="true"] { color: var(--text) !important; }
+.sw[aria-busy="true"]::after { content: none; }
+.sw[aria-busy="true"] > * { visibility: visible; }
+
+/* ── 시세 ── */
+.price { display: grid; grid-template-columns: minmax(0, 1fr) 92px 56px; gap: 10px; align-items: center; padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); white-space: nowrap; }
+.tl-list > .price:first-child { border-top: 0; padding-top: 0; }
+.price .pct { text-align: right; font-size: var(--fs-body); }
+.spark.is-up, .pct.is-up { color: var(--danger); }
+.spark.is-down, .pct.is-down { color: #5aa9ff; }
+.spark.is-flat, .pct.is-flat { color: var(--text-muted); }
+
+/* ── 이번 주 골드 ── */
+.hc-gold .gold-sum { align-items: baseline; gap: 6px; }
+.gold-num { color: var(--gold); }
+.hc-gold b.gold-num { font-size: 22px; }
+.ui-gauge.is-gold i { background: var(--gold); }
+.gold-scroll { overflow-x: auto; }
+.t { width: 100%; border-collapse: collapse; }
+.t th { padding: 0 var(--sp-2) var(--sp-2); font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); text-align: left; white-space: nowrap; }
+.t td { padding: var(--sp-2); border-top: 1px solid var(--border-soft); white-space: nowrap; vertical-align: middle; }
+.t .r { text-align: right; }
+
+/* ── 태블릿 이하: 한 열 ── */
+@media (max-width: 1024px) {
+  .home-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .home-side > .hc-todo { grid-column: 1 / -1; }
+}
+
+/* ── 모바일: 급한 것(할 일) 먼저, 숙제는 캐릭터마다 카드 ── */
+@media (max-width: 640px) {
+  .home-grid { display: flex; flex-direction: column; align-items: stretch; }
+  .home-main, .home-side { display: contents; }
+  .hc-todo { order: 0; }
+  .hc-hw { order: 1; }
+  .hc-gold { order: 2; }
+  .hc-sched { order: 3; }
+  .hc-today { order: 4; }
+  .hc-price { order: 5; }
+  .hc-event { order: 6; }
+  .hc-opp { order: 7; }
+  .hc-hw.ui-card { padding: 0; border: 0; background: transparent; gap: var(--sp-3); overflow: visible; }
+  .hc-hw .ui-empty, .hc-hw.ui-card:not([data-hw]) { padding: 14px var(--sp-4); }
+  .hw-desktop { display: none; }
+  .hw-mobile { display: flex; flex-direction: column; gap: var(--sp-3); }
+  .hm-card[hidden] { display: none; }
+  .hm-card { padding: var(--sp-3); }
+  .hm-card .mrow:nth-of-type(1) { border-top: 0; }
+  .hw-head .btn.sm, .hw-head .chip-btn { height: 36px; }
+  .inv-form .btn.sm, .hc-todo .btn.sm { height: 44px; padding: 0 var(--sp-4); font-size: var(--fs-body); }
+  .hc-todo .btn.pri { flex: 1; }
+  .hw-head .hw-menu-wrap > .menu { right: auto; left: 0; }
+  .sw { min-height: 44px; }
+}

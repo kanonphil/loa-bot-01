@@ -297,7 +297,9 @@ async def remove_account(discord_id: str, key_id: int) -> dict:
 
 async def toggle_completion(
     discord_id: str, character_name: str, raid_name: str, difficulty: str
-) -> bool:
+) -> dict:
+    """봇은 검증에 실패하면 {"success": false, "reason", "completed": false}를 준다.
+    예전 응답(success 키 없음)도 성공으로 취급한다."""
     resp = await _get_client().post(
         f"{config.BOT_API_BASE_URL}/api/internal/completions/toggle",
         json={
@@ -310,7 +312,12 @@ async def toggle_completion(
         timeout=10,
     )
     resp.raise_for_status()
-    return resp.json()["completed"]
+    data = resp.json()
+    return {
+        "success": data.get("success", True),
+        "completed": bool(data.get("completed")),
+        "reason": data.get("reason"),
+    }
 
 
 # ── 공대 모집 ─────────────────────────────────────────────

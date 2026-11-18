@@ -36,6 +36,7 @@ RAIDS = {
                  "difficulties": {"노말": {"min_level": 1700, "total_slots": 8, "party_split": 4, "gates": 1, "sort_order": 0}, "하드": {"min_level": 1730, "total_slots": 8, "party_split": 4, "gates": 1, "sort_order": 1}}},
 }
 CATEGORIES = [{"name": "카제로스", "sort_order": 0, "is_extreme": 0}, {"name": "익스트림", "sort_order": 1, "is_extreme": 1}]
+import stub_home; stub_home.register(app, RAIDS, CHARS)  # 홈 화면 스텁(먼저 등록해 같은 경로의 정적 스텁을 덮는다)
 
 def party(mid, raid, diff, leader, start, status="recruiting", slots=None, memo=None):
     return {"message_id": mid, "channel_id": "c" + mid, "guild_id": "1", "leader_id": leader, "raid_name": raid, "difficulty": diff,
