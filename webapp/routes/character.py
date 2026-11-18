@@ -25,7 +25,11 @@ async def character_detail(
     # discord_id를 안 넘기면(원정대 관리에서 들어온 경우) 내 캐릭터로 간주.
     # 공대 모집의 "자세히 보기"처럼 다른 사람 캐릭터를 볼 때만 명시적으로 넘어온다.
     owner_discord_id = discord_id or user["discord_id"]
-    detail = await bot_client.get_armory_detail(owner_discord_id, character_name)
+    # 남의 캐릭터는 캐시만 읽는다 — 캐시가 비어 있을 때 봇이 그 사람의 로스트아크 API 키로 라이브 조회를
+    # 하면 아무나 다른 길드원의 호출 한도를 소진시킬 수 있다(본인 캐릭터만 라이브 조회 허용).
+    detail = await bot_client.get_armory_detail(
+        owner_discord_id, character_name, cache_only=owner_discord_id != user["discord_id"],
+    )
     # 동기화는 본인 캐릭터에서만 허용 — 남의 캐릭터 상세를 볼 때(discord_id 지정)는
     # 그 사람 대신 API를 호출시킬 권한이 없으므로 버튼 자체를 숨긴다.
     can_sync = discord_id is None
@@ -79,7 +83,9 @@ async def party_member_card(
     """공대 모집 화면에서 파티원 위에 마우스를 올렸을 때 뜨는 간단 요약 카드.
     전체 정보는 캐릭터 상세 페이지(/characters/{name})에 이미 있으니, 여기선 한눈에
     볼 핵심(전투력/아이템레벨/장신구 품질 요약)만 컴팩트하게 보여준다."""
-    detail = await bot_client.get_armory_detail(discord_id, character_name)
+    detail = await bot_client.get_armory_detail(
+        discord_id, character_name, cache_only=discord_id != user["discord_id"],
+    )
     return templates.TemplateResponse(
         request,
         "_party_member_card.html",
