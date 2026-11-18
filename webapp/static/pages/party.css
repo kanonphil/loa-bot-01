@@ -12,7 +12,7 @@
 
 /* 목록·달력·이력은 같은 머리줄을 쓰므로 본문 폭도 같은 page-wide(공용 --page-w) — 탭을 옮겨도 제목·탭 위치가 그대로 */
 
-.pt-page { display: flex; flex-direction: column; gap: var(--sp-3); font-size: var(--fs-body); }
+.pt-page { --page-gap: var(--sp-3); display: flex; flex-direction: column; gap: var(--page-gap); font-size: var(--fs-body); }
 .pt-page > .banner { margin-bottom: 0; }
 .pt-meta { font-size: var(--fs-meta); color: var(--text-muted); }
 .pt-meta b { color: var(--text); font-weight: 600; }
@@ -43,7 +43,7 @@
 
 /* 좁은 화면 — 표를 카드로 */
 @media (max-width: 760px) {
-  .pt-tablecard { padding: 0; border: 0; background: transparent; }
+  .ui-card.pt-tablecard { padding: 0; border: 0; background: transparent; overflow: visible; }
   .pt-table, .pt-table tbody { display: block; }
   .pt-table thead { display: none; }
   .pt-table tbody { display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -219,8 +219,8 @@
 }
 
 /* ── 달력 · 이력의 새 상태 ───────────────────────────────── */
-.calendar-party.status-expired { opacity: 0.6; }
-.calendar-party.status-expired .calendar-party-badge { color: var(--text-muted); }
+.calendar-party:is(.status-expired, .status-ended) { opacity: 0.6; }
+.calendar-party:is(.status-expired, .status-ended) .calendar-party-badge { color: var(--text-muted); }
 
 .pt-menu-wrap { position: relative; }
 .pt-menu-wrap .menu { right: 0; top: calc(100% + 4px); min-width: 160px; }

@@ -68,6 +68,8 @@ def _make_party_entry(p: dict, dt: datetime) -> dict:
     return {
         **p,
         "status_label": label,
+        # 색 클래스 — 관리자 종료(disbanded, 클리어 아님)는 클리어 초록이 아니라 기한 만료처럼 흐리게
+        "status_class": "ended" if p["status"] == "disbanded" and label != "클리어" else p["status"],
         "time_label": dt.strftime("%H:%M"),
         "is_active": p["status"] not in ("disbanded", "expired"),
     }

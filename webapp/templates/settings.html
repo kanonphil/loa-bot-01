@@ -110,7 +110,7 @@
     <span class="exp-meta">봇 서버에 연결하지 못해 표시할 수 없습니다.</span>
     {% else %}
     <form method="post" action="/settings/pre-notify" class="exp-addrow exp-addrow-end toolbar">
-      <select name="pre_notify_hours" class="js-themed-select" aria-label="사전 알림 시간">
+      <select name="pre_notify_hours" class="js-themed-select is-block" aria-label="사전 알림 시간">
         {% for h in pre_notify.choices %}
         <option value="{{ h }}" {% if h == pre_notify.pre_notify_hours %}selected{% endif %}>
           {%- if h == 0 %}받지 않음{% elif h < 1 %}{{ (h * 60) | int }}분 전{% else %}{{ h | int }}시간 전{% endif -%}

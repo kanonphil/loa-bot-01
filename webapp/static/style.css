@@ -5723,6 +5723,7 @@ form[aria-busy="true"] :is(button, input[type="submit"]) { pointer-events: none;
 .toolbar .chip-btn b { margin-left: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .toolbar .toolbar-end { margin-left: auto; }
 .toolbar form { margin: 0; }
+.page-content > .toolbar { margin-bottom: calc(var(--sp-4) - var(--page-gap)); }
 
 /* 검색칸 — 돋보기가 들어간 .field. 툴바 안에서는 260px, 좁은 화면에서는 한 줄 전체 */
 .field.search-field {

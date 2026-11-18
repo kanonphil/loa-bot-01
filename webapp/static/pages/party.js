@@ -274,7 +274,10 @@
         input.dataset.role = o.role;
         var name = el("span", "pt-copt-name");
         name.appendChild(el("b", "", o.name));
-        name.appendChild(el("span", "pt-meta", o.cls + " · " + (o.level != null ? Number(o.level).toFixed(2) : "—")));
+        // 서버가 그린 목록과 같은 모양: "직업 · <span class=num>1735.00</span>"
+        var meta = el("span", "pt-meta", o.cls + " · ");
+        meta.appendChild(el("span", "num", o.level != null ? Number(o.level).toFixed(2) : "—"));
+        name.appendChild(meta);
         var why;
         if (!o.ok) why = o.reason;
         else {

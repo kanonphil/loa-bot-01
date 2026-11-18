@@ -55,7 +55,7 @@
         <td class="pt-cell-join">
           {% if j.state == "can" %}
           <form method="post" action="/parties/{{ p.message_id }}/join" class="pt-join" data-pt-join>
-            <select class="js-themed-select" name="character_name" aria-label="{{ p.raid_name }} {{ p.difficulty }} 참여 캐릭터">
+            <select class="js-themed-select is-block" name="character_name" aria-label="{{ p.raid_name }} {{ p.difficulty }} 참여 캐릭터">
               {% for o in j.options %}
               <option value="{{ o.name }}" data-role="{{ o.role }}"{% if o.group %} data-group="{{ o.group }}"{% endif %}>{{ o.name }} · {{ "폿" if o.role == "support" else "딜" }}{% if o.recommended %} (추천){% endif %}</option>
               {% endfor %}

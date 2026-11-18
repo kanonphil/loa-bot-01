@@ -90,7 +90,7 @@
   <div class="pt-bar pt-bar-join" id="join" data-pt-joinbar>
     {% if eligibility and eligibility.can_join and eligibility.qualifying %}
     <form method="post" action="/parties/{{ mid }}/join" class="pt-row" id="join-form">
-      <select name="character_name" id="join-character-select" class="js-themed-select" aria-label="참여 캐릭터">
+      <select name="character_name" id="join-character-select" class="js-themed-select is-block" aria-label="참여 캐릭터">
         {% for q in eligibility.qualifying %}
         <option value="{{ q.name }}">{{ q.name }} · {{ q['class'] }} {{ q.level | ilvl }}</option>
         {% endfor %}

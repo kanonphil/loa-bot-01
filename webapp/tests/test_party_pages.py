@@ -361,6 +361,8 @@ def test_calendar_labels_expired_and_admin_disband(client):
         resp = client.get("/calendar?view=week&week_start=" + NOW.strftime("%Y-%m-%d"))
     assert "기한 만료" in resp.text and "종료" in resp.text and "클리어" in resp.text
     assert 'href="/parties/e"' not in resp.text  # 끝난 공대는 모집글 링크를 만들지 않는다
+    # 관리자 종료는 클리어(초록)와 다른 흐린 색, 클리어는 그대로
+    assert 'class="calendar-party status-ended"' in resp.text and 'class="calendar-party status-disbanded"' in resp.text
 
 
 def test_history_labels_expired_distinct_from_clear(client):
