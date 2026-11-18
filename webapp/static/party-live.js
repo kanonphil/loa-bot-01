@@ -2,38 +2,94 @@
   var path = window.location.pathname;
   // 파티 상세(/parties/<id>)도 포함 — 목록/캘린더만 갱신되고 상세는 F5를 눌러야
   // 슬롯/댓글이 보이던 문제. /parties/create, /parties/history는 폼/이력 화면이라 제외.
-  var isDetail = /^\/parties\/[^/]+$/.test(path) && path !== "/parties/create" && path !== "/parties/history";
+  var detailMatch = path.match(/^\/parties\/([^/]+)$/);
+  var detailId = detailMatch && path !== "/parties/create" && path !== "/parties/history" ? detailMatch[1] : null;
   // /invites: 파티장이 초대하거나 슬롯이 채워지면 바뀜, /raid-check: 파티장이 클리어하면 자동 체크가 들어옴
-  var isRelevant = path === "/main" || path === "/parties" || path === "/calendar" || path === "/admin/parties"
-    || path === "/invites" || path === "/raid-check" || isDetail;
-  if (!isRelevant) return;
+  var isList = path === "/main" || path === "/parties" || path === "/calendar" || path === "/admin/parties" || path === "/invites";
+  var isRaidCheck = path === "/raid-check";
+  if (!isList && !isRaidCheck && !detailId) return;
+
+  // 서버(party_events.py)가 보내는 이벤트 종류 — { type, message_id }
+  //   created / reopened / slots / status / details : 공대 목록·참가자·상태·일정이 바뀜
+  //   comments : 댓글 수만 바뀜(상세 화면에서만 의미 있음)
+  //   cleared / removed : 목록에서 사라짐(클리어 / 취소·종료)
+  var LIST_TYPES = { created: 1, reopened: 1, slots: 1, status: 1, details: 1, cleared: 1, removed: 1 };
+
+  // 이 페이지가 이 이벤트를 신경 써야 하는지. 예전엔 어떤 변경이든 열린 모든 탭이 전체 페이지를 다시
+  // 받았다(댓글 하나에 탭 10개 × 요청 수십 개).
+  function isRelevant(event) {
+    if (!event) return true; // 형식을 모르면 안전하게 갱신
+    if (detailId) return String(event.message_id) === detailId;
+    if (isRaidCheck) return event.type === "cleared";
+    return !!LIST_TYPES[event.type];
+  }
 
   var source = new EventSource("/events/parties");
-  var pending = false;
-  source.addEventListener("parties-changed", function () {
-    // 상세 페이지에서 댓글이나 일정을 입력하는 중이면 화면을 갈아엎지 않고, 입력창에서
-    // 나갈 때 한 번에 반영한다(입력 중이던 글이 사라지는 걸 막는다).
-    if (isTyping()) {
-      pending = true;
+  var timer = null;
+  var hiddenPending = false;
+
+  source.addEventListener("parties-changed", function (e) {
+    var event = null;
+    try { event = JSON.parse(e.data); } catch (err) { /* 옛 형식 → 항상 갱신 */ }
+    if (!isRelevant(event)) return;
+    // 한 폴링에서 여러 이벤트가 몰려도 한 번만 갱신한다
+    clearTimeout(timer);
+    timer = setTimeout(requestRefresh, 300);
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && hiddenPending) {
+      hiddenPending = false;
+      requestRefresh();
+    }
+  });
+
+  // 폼 입력 추적 — 한 글자라도 입력/변경한 폼은 "작성 중"이다.
+  document.addEventListener("input", markDirty, true);
+  document.addEventListener("change", markDirty, true);
+  function markDirty(e) {
+    var form = e.target && e.target.closest ? e.target.closest(".page-content form") : null;
+    if (form) form.dataset.liveDirty = "1";
+  }
+
+  // 작성 중이거나 폼 안에 포커스가 있으면 화면을 갈아엎지 않는다 — 쓰던 글·선택이 사라지기 때문.
+  function isEditing() {
+    var el = document.activeElement;
+    if (el && el.closest && el.closest(".page-content form")) return true;
+    return !!document.querySelector(".page-content form[data-live-dirty]");
+  }
+
+  function requestRefresh() {
+    if (document.hidden) {
+      hiddenPending = true; // 안 보는 탭은 돌아왔을 때 한 번만
+      return;
+    }
+    if (isEditing()) {
+      showBanner();
       return;
     }
     refresh();
-  });
-  document.addEventListener("focusout", function () {
-    if (!pending) return;
-    setTimeout(function () {
-      if (pending && !isTyping()) {
-        pending = false;
-        refresh();
-      }
-    }, 150);
-  });
+  }
 
-  function isTyping() {
-    var el = document.activeElement;
-    if (!el || !el.closest || !el.closest(".page-content")) return false;
-    var tag = el.tagName;
-    return (tag === "TEXTAREA" || (tag === "INPUT" && el.type !== "checkbox" && el.type !== "radio")) && el.value !== "";
+  function showBanner() {
+    var content = document.querySelector(".page-content");
+    if (!content || content.querySelector("[data-live-banner]")) return;
+    var banner = document.createElement("div");
+    banner.className = "banner info";
+    banner.setAttribute("data-live-banner", "");
+    var text = document.createElement("span");
+    text.textContent = "바뀐 내용이 있습니다";
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn sm pri";
+    button.textContent = "지금 반영";
+    button.addEventListener("click", function () {
+      banner.remove();
+      refresh();
+    });
+    banner.appendChild(text);
+    banner.appendChild(button);
+    content.insertBefore(banner, content.firstChild);
   }
 
   // 예전엔 여기서 window.location.reload()를 했다 — 길드 전체 공대 변경 하나에
@@ -55,6 +111,11 @@
         var oldContent = document.querySelector(".page-content");
         if (!newContent || !oldContent) {
           window.location.reload();
+          return;
+        }
+        // 요청을 보내고 기다리는 사이에 입력을 시작했을 수 있다 — 그러면 덮어쓰지 않고 배너로 알린다.
+        if (isEditing()) {
+          showBanner();
           return;
         }
         oldContent.replaceWith(newContent);
@@ -79,7 +140,7 @@
       });
   }
 
-  // 갱신 직전에 쓰고 있던 textarea 내용(댓글 초안 등)을 같은 이름의 새 입력창에 되돌린다.
+  // 폼 밖에서 쓰던 textarea 내용도 같은 이름의 새 입력창에 되돌린다(폼 안은 위에서 갱신 자체를 막는다).
   function collectDrafts() {
     var drafts = {};
     document.querySelectorAll(".page-content textarea[name]").forEach(function (el) {

@@ -1,11 +1,14 @@
 import asyncio
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import parse_qs
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
@@ -14,6 +17,7 @@ from starlette.responses import PlainTextResponse, RedirectResponse
 from starlette.staticfiles import StaticFiles
 
 from webapp import config, guild_info, notification_store, party_events
+from webapp.csrf import OriginCheckMiddleware
 from webapp.clients import bot_client
 from webapp.auth.dependencies import NotAuthenticated
 from webapp.routes import (
@@ -39,6 +43,15 @@ logger = logging.getLogger("webapp")
 CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60  # 6시간마다 보관기간 지난 알림 정리
 
 
+def _cleanup_sleep_seconds(now: datetime | None = None) -> float:
+    """다음 정리까지 대기 — 6시간 주기이되 다음 주간 리셋(수요일 06:00 KST) 직후에 맞춰 깬다.
+    프로세스 시작 시각 기준 6시간 주기만 쓰면 리셋 후 최대 6시간 동안 전주 알림이 남았다."""
+    now = now or datetime.now(notification_store._KST)
+    next_reset = notification_store._current_week_reset(now) + timedelta(days=7)
+    until_reset = (next_reset - now).total_seconds() + 5
+    return max(5.0, min(CLEANUP_INTERVAL_SECONDS, until_reset))
+
+
 async def _cleanup_loop() -> None:
     while True:
         try:
@@ -54,7 +67,7 @@ async def _cleanup_loop() -> None:
                 logger.info("전주 공대 알림 %d개 삭제 (주간 리셋)", purged)
         except Exception:
             logger.exception("주간 알림 정리 중 오류")
-        await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+        await asyncio.sleep(_cleanup_sleep_seconds())
 
 
 @asynccontextmanager
@@ -74,7 +87,23 @@ async def lifespan(app: FastAPI):
 # /docs·/redoc·/openapi.json은 끈다 — 로그인 없이 전체 라우트 목록(관리자 경로 포함)이 그대로
 # 공개되고 있었고, 30일 접근 로그에서 스캐너가 실제로 받아가고 있었다. 이 앱은 사람이 쓰는 HTML
 # 사이트라 API 문서가 필요 없다.
-app = FastAPI(title="로아봇 웹", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+_SAFE_PATH_VALUE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+async def _validate_path_ids(request: Request) -> None:
+    """URL 경로의 식별자(message_id·target_discord_id)는 영숫자만 허용한다. 봇 호출 URL에 그대로
+    들어가므로 `..`·`%2F` 같은 값이 다른 내부 API 경로로 새는 걸 라우트 앞단에서 막는다
+    (bot_client도 한 번 더 이스케이프한다)."""
+    for key in ("message_id", "target_discord_id"):
+        value = request.path_params.get(key)
+        if value is not None and not _SAFE_PATH_VALUE.match(str(value)):
+            raise StarletteHTTPException(status_code=404)
+
+
+app = FastAPI(
+    title="로아봇 웹", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None,
+    dependencies=[Depends(_validate_path_ids)],
+)
 
 templates.env.globals["get_guild_name"] = guild_info.get_name
 templates.env.globals["get_guild_icon_url"] = guild_info.get_icon_url
@@ -97,9 +126,25 @@ app.add_middleware(
 # HTML/CSS/JS는 gzip으로 5~10배 작아진다. SSE(text/event-stream)는 Starlette가 알아서
 # 제외하므로 실시간 알림에는 영향 없음.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+# CSRF — 규칙은 webapp/csrf.py 참고. 세션 미들웨어와 무관하게 헤더만 보므로 순서 영향 없음.
+app.add_middleware(OriginCheckMiddleware)
+
+class VersionedStaticFiles(StaticFiles):
+    """?v=<버전>이 붙은 요청(템플릿이 항상 붙인다)은 내용이 바뀌면 URL이 바뀌므로 1년 immutable,
+    버전 없는 요청은 매번 재검증. 안 붙이면 브라우저/Cloudflare가 휴리스틱으로만 캐시해 재요청이 잦았다."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code in (200, 304):
+            versioned = bool(parse_qs(scope.get("query_string", b"").decode("latin-1")).get("v"))
+            response.headers["Cache-Control"] = (
+                "public, max-age=31536000, immutable" if versioned else "no-cache"
+            )
+        return response
+
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", VersionedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(auth_routes.router)
 app.include_router(pages.router)
@@ -117,9 +162,25 @@ app.include_router(notifications.router)
 app.include_router(admin.router)
 
 
+def _login_required_response(request):
+    """로그인이 필요할 때의 응답. 페이지 이동만 /login으로 보낸다 — fetch/htmx/EventSource까지
+    /login(307)으로 보내면 그 요청이 /login의 OAuth state를 덮어써서 진행 중이던 로그인이
+    invalid_state로 깨지고, htmx POST는 아무 안내 없이 실패했다."""
+    headers = request.headers
+    is_htmx = bool(headers.get("HX-Request"))
+    is_sse = "text/event-stream" in headers.get("accept", "")
+    fetch_mode = headers.get("sec-fetch-mode")
+    is_fetch = (fetch_mode is not None and fetch_mode != "navigate") or bool(headers.get("x-requested-with"))
+    if is_htmx:
+        return PlainTextResponse("로그인이 필요합니다.", status_code=401, headers={"HX-Redirect": "/login"})
+    if is_sse or is_fetch:
+        return PlainTextResponse("로그인이 필요합니다.", status_code=401)
+    return RedirectResponse("/login")
+
+
 @app.exception_handler(NotAuthenticated)
 async def not_authenticated_handler(request, exc):
-    return RedirectResponse("/login")
+    return _login_required_response(request)
 
 
 def _error_page(request, status: int, title: str, desc: str):
@@ -145,7 +206,7 @@ async def http_exception_handler(request, exc):
     """웹앱 자체가 던지는 403(본인 캐릭터 아님·관리자 아님)/404 등이 FastAPI 기본 JSON으로 떨어졸
     사용자가 원시 {"detail": ...}를 보던 문제. 로그인 필요(401 NotAuthenticated)는 기존대로 /login."""
     if isinstance(exc, NotAuthenticated) or exc.status_code == 401:
-        return RedirectResponse("/login")
+        return _login_required_response(request)
     title, desc = _HTTP_TITLES.get(exc.status_code, ("요청을 처리하지 못했습니다", "잠시 후 다시 시도해주세요."))
     if isinstance(exc.detail, str) and exc.detail:
         desc = exc.detail

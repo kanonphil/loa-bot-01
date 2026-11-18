@@ -40,6 +40,31 @@ def _reset_bot_client_cache():
     bot_client._cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _reset_auth_and_guild_state():
+    """등록 여부 TTL 캐시가 테스트 간에 새면 '삭제된 유저' 시나리오가 앞 테스트 값에 가려진다.
+    길드 아이콘 재시도는 렌더마다 백그라운드 태스크를 띄우므로 테스트에서는 기본으로 끈다
+    (재시도 자체를 검증하는 테스트가 _next_attempt_at을 직접 0으로 되돌린다)."""
+    from webapp import guild_info
+    from webapp.auth import dependencies
+
+    from webapp import party_events
+
+    def _reset_party_events():
+        party_events._seen_ids.clear()
+        party_events._pending_vanished.clear()
+        party_events._pending_events.clear()
+        party_events._admin_hints.clear()
+
+    dependencies.clear_registration_cache()
+    _reset_party_events()
+    guild_info._next_attempt_at = float("inf")
+    yield
+    dependencies.clear_registration_cache()
+    _reset_party_events()
+    guild_info._next_attempt_at = 0.0
+
+
 @pytest.fixture()
 def notification_db(tmp_path, monkeypatch):
     """앱의 lifespan(startup)에 기대지 않고, 테스트가 직접 알림 DB를 준비한다."""
@@ -51,7 +76,9 @@ def notification_db(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def client(notification_db):
-    return TestClient(app, follow_redirects=False)
+    # 브라우저는 POST에 항상 Origin을 보낸다 — CSRF 미들웨어(webapp/csrf.py)가 같은 호스트만 통과시키므로
+    # 테스트 클라이언트도 TestClient 기본 호스트(testserver)를 Origin으로 보낸다.
+    return TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
 
 
 def extract_state(location: str) -> str:

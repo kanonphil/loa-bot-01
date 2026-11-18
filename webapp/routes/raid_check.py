@@ -16,7 +16,7 @@ from starlette.responses import RedirectResponse
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
-from webapp.flash import redirect_with_toast
+from webapp.flash import redirect_result, redirect_with_toast
 from webapp.format import period_view
 from webapp.raid_check import (
     applicable_raids, eligible_characters, extreme_raids, filter_groups_by_selection, group_by_category,
@@ -123,10 +123,15 @@ async def _page_context(discord_id: str, account: str | None) -> dict:
     }
 
 
-async def _render_extreme(request: Request, discord_id: str, toast: str | None = None, toast_type: str = "success"):
-    characters, raids = await asyncio.gather(
-        bot_client.get_user_characters_grouped(discord_id), bot_client.get_raids()
-    )
+async def _render_extreme(
+    request: Request, discord_id: str, toast: str | None = None, toast_type: str = "success",
+    characters: list[dict] | None = None, raids: dict | None = None,
+):
+    """characters/raids를 이미 들고 있으면 넘겨서 같은 봇 호출을 다시 하지 않는다."""
+    if characters is None or raids is None:
+        characters, raids = await asyncio.gather(
+            bot_client.get_user_characters_grouped(discord_id), bot_client.get_raids()
+        )
     extreme = await _extreme_section(discord_id, characters, raids)
     headers = {"X-Toast": quote(toast), "X-Toast-Type": toast_type} if toast else {}
     return templates.TemplateResponse(request, "_extreme_section.html", {"extreme": extreme}, headers=headers)
@@ -140,24 +145,46 @@ async def set_extreme(
     character_name: str = Form(...),
     user: dict = Depends(get_current_user),
 ):
-    if await _find_own_character(user["discord_id"], character_name) is None:
+    characters, raids = await asyncio.gather(
+        bot_client.get_user_characters_grouped(user["discord_id"]), bot_client.get_raids()
+    )
+    if not any(c["character_name"] == character_name for c in characters):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인 캐릭터만 체크할 수 있습니다.")
+    # 지금 운영 중인 익스트림 레이드의 실제 난이도만 받는다 — 폼 조작으로 일반 레이드·없는 난이도를 보내지 못하게.
+    live = {r["raid_name"]: r for r in extreme_raids(raids)}
+    if raid_name not in live or difficulty not in dict(live[raid_name]["difficulties"]):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="체크할 수 없는 레이드입니다.")
     result = await bot_client.set_extreme_completion(user["discord_id"], raid_name, difficulty, character_name)
     if not result.get("success"):
-        return await _render_extreme(request, user["discord_id"], result.get("reason") or "체크하지 못했습니다.", "error")
-    raids = await bot_client.get_raids()
+        return await _render_extreme(
+            request, user["discord_id"], result.get("reason") or "체크하지 못했습니다.", "error",
+            characters=characters, raids=raids,
+        )
     short = (raids.get(raid_name) or {}).get("short_name") or raid_name
-    return await _render_extreme(request, user["discord_id"], f"{short} {difficulty} 원정대 클리어 — {character_name}")
+    return await _render_extreme(
+        request, user["discord_id"], f"{short} {difficulty} 원정대 클리어 — {character_name}",
+        characters=characters, raids=raids,
+    )
 
 
 @router.post("/raid-check/extreme/clear")
 async def clear_extreme(
     request: Request, raid_name: str = Form(...), user: dict = Depends(get_current_user),
 ):
-    await bot_client.clear_extreme_completion(user["discord_id"], raid_name)
-    raids = await bot_client.get_raids()
+    result = await bot_client.clear_extreme_completion(user["discord_id"], raid_name)
+    characters, raids = await asyncio.gather(
+        bot_client.get_user_characters_grouped(user["discord_id"]), bot_client.get_raids()
+    )
+    if not result.get("success"):
+        return await _render_extreme(
+            request, user["discord_id"], result.get("reason") or "해제하지 못했습니다.", "error",
+            characters=characters, raids=raids,
+        )
     short = (raids.get(raid_name) or {}).get("short_name") or raid_name
-    return await _render_extreme(request, user["discord_id"], f"{short} 클리어 기록을 해제했습니다.", "info")
+    return await _render_extreme(
+        request, user["discord_id"], f"{short} 클리어 기록을 해제했습니다.", "info",
+        characters=characters, raids=raids,
+    )
 
 
 @router.get("/raid-check")
@@ -222,12 +249,15 @@ async def toggle_raid_check(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="본인 캐릭터만 체크할 수 있습니다."
         )
+    raids, categories = await asyncio.gather(bot_client.get_raids(), bot_client.get_raid_categories())
+    # 이 캐릭터가 실제로 입장할 수 있는 (레이드, 난이도)만 — 익스트림은 applicable_raids가 기본 제외한다.
+    # 폼을 조작해 임의 레이드/난이도(익스트림 포함)를 봇에 보내 주간 제한을 우회하지 못하게.
+    allowed = {(r, d) for r, d, _ in applicable_raids(raids, character.get("item_level") or 0)}
+    if (raid_name, difficulty) not in allowed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="체크할 수 없는 레이드입니다.")
 
     completed = await bot_client.toggle_completion(user["discord_id"], character_name, raid_name, difficulty)
 
-    raids, categories = await asyncio.gather(
-        bot_client.get_raids(), bot_client.get_raid_categories()
-    )
     card = await _character_card(user["discord_id"], character, raids, categories, account or None)
     short = (raids.get(raid_name) or {}).get("short_name") or raid_name
     toast = f"{character_name} · {short} {difficulty} {'완료 체크' if completed else '체크 해제'}"
@@ -248,14 +278,14 @@ async def raid_select_page(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="본인 캐릭터만 설정할 수 있습니다."
         )
-
-    raids, categories = await asyncio.gather(
-        bot_client.get_raids(), bot_client.get_raid_categories()
+    raids, categories, selection = await asyncio.gather(
+        bot_client.get_raids(),
+        bot_client.get_raid_categories(),
+        bot_client.get_raid_selection(user["discord_id"], character_name),
     )
     item_level = character.get("item_level") or 0
     groups = group_by_category(raids, categories, applicable_raids(raids, item_level))
 
-    selection = await bot_client.get_raid_selection(user["discord_id"], character_name)
     if selection["customized"]:
         selected_raids = set(selection["selected_raids"])
     else:
@@ -289,6 +319,6 @@ async def raid_select_save(
             status_code=status.HTTP_403_FORBIDDEN, detail="본인 캐릭터만 설정할 수 있습니다."
         )
 
-    await bot_client.set_raid_selection(user["discord_id"], character_name, raid_names)
+    result = await bot_client.set_raid_selection(user["discord_id"], character_name, raid_names)
     back = f"/raid-check?account={quote(account)}" if account else "/raid-check"
-    return redirect_with_toast(back, f"{character_name}의 레이드 선택을 저장했습니다.")
+    return redirect_result(back, result, f"{character_name}의 레이드 선택을 저장했습니다.", "레이드 선택을 저장하지 못했습니다.")

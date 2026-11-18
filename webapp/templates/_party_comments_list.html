@@ -9,7 +9,7 @@
       <div class="party-comment-head">
         <span class="party-comment-author">{{ c.author_name }}</span>
         {% if c.source == "web" %}{{ ui.chip("웹", "accent") }}{% endif %}
-        <span class="party-comment-time">{{ c.created_at }}</span>
+        <time class="party-comment-time" title="{{ c.created_at|kst_time }}">{{ c.created_at|time_ago }}</time>
         {% if c.source == "web" and c.discord_id == user.discord_id %}
         <form method="post" action="/parties/{{ party.message_id }}/comments/{{ c.id }}/delete" class="party-comment-delete-form"
               hx-post="/parties/{{ party.message_id }}/comments/{{ c.id }}/delete" hx-target="#party-comments-list" hx-swap="outerHTML"

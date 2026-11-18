@@ -4,7 +4,7 @@ import asyncio
 import pytest
 import respx
 
-from webapp import notification_store, party_events
+from webapp import notification_store, party_events, sse
 from webapp.routes import notifications
 from webapp.tests.conftest import log_in, without_toast
 
@@ -200,10 +200,10 @@ def test_save_type_preferences_filters_panel(client):
     resp = client.post("/notifications/preferences", data={"cleared": "on", "guest_joined": "on"})
     assert resp.status_code == 303
 
+    assert client.get("/notifications/count").json()["count"] == 1  # 패널을 열면 읽음 처리되므로 먼저 센다
     resp = client.get("/notifications/panel")
     assert "클리어 알림" in resp.text
     assert "모집 알림" not in resp.text
-    assert client.get("/notifications/count").json()["count"] == 1
 
 
 def test_raid_filter_add_and_remove_roundtrip(client):
@@ -233,7 +233,7 @@ def test_raid_filter_add_and_remove_roundtrip(client):
 def test_stream_filters_events_by_user_preferences(monkeypatch, notification_db):
     """실시간 toast(SSE)도 종류 토글을 따라야 한다 — created를 끈 유저에겐
     created 이벤트가 스킵되고 다음 이벤트(cleared)만 전달된다."""
-    monkeypatch.setattr(notifications, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr(sse, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
 
     async def scenario():
         await notification_store.set_type_preferences("111", created=False, cleared=True, guest_joined=True)
@@ -253,7 +253,7 @@ def test_stream_filters_events_by_user_preferences(monkeypatch, notification_db)
 
 
 def test_stream_sends_keepalive_then_notification_event(monkeypatch):
-    monkeypatch.setattr(notifications, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr(sse, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
 
     async def scenario():
         gen = notifications._stream(_FakeRequest())
@@ -271,7 +271,7 @@ def test_stream_sends_keepalive_then_notification_event(monkeypatch):
 
 
 def test_stream_unsubscribes_on_close(monkeypatch):
-    monkeypatch.setattr(notifications, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr(sse, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
 
     async def scenario():
         gen = notifications._stream(_FakeRequest())

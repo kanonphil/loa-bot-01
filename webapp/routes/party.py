@@ -1,12 +1,11 @@
 """공대 모집 페이지 — 목록/상세/참여/나가기/개설/파티장 관리."""
 import asyncio
-import json
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import RedirectResponse
 
-from webapp import config
+from webapp import config, party_events
 from webapp.auth.dependencies import get_current_user, require_admin
 from webapp.clients import bot_client
 from webapp.flash import redirect_with_toast
@@ -173,7 +172,6 @@ async def create_party_form(
             "user": user,
             "active": "parties",
             "groups": groups,
-            "groups_json": json.dumps(groups, ensure_ascii=False),
             # 개설 실패 후 되돌아왔을 때 채워줄 값(쿼리) — 없으면 빈 폼
             "preset": {k: request.query_params.get(k, "") for k in
                        ("raid", "difficulty", "proficiency", "scheduled_datetime", "memo", "character_name", "role")},
@@ -243,39 +241,52 @@ async def _detail_context(
     viewing_as_admin = is_admin and admin_mode and not is_actual_leader
     other_members = [s for s in party["slots"] if s["discord_id"] != discord_id]
     my_slot = next((s for s in party["slots"] if s["discord_id"] == discord_id), None)
-    can_switch_to_support = False
+    not_finished = party["status"] != "disbanded"
+    can_join_view = not joined and not_finished
+    show_invite = is_leader and not_finished
+
+    # get_party 이후의 호출은 서로 의존하지 않는다 — 예전엔 3~5번을 순서대로 기다렸다.
+    calls: dict = {
+        "comments": bot_client.get_party_comments(message_id),  # 리더 여부와 무관하게 누구나 볼 수 있다.
+        "raids": bot_client.get_raids(),
+    }
     if joined and my_slot and my_slot["role"] != "support":
-        support_classes = set(await bot_client.get_support_classes())
-        can_switch_to_support = my_slot["character_class"] in support_classes
-    eligibility = None
+        calls["support_classes"] = bot_client.get_support_classes()
+    if can_join_view:
+        # Discord PartyView._handle_waitlist와 동일한 조건(참여 안 했고 파티가 종료되지 않음)
+        calls["eligibility"] = bot_client.get_party_eligibility(message_id, discord_id)
+        calls["waitlist"] = bot_client.get_waitlist_status(message_id, discord_id)
+    if show_invite:
+        # 게스트 초대(미등록 유저)는 웹에 동등한 UI가 없어 v1 범위에서 제외 — 등록된 유저만 초대할 수 있다.
+        calls["invite"] = bot_client.get_invitable_users(message_id, discord_id)
+        calls["proficiency"] = bot_client.get_proficiency_options()
+    fetched = dict(zip(calls, await asyncio.gather(*calls.values())))
+
+    support_classes = set(fetched.get("support_classes") or [])
+    can_switch_to_support = bool(
+        joined and my_slot and my_slot["role"] != "support" and my_slot["character_class"] in support_classes
+    )
+    eligibility = fetched.get("eligibility")
     character_is_support = {}
     on_waitlist = False
-    if not joined and party["status"] != "disbanded":
-        eligibility = await bot_client.get_party_eligibility(message_id, discord_id)
+    if can_join_view:
         if eligibility and eligibility.get("qualifying"):
+            # 자격 있는 캐릭터가 있을 때만 필요하고, 20초 TTL 캐시라 거의 왕복이 없다.
             support_classes = set(await bot_client.get_support_classes())
             character_is_support = {
                 q["name"]: q["class"] in support_classes for q in eligibility["qualifying"]
             }
-        # Discord PartyView._handle_waitlist와 동일한 조건(참여 안 했고 파티가
-        # 종료되지 않음)일 때만 노출 — 웹에 없던 기능이라 이번에 추가.
-        waitlist_status = await bot_client.get_waitlist_status(message_id, discord_id)
-        on_waitlist = waitlist_status["on_waitlist"]
+        on_waitlist = fetched["waitlist"]["on_waitlist"]
 
     invitable_users = []
     invitable_slots = []
-    if is_leader and party["status"] != "disbanded":
-        # 게스트 초대(미등록 유저)는 웹에 동등한 UI가 없어 v1 범위에서 제외 —
-        # 등록된 유저만 초대할 수 있다.
-        invite_result = await bot_client.get_invitable_users(message_id, discord_id)
-        if invite_result.get("success"):
-            invitable_users = invite_result["users"]
-            invitable_slots = invite_result["available_slots"]
+    invite_result = fetched.get("invite")
+    if invite_result and invite_result.get("success"):
+        invitable_users = invite_result["users"]
+        invitable_slots = invite_result["available_slots"]
 
-    # 파티 스레드 댓글 — 리더 여부와 무관하게 누구나 볼 수 있다.
-    comments = await bot_client.get_party_comments(message_id)
-
-    raids = await bot_client.get_raids()
+    comments = fetched["comments"]
+    raids = fetched["raids"]
     raid_info = raids.get(party["raid_name"], {})
     period = period_view(raid_info["available_until"]) if raid_info.get("available_until") else None
     diff_info = (raid_info.get("difficulties") or {}).get(party["difficulty"], {})
@@ -284,9 +295,9 @@ async def _detail_context(
 
     difficulty_options = []
     proficiency_options = []
-    if is_leader and party["status"] != "disbanded":
+    if show_invite:
         difficulty_options = list((raid_info.get("difficulties") or {}).keys())
-        proficiency_options = await bot_client.get_proficiency_options()
+        proficiency_options = fetched["proficiency"]
 
     slot_by_number = {s["slot_number"]: s for s in party["slots"]}
 
@@ -647,14 +658,22 @@ async def admin_revert_clear(
 ):
     """클리어 취소(되돌리기) — 파티장도 못 쓰는 관리자 전용 액션이라 require_admin으로
     이 경로만 따로 막는다(다른 파티 액션들은 관리자·파티장 겸용이라 get_current_user)."""
+    # 되살아난 파티가 "모집을 시작했습니다" 알림으로 나가지 않게 폴링 루프에 미리 알린다.
+    party_events.note_admin_action(message_id, "revert")
     result = await bot_client.admin_revert_clear(message_id, user["discord_id"])
+    if not result.get("success"):
+        party_events.clear_admin_hint(message_id)
     return _redirect_with_result(message_id, result, "되돌리지 못했습니다.", "클리어를 되돌렸습니다.")
 
 
 @router.post("/parties/{message_id}/admin-disband")
 async def admin_disband(request: Request, message_id: str, user: dict = Depends(require_admin)):
     """파티 종료(스레드 유지) — 취소(스레드 삭제)와 구분되는 관리자 전용 액션."""
+    # 종료도 클리어와 같은 status='disbanded'라, 알림이 "클리어했습니다"로 나가지 않게 미리 알린다.
+    party_events.note_admin_action(message_id, "disband")
     result = await bot_client.admin_disband_party(message_id, user["discord_id"])
+    if not result.get("success"):
+        party_events.clear_admin_hint(message_id)
     return _redirect_with_result(message_id, result, "파티를 종료하지 못했습니다.", "파티를 종료했습니다(스레드는 유지).")
 
 

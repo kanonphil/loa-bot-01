@@ -25,8 +25,20 @@ from webapp.flash import redirect_result, redirect_with_toast
 from webapp.format import is_overdue_party, party_view
 from webapp.routes.party import _history_view
 from webapp.templating import templates
+from webapp.utils import safe_local_path
 
 router = APIRouter()
+
+
+def _parse_split(raw: str) -> tuple[int | None, str | None]:
+    """파티 분할 인원 입력 — 비우면 분할 없음. 숫자가 아니면 (None, 오류문구). int()를 바로 부르면
+    "abc" 한 번에 500이 났다."""
+    raw = raw.strip()
+    if not raw:
+        return None, None
+    if not (raw.isascii() and raw.isdigit()):
+        return None, "파티 분할 인원은 숫자로 입력해주세요."
+    return int(raw), None
 
 TABS = [
     ("categories", "카테고리"),
@@ -80,14 +92,14 @@ async def toggle_admin_mode(request: Request, user: dict = Depends(require_admin
     path = referer.path or "/main"
     if referer.query:
         path = f"{path}?{referer.query}"
-    return RedirectResponse(path, status_code=303)
+    return RedirectResponse(safe_local_path(path, "/main"), status_code=303)
 
 
 # ── 레이드 관리 화면 (카테고리/레이드/난이도 탭) ─────────────
 
 @router.get("/admin/raids")
 async def admin_raids_page(
-    request: Request, tab: str | None = None, error: str | None = None,
+    request: Request, tab: str | None = None,
     raid: str | None = None, user: dict = Depends(require_admin),
 ):
     if tab not in _TAB_KEYS:
@@ -124,7 +136,6 @@ async def admin_raids_page(
             "grouped": grouped,
             "raids": raids,
             "raid_names": sorted(raids.keys()),
-            "error": error,
             "selected_raid": selected_raid,
         },
     )
@@ -198,7 +209,9 @@ async def add_difficulty(
     party_split: str = Form(""), gates: int = Form(1),
     user: dict = Depends(require_admin),
 ):
-    split = int(party_split) if party_split.strip() else None
+    split, split_error = _parse_split(party_split)
+    if split_error:
+        return redirect_with_toast(f"/admin/raids?tab=difficulties&raid={quote(raid_name)}", split_error, "error")
     result = await bot_client.admin_add_difficulty(
         user["discord_id"], raid_name, difficulty.strip(), min_level, total_slots, split, gates,
     )
@@ -257,7 +270,9 @@ async def update_difficulty(
     party_split: str = Form(""), gates: int = Form(1),
     user: dict = Depends(require_admin),
 ):
-    split = int(party_split) if party_split.strip() else None
+    split, split_error = _parse_split(party_split)
+    if split_error:
+        return redirect_with_toast(f"/admin/raids?tab=difficulties&raid={quote(raid_name)}", split_error, "error")
     result = await bot_client.admin_update_difficulty(
         user["discord_id"], raid_name, difficulty, min_level, total_slots, split, gates,
     )
@@ -338,7 +353,7 @@ async def set_raid_period(
 
 @router.get("/admin/classes")
 async def admin_classes_page(
-    request: Request, error: str | None = None, user: dict = Depends(require_admin),
+    request: Request, user: dict = Depends(require_admin),
 ):
     job_classes = await bot_client.get_job_classes()
     return templates.TemplateResponse(
@@ -348,7 +363,6 @@ async def admin_classes_page(
             "user": user,
             "active": "admin_classes",
             "job_classes": sorted(job_classes, key=lambda c: c["name"]),
-            "error": error,
         },
     )
 
@@ -381,8 +395,7 @@ def _closed_status_view(entry: dict) -> dict:
 
 @router.get("/admin/parties")
 async def admin_parties_page(
-    request: Request, tab: str = "open", forum_saved: int | None = None,
-    forum_error: str | None = None, user: dict = Depends(require_admin),
+    request: Request, tab: str = "open", user: dict = Depends(require_admin),
 ):
     if tab not in ("open", "closed"):
         tab = "open"
@@ -415,8 +428,6 @@ async def admin_parties_page(
             "counts": counts,
             "bot_status": bot_status,
             "forum": forum,
-            "forum_saved": forum_saved,
-            "forum_error": forum_error,
         },
     )
 
@@ -584,7 +595,7 @@ NOTIFICATION_TABS = [("subscriptions", "구독 현황"), ("logs", "발송 로그
 
 @router.get("/admin/notifications")
 async def admin_notifications_page(
-    request: Request, tab: str = "subscriptions", error: str | None = None,
+    request: Request, tab: str = "subscriptions",
     sent: int | None = None, total: int | None = None,
     user: dict = Depends(require_admin),
 ):
@@ -593,7 +604,7 @@ async def admin_notifications_page(
     uid = user["discord_id"]
     ctx: dict = {
         "user": user, "active": "admin_notifications", "tabs": NOTIFICATION_TABS, "tab": tab,
-        "error": error, "sent": sent, "total": total,
+        "sent": sent, "total": total,
     }
     if tab == "subscriptions":
         subs = await bot_client.admin_subscriptions(uid)
@@ -674,12 +685,17 @@ async def admin_completion_toggle(
 ):
     """htmx — 체크 하나를 바꾸고 그리드만 다시 그린다(레이드 체크 카드와 같은 패턴)."""
     uid = user["discord_id"]
-    await bot_client.admin_set_completion(
+    result = await bot_client.admin_set_completion(
         uid, target_discord_id, character_name, raid_name, difficulty, week_key, done == "1",
     )
     grid = await _completion_grid(uid, target_discord_id, character_name, week_key)
-    toast = f"{character_name} · {raid_name} {difficulty} {'완료 체크' if done == '1' else '체크 해제'}"
+    if not result.get("success"):
+        # 봇이 거부했는데(관리자 권한 상실 등) 성공 토스트를 띄우던 문제
+        toast, toast_type = result.get("reason") or "체크를 저장하지 못했습니다.", "error"
+    else:
+        toast = f"{character_name} · {raid_name} {difficulty} {'완료 체크' if done == '1' else '체크 해제'}"
+        toast_type = "success" if done == "1" else "info"
     return templates.TemplateResponse(
         request, "_admin_completion_grid.html", {"grid": grid},
-        headers={"X-Toast": quote(toast), "X-Toast-Type": "success" if done == "1" else "info"},
+        headers={"X-Toast": quote(toast), "X-Toast-Type": toast_type},
     )

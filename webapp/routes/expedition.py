@@ -1,18 +1,22 @@
 """원정대 관리 — 웹에서 캐릭터 등록/삭제/아이템레벨 동기화.
 Discord의 /캐릭터등록, /캐릭터삭제, "동기화" 버튼과 동일한 봇 내부 로직을 그대로 호출한다."""
+import asyncio
+
 from fastapi import APIRouter, Depends, Form, Request
 
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
 from webapp.flash import redirect_result
 from webapp.templating import templates
-from webapp.utils import time_ago
+from webapp.utils import safe_local_path, time_ago
 
 router = APIRouter()
 
 
 async def _page_context(discord_id: str) -> dict:
-    characters = await bot_client.get_user_characters_grouped(discord_id)
+    characters, accounts = await asyncio.gather(
+        bot_client.get_user_characters_grouped(discord_id), bot_client.list_accounts(discord_id)
+    )
     groups: list[dict] = []
     seen_labels: dict[str, dict] = {}
     for c in characters:
@@ -28,7 +32,6 @@ async def _page_context(discord_id: str) -> dict:
         latest = max((c.get("cached_at") or "" for c in group["characters"]), default="")
         group["last_sync"] = time_ago(latest) if latest else ""
     # 캐릭터 카드 자체는 기존과 동일하게 평탄화된 목록으로도 노출 (기존 템플릿/테스트 호환)
-    accounts = await bot_client.list_accounts(discord_id)
     return {"characters": characters, "character_groups": groups, "accounts": accounts}
 
 
@@ -67,7 +70,7 @@ async def sync_characters(next: str = Form("/expedition"), user: dict = Depends(
     """동기화는 캐릭터 수만큼 로스트아크 API를 돌아 수 초 걸린다 — 결과를 렌더하지 않고 redirect 해야
     뒤로가기/F5가 동기화를 다시 돌리지 않는다. next: 메인 카드 등 다른 곳에서 눌렀을 때 돌아갈 경로."""
     result = await bot_client.sync_characters(user["discord_id"])
-    target = next if next.startswith("/") and not next.startswith("//") else "/expedition"
+    target = safe_local_path(next, "/expedition")
     msg = f"{result.get('updated', 0)}/{result.get('total', 0)}개 캐릭터 동기화 완료"
     return redirect_result(target, result, msg, "동기화하지 못했습니다.")
 

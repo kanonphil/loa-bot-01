@@ -95,7 +95,7 @@ def test_notifications_logs_tab(client, monkeypatch):
             {"id": 1, "discord_id": "222", "raid_name": "아르모체(4막)", "difficulty": "하드", "message_id": "900", "sent_at": "2026-09-10 12:00:00"},
         ]))
         resp = client.get("/admin/notifications?tab=logs")
-    assert "2026-09-10 12:00:00" in resp.text
+    assert "2026-09-10 21:00" in resp.text  # DB는 UTC, 화면은 KST
     assert "/parties/900" in resp.text
 
 

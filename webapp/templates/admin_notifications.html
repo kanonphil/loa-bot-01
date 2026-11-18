@@ -44,7 +44,7 @@
       <tbody>
         {% for l in logs %}
         <tr class="admin-log-row">
-          <td>{{ l.sent_at }}</td>
+          <td><time title="{{ l.sent_at|time_ago }}">{{ l.sent_at|kst_time }}</time></td>
           <td>{{ l.discord_id }}</td>
           <td>{{ l.raid_name }}</td>
           <td>{{ l.difficulty }}</td>
