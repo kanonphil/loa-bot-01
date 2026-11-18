@@ -947,8 +947,60 @@ async def update_character_combat_power(discord_id: str, character_name: str, co
             "WHERE discord_id=? AND character_name=?",
             (float(combat_power), discord_id, character_name),
         )
+        updated = cur.rowcount > 0
+        if updated:
+            # 전투력 추이용 일별 기록(하루 한 줄, 같은 날 다시 쓰면 덮어쓴다). 일일 4시 동기화,
+            # 수동 동기화, 캐릭터 상세 동기화가 모두 이 함수를 거치므로 여기 한 곳에서 남긴다.
+            # 아이템레벨은 같은 동기화가 직전에 갱신한 캐시 값을 함께 적는다.
+            await db.execute(
+                "INSERT INTO character_cp_history (character_name, date, combat_power, item_level) "
+                "SELECT character_name, ?, ?, item_level FROM user_characters "
+                "WHERE discord_id=? AND character_name=? "
+                "ON CONFLICT(character_name, date) DO UPDATE SET "
+                "combat_power=excluded.combat_power, "
+                "item_level=COALESCE(excluded.item_level, character_cp_history.item_level)",
+                (datetime.now(KST).date().isoformat(), float(combat_power), discord_id, character_name),
+            )
         await db.commit()
-        return cur.rowcount > 0
+        return updated
+
+
+async def get_cp_history(character_name: str, days: int = 90) -> list[dict]:
+    """캐릭터 전투력/아이템레벨 일별 기록(오래된 날짜부터)."""
+    since = (datetime.now(KST).date() - timedelta(days=max(int(days), 1) - 1)).isoformat()
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT date, combat_power, item_level FROM character_cp_history "
+            "WHERE character_name=? AND date>=? ORDER BY date",
+            (character_name, since),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_cp_baselines(character_names: list[str], days: int = 7) -> dict[str, float]:
+    """랭킹 cp_growth_7d용 — 각 캐릭터의 'days일 전 이전 마지막 기록' 전투력.
+    그만큼 오래된 기록이 없으면 빠진다(증가량 null)."""
+    names = [n for n in dict.fromkeys(character_names) if n]
+    if not names:
+        return {}
+    cutoff = (datetime.now(KST).date() - timedelta(days=days)).isoformat()
+    out: dict[str, float] = {}
+    async with _connect() as db:
+        for i in range(0, len(names), 500):
+            chunk = names[i:i + 500]
+            marks = ",".join("?" * len(chunk))
+            cur = await db.execute(
+                "SELECT h.character_name, h.combat_power FROM character_cp_history h "
+                "JOIN (SELECT character_name, MAX(date) AS d FROM character_cp_history "
+                f"      WHERE date<=? AND combat_power IS NOT NULL AND character_name IN ({marks}) "
+                "      GROUP BY character_name) last "
+                "ON last.character_name=h.character_name AND last.d=h.date",
+                (cutoff, *chunk),
+            )
+            for name, cp in await cur.fetchall():
+                out[name] = cp
+    return out
 
 
 async def get_character_armory_cache(discord_id: str, character_name: str) -> dict | None:
@@ -1040,7 +1092,13 @@ async def get_expedition_ranking(metric: str, limit: int = 100, role: str | None
                 (limit,),
             )
         rows = await cur.fetchall()
-    return [dict(r) for r in rows]
+    entries = [dict(r) for r in rows]
+    # 7일 전투력 증가량 — 현재 캐시 전투력 − 7일 전(이전) 마지막 기록. 비교할 기록이 없으면 None.
+    baselines = await get_cp_baselines([e.get("character_name") for e in entries])
+    for e in entries:
+        base, cp = baselines.get(e.get("character_name")), e.get("combat_power")
+        e["cp_growth_7d"] = round(float(cp) - float(base), 2) if base is not None and cp is not None else None
+    return entries
 
 
 async def update_character_cache(

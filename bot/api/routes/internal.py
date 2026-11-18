@@ -1946,3 +1946,15 @@ async def admin_set_loa_tracked_items(body: TrackedItemsBody):
     return {"success": False, "reason": f"추적 아이템은 최대 {loa_content.MAX_TRACKED_ITEMS}개까지 지정할 수 있습니다."}
   names, unresolved = await loa_content.set_tracked_items(cleaned)
   return {"success": True, "names": names, "unresolved": unresolved}
+
+
+# ── 전투력 추이 ───────────────────────────────────────────────
+
+@router.get("/characters/{name}/history")
+async def character_cp_history(name: str, discord_id: str, days: int = 90):
+  """캐릭터 전투력/아이템레벨 일별 기록 — 본인뿐 아니라 등록된 길드원 누구나 볼 수 있다
+  (랭킹처럼 길드 안에서는 공개 정보)."""
+  if not await db.user_exists(discord_id):
+    raise HTTPException(status_code=403, detail="등록된 길드원만 볼 수 있습니다.")
+  days = min(max(days, 1), 365)
+  return {"items": await db.get_cp_history(name, days)}
