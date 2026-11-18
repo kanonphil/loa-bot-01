@@ -60,6 +60,7 @@ INVITES = [{"message_id": "p2", "slot_number": 6, "invited_at": (datetime.utcnow
             "scheduled_datetime": PARTIES[1]["scheduled_datetime"], "leader_id": "222", "min_level": 1710, "status": "recruiting"}]
 
 def j(x): return JSONResponse(x)
+__import__("stub_exp").register(app)  # 원정대·더보기 확장 스텁(앞에 등록된 경로가 이긴다)
 
 @app.get("/api/internal/verify-user")
 async def verify(discord_id: str): return j({"discord_id": discord_id, "registered": True})
