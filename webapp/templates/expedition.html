@@ -26,7 +26,7 @@
 
 <div class="exp-listhead">
   <h2 class="exp-h">내 캐릭터</h2><span class="ui-chip">{{ characters|length }}</span>
-  {% if character_groups|length == 1 and character_groups[0].last_sync %}<span class="exp-meta">마지막 동기화 {{ character_groups[0].last_sync }}</span>{% endif %}
+  {% if character_groups|length == 1 and character_groups[0].last_sync %}<span class="exp-meta">마지막 동기화 <time title="{{ character_groups[0].last_sync_at|kst_time }}">{{ character_groups[0].last_sync }}</time></span>{% endif %}
   <form method="post" action="/expedition/sync" class="exp-sync" data-sync-form>
     <span class="exp-meta" data-sync-note role="status" aria-live="polite">아이템 레벨은 매일 04시에 자동으로 갱신됩니다.</span>
     <button type="submit" class="btn" data-busy-text="동기화 중">전체 동기화</button>
@@ -48,7 +48,7 @@
   <div class="exp-group-head">
     <h3 class="exp-sub expedition-account-title">{{ group.label }}</h3>
     <span class="ui-chip">{{ group.characters|length }}</span>
-    {% if group.last_sync %}<span class="exp-meta exp-push">마지막 동기화 {{ group.last_sync }}</span>{% endif %}
+    {% if group.last_sync %}<span class="exp-meta exp-push">마지막 동기화 <time title="{{ group.last_sync_at|kst_time }}">{{ group.last_sync }}</time></span>{% endif %}
   </div>
   {% endif %}
   <ul class="exp-grid">
@@ -56,10 +56,10 @@
     <li class="ui-card exp-char">
       <a class="exp-char-main" href="/characters/{{ c.character_name | urlencode }}">
         <span class="exp-char-name trunc">{{ c.character_name }}</span>
-        <span class="exp-meta">{{ c.character_class or "—" }} &middot; <span class="num">{% if c.item_level is not none %}{{ "%.2f"|format(c.item_level|float) }}{% else %}—{% endif %}</span></span>
+        <span class="exp-meta">{{ c.character_class or "—" }} &middot; <span class="num">{% if c.item_level is not none %}{{ c.item_level | ilvl }}{% else %}—{% endif %}</span></span>
       </a>
       <dl class="exp-char-stats">
-        <div><dt>전투력</dt><dd class="num">{% if c.combat_power is not none %}{{ "{:,.2f}".format(c.combat_power|float) }}{% else %}—{% endif %}</dd></div>
+        <div><dt>전투력</dt><dd class="num">{{ c.combat_power | cp }}</dd></div>
         <div><dt>7일 변화</dt>
           <dd class="num">{% if c.cp_growth_7d is not none %}{% set g = c.cp_growth_7d|float -%}
             {%- if g > 0 %}<span class="exp-up">▲ +{{ "{:,.2f}".format(g) }}</span>{% elif g < 0 %}<span class="exp-down">▼ −{{ "{:,.2f}".format(g|abs) }}</span>{% else %}<span class="exp-meta">변화 없음</span>{% endif %}

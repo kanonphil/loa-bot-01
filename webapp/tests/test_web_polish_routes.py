@@ -172,7 +172,7 @@ def test_expedition_shows_last_sync_and_search_for_many_characters(client):
         resp = client.get("/expedition")
 
     body = resp.text
-    assert "마지막 동기화 3시간 전" in body
+    assert "마지막 동기화 <time title=" in body and ">3시간 전</time>" in body
     assert "매일 04시" in body
     assert 'data-filter-target="#expedition-groups"' in body
 

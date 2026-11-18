@@ -274,7 +274,7 @@
         input.dataset.role = o.role;
         var name = el("span", "pt-copt-name");
         name.appendChild(el("b", "", o.name));
-        name.appendChild(el("span", "pt-meta", o.cls + " · " + (o.level != null ? Number(o.level).toFixed(1) : "-")));
+        name.appendChild(el("span", "pt-meta", o.cls + " · " + (o.level != null ? Number(o.level).toFixed(2) : "—")));
         var why;
         if (!o.ok) why = o.reason;
         else {

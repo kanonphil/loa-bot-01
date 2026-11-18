@@ -22,7 +22,7 @@
   {% if not x.cleared %}
   {% for d in x.diffs if d.eligible | length > 1 %}
   <div class="menu hw-x-menu" data-float id="xm-{{ where }}-{{ idx }}-{{ x.diffs.index(d) }}" role="menu" aria-label="{{ d.name }} 클리어 캐릭터" hidden>
-    {% for c in d.eligible %}<button type="button" class="menu-item" role="menuitem" data-x-pick="{{ c.name }}" data-x-diff="{{ d.name }}">{{ c.name }}<span class="menu-state num">{{ '%.1f' | format(c.item_level or 0) }}</span></button>{% endfor %}
+    {% for c in d.eligible %}<button type="button" class="menu-item" role="menuitem" data-x-pick="{{ c.name }}" data-x-diff="{{ d.name }}">{{ c.name }}<span class="menu-state num">{{ c.item_level | ilvl }}</span></button>{% endfor %}
   </div>
   {% endfor %}
   {% endif %}

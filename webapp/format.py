@@ -110,17 +110,33 @@ def reset_view(now: datetime | None = None) -> dict:
     }
 
 
+# 공대 상태 표기 — 홈·달력·이력·목록·상세·관리가 전부 이것만 쓴다(같은 상태는 어디서나 같은 글자·색).
+# 파티완성은 골드(warn): 클리어(ok, 초록)와 둘 다 초록이면 구분이 어려웠다.
+STATUS_LABELS: dict[str, tuple[str, str]] = {
+    "recruiting": ("모집중", "accent"),
+    "full": ("파티완성", "warn"),
+    "closed": ("마감", ""),
+    "disbanded": ("종료", ""),
+    "cleared": ("클리어", "ok"),
+    "expired": ("기한 만료", "past"),
+    "cancelled": ("취소", "danger"),
+}
+
+
+def status_view(party: dict) -> tuple[str, str]:
+    """(라벨, 톤). disbanded는 클리어로 끝난 것과 관리자가 종료한 것이 같은 상태값이라 cleared_at으로 나눈다 —
+    cleared_at 칸이 있는데 비어 있으면 "종료", 칸 자체가 없는 응답(이력 목록)은 예전처럼 "클리어"."""
+    status = party.get("status")
+    if status == "disbanded" and ("cleared_at" not in party or party.get("cleared_at")):
+        status = "cleared"
+    return STATUS_LABELS.get(status, (str(status or ""), ""))
+
+
 def party_view(party: dict, now: datetime | None = None) -> dict:
     """공대 카드가 필요로 하는 표시 정보를 한 번에 붙여준다."""
     filled = len(party.get("slots") or [])
     total = party.get("total_slots") or 0
-    status = party.get("status")
-    if status == "recruiting":
-        tone, status_label = ("accent", "모집중")
-    elif status == "full":
-        tone, status_label = ("warn", "파티완성")  # 이력 화면의 "클리어"(ok, 초록)와 같은 상태 표기를 유지
-    else:
-        tone, status_label = ("", "마감")
+    status_label, tone = status_view(party)
     return {
         **party,
         "schedule": schedule_view(party.get("scheduled_datetime"), party.get("scheduled_time"), now),

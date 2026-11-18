@@ -15,7 +15,7 @@
     <option value="" disabled selected>변경할 캐릭터 선택</option>
     {% for c in eligibility.candidates %}
     <option value="{{ c.name }}">
-      {{ c.name }} ({{ c['class'] }}, {{ c.level }}){% if c.in_other_party %} — 타 공대 참여중{% endif %}
+      {{ c.name }} ({{ c['class'] }}, {{ c.level | ilvl }}){% if c.in_other_party %} — 타 공대 참여중{% endif %}
     </option>
     {% endfor %}
   </select>
@@ -30,7 +30,7 @@
   <p class="party-switch-ineligible-title">아래 캐릭터는 선택할 수 없습니다</p>
   <ul>
     {% for name in eligibility.gold_done %}<li>{{ name }} — 이번 주 이미 클리어함</li>{% endfor %}
-    {% for c in eligibility.level_too_low %}<li>{{ c.name }} — 아이템 레벨 미달 ({{ c.level }})</li>{% endfor %}
+    {% for c in eligibility.level_too_low %}<li>{{ c.name }} — 아이템 레벨 미달 ({{ c.level | ilvl }})</li>{% endfor %}
     {% for name in eligibility.no_cache %}<li>{{ name }} — 아이템 레벨 정보 없음 (원정대 관리에서 동기화 필요)</li>{% endfor %}
   </ul>
 </div>

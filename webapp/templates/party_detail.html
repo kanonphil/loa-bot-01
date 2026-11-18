@@ -92,7 +92,7 @@
     <form method="post" action="/parties/{{ mid }}/join" class="pt-row" id="join-form">
       <select name="character_name" id="join-character-select" class="js-themed-select" aria-label="참여 캐릭터">
         {% for q in eligibility.qualifying %}
-        <option value="{{ q.name }}">{{ q.name }} · {{ q['class'] }} {{ q.level }}</option>
+        <option value="{{ q.name }}">{{ q.name }} · {{ q['class'] }} {{ q.level | ilvl }}</option>
         {% endfor %}
       </select>
       <select name="role" id="join-role-select" class="js-themed-select" aria-label="역할">
@@ -114,7 +114,7 @@
       <b class="pt-warn">참여할 수 있는 캐릭터가 없습니다</b>
       {% if eligibility.gold_done %}<br>이번 주 완료: {{ eligibility.gold_done | join(', ') }}{% endif %}
       {% if eligibility.in_other_party %}<br>다른 공대 참여 중: {{ eligibility.in_other_party | join(', ') }}{% endif %}
-      {% if eligibility.level_too_low %}<br>레벨 {{ eligibility.min_level | int }} 필요: {% for c in eligibility.level_too_low %}{{ c.name }} ({{ c.level }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+      {% if eligibility.level_too_low %}<br>레벨 {{ eligibility.min_level | int }} 필요: {% for c in eligibility.level_too_low %}{{ c.name }} ({{ c.level | ilvl }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
       {% if eligibility.no_cache %}<br>레벨 미확인: {{ eligibility.no_cache | join(', ') }} — 원정대 화면에서 동기화해 주세요.{% endif %}
     </div>
     {% elif eligibility %}

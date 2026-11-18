@@ -76,6 +76,7 @@ async def _page_context(discord_id: str) -> dict:
         # 매일 04시 자동 동기화가 있다는 걸 모르면 "왜 레벨이 옛날 거냐"가 된다 — 최근 갱신 시각을 보여준다
         latest = max((c.get("cached_at") or "" for c in group["characters"]), default="")
         group["last_sync"] = time_ago(latest) if latest else ""
+        group["last_sync_at"] = latest  # 올리면 한국 시간 전체(<time title>)
     # 캐릭터 카드 자체는 기존과 동일하게 평탄화된 목록으로도 노출 (기존 템플릿/테스트 호환)
     return {"characters": characters, "character_groups": groups, "accounts": accounts}
 

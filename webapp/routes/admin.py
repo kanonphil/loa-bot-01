@@ -21,7 +21,7 @@ from webapp import config, notification_store, party_events
 from webapp.auth.dependencies import require_admin
 from webapp.clients import bot_admin, bot_client
 from webapp.flash import redirect_result, redirect_with_toast
-from webapp.format import is_overdue_party, party_view
+from webapp.format import is_overdue_party, party_view, status_view
 from webapp.routes.party import _history_view
 from webapp.templating import templates
 from webapp.utils import kst_time, safe_local_path, time_ago
@@ -496,11 +496,8 @@ async def delete_class(name: str = Form(...), user: dict = Depends(require_admin
 # 줄에서 바로 하는 건 열기 · 강제 마감/재개 · 클리어 되돌리기 · 스레드 잠금 해제.
 # 강퇴·위임·일정 변경은 공대 상세의 "파티장 관리" 패널이 관리자에게도 열려 있어 거기로 보낸다.
 
-_CLOSED_LABELS = {"disbanded": ("클리어", "ok"), "expired": ("기한 만료", "warn")}
-
-
 def _closed_status_view(entry: dict) -> dict:
-    label, tone = _CLOSED_LABELS.get(entry["status"], (entry["status"], ""))
+    label, tone = status_view(entry)
     leader_slot = next((s for s in entry.get("slots") or [] if s["discord_id"] == entry["leader_id"]), None)
     return {**entry, "status_label": label, "status_tone": tone, "leader_character_name": leader_slot["character_name"] if leader_slot else None}
 

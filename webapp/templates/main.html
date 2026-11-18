@@ -60,7 +60,7 @@
           {% for row in hw.rows %}
           <div class="hw-row" data-row="{{ row.name }}" data-done="{{ row.done }}" data-total="{{ row.total }}"{% if hw.filter_default and not row.remaining %} hidden{% endif %}>
             <div class="ln"></div>
-            <div class="who"><b class="trunc">{{ row.name }}</b><span>{{ row.cls }} · <span class="num">{{ '%.1f' | format(row.item_level or 0) }}</span></span></div>
+            <div class="who"><b class="trunc">{{ row.name }}</b><span>{{ row.cls }} · <span class="num">{{ row.item_level | ilvl }}</span></span></div>
             {% for cell in row.cells %}
             <div>
               {% if cell %}
@@ -88,7 +88,7 @@
       <div class="hw-mobile">
         {% for row in hw.rows %}
         <div class="ui-card hm-card" data-row="{{ row.name }}" data-done="{{ row.done }}" data-total="{{ row.total }}"{% if hw.filter_default and not row.remaining %} hidden{% endif %}>
-          <div class="hm-head"><b class="trunc">{{ row.name }}</b><span class="meta trunc">{{ row.cls }} · {{ '%.1f' | format(row.item_level or 0) }}</span><span class="num hm-count" data-char-count="{{ row.name }}">{{ row.done }}/{{ row.total }}</span></div>
+          <div class="hm-head"><b class="trunc">{{ row.name }}</b><span class="meta trunc">{{ row.cls }} · <span class="num">{{ row.item_level | ilvl }}</span></span><span class="num hm-count" data-char-count="{{ row.name }}">{{ row.done }}/{{ row.total }}</span></div>
           {% for cell in row.cells if cell %}
           <div class="mrow"><b>{{ cell.short_name }}</b>
             <span class="seg" role="group" aria-label="{{ row.name }} · {{ cell.short_name }}" data-char="{{ row.name }}" data-raid="{{ cell.raid_name }}" data-short="{{ cell.short_name }}">
@@ -137,7 +137,7 @@
           </div>
           <div class="inv-pick" hidden>
             <select name="character_name" class="field js-themed-select" aria-label="참여 캐릭터">
-              {% for q in inv.qualifying %}<option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>{% endfor %}
+              {% for q in inv.qualifying %}<option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level | ilvl }})</option>{% endfor %}
             </select>
             <select name="role" class="field js-themed-select" aria-label="역할">
               <option value="dps">딜러</option>

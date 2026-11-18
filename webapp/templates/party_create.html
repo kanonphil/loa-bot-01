@@ -68,7 +68,7 @@
         <div class="pt-step-h"><span class="pt-k" id="k3">3</span><h2 id="step3">내 캐릭터 · 조건</h2><span class="pt-meta">입장 가능하고 이번 주 아직 안 간 캐릭터를 먼저 추천합니다</span></div>
         <div class="pt-chars" id="char-list" role="radiogroup" aria-label="참여할 캐릭터">
           {% for c in characters %}
-          <label class="pt-copt"><input type="radio" name="character_name" value="{{ c.character_name }}" data-role="{{ 'support' if c.is_support else 'dps' }}"><span class="pt-dot"></span><span class="pt-copt-name"><b>{{ c.character_name }}</b><span class="pt-meta">{{ c.character_class }} · {{ c.item_level }}</span></span><span class="pt-copt-why">{{ "서포터" if c.is_support else "딜러" }}</span></label>
+          <label class="pt-copt"><input type="radio" name="character_name" value="{{ c.character_name }}" data-role="{{ 'support' if c.is_support else 'dps' }}"><span class="pt-dot"></span><span class="pt-copt-name"><b>{{ c.character_name }}</b><span class="pt-meta">{{ c.character_class }} · <span class="num">{{ c.item_level | ilvl }}</span></span></span><span class="pt-copt-why">{{ "서포터" if c.is_support else "딜러" }}</span></label>
           {% endfor %}
           <label class="pt-copt is-on"><input type="radio" name="character_name" value="" checked><span class="pt-dot"></span><span class="pt-copt-name"><b>나중에 직접 참여</b></span><span class="pt-copt-why">파티장만 하고 자리는 비워 둠</span></label>
         </div>

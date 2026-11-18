@@ -73,8 +73,8 @@
       </div></td>
       <td class="exp-c-class">{{ e.character_class or "—" }}</td>
       <td class="n exp-value">
-        {% if metric == "combat_power" %}{{ "{:,.2f}".format(e.value|float) }}
-        {% elif metric == "item_level" %}{{ "%.2f"|format(e.value|float) }}
+        {% if metric == "combat_power" %}{{ e.value | cp }}
+        {% elif metric == "item_level" %}{{ e.value | ilvl }}
         {% else %}{{ e.value|int }}개{% endif %}
       </td>
       {% if has_growth %}

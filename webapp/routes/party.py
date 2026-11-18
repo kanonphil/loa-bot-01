@@ -40,19 +40,8 @@ def _max_item_level(characters: list[dict]) -> float:
     return max((c.get("item_level") or 0) for c in characters) if characters else 0
 
 
-_HISTORY_STATUS = {
-    "recruiting": ("모집중", "accent"),
-    "full": ("파티완성", "warn"),  # "클리어"(ok, 초록)와 구분되게 골드로 — 둘 다 초록이면 구분이 어려웠다
-    "closed": ("마감", ""),
-    "disbanded": ("클리어", "ok"),
-    "cleared": ("클리어", "ok"),
-    "expired": ("기한 만료", "past"),
-    "cancelled": ("취소", "danger"),
-}
-
-
 def _history_view(entry: dict) -> dict:
-    label, tone = _HISTORY_STATUS.get(entry["status"], (entry["status"], ""))
+    label, tone = party_logic.status_view(entry)
     return {**entry, "status_label": label, "status_tone": tone}
 
 
