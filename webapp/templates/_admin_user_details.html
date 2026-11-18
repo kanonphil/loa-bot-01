@@ -7,7 +7,7 @@
     {% else %}
     <ul class="ad-details-list">
       {% for c in characters %}
-      <li>{{ c.character_name }} <span class="ad-meta">{{ c.character_class or "?" }} &middot; {% if c.item_level %}{{ c.item_level }}{% else %}미동기화{% endif %}</span></li>
+      <li>{{ c.character_name }} <span class="ad-meta">{{ c.character_class or "?" }} &middot; {% if c.item_level %}<span class="num">{{ c.item_level | ilvl }}</span>{% else %}미동기화{% endif %}</span></li>
       {% endfor %}
     </ul>
     {% endif %}

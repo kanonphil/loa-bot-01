@@ -3,7 +3,7 @@
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
 {% block page_top %}<h1>이용 가이드</h1>{% endblock %}
 {% block content %}
-<div class="page-content guide-page exp-page">
+<div class="page-content page-narrow guide-page exp-page">
 {# 로그인하지 않으면 머리줄이 없으므로 제목을 여기서 그린다 #}
 {% if not user %}<h1>이용 가이드</h1>{% endif %}
 <p class="exp-meta exp-caption">디스코드 <code>/가이드</code>와 같은 내용을 웹 기준으로 정리했습니다. 처음이라면 위에서부터 순서대로 따라오면 됩니다.</p>

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
-from webapp.utils import kst_time, time_ago
+from webapp.utils import combat_power, ilvl, kst_time, time_ago
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -13,3 +13,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # 보통 짝으로 쓴다: <time title="{{ v|kst_time }}">{{ v|time_ago }}</time>
 templates.env.filters["time_ago"] = time_ago
 templates.env.filters["kst_time"] = kst_time
+# 숫자 표기 — 화면마다 1735.0 / 1735 / 1735.00이 섞이지 않게 한 곳에서
+#   {{ c.item_level|ilvl }}  → "1735.00"     {{ c.combat_power|cp }} → "2,812.45"   (값 없으면 "—")
+templates.env.filters["ilvl"] = ilvl
+templates.env.filters["cp"] = combat_power

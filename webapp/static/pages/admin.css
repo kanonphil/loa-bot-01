@@ -2,9 +2,8 @@
    style.css 것을 그대로 쓰고, 여기엔 이 화면에만 있는 배치(마스터-디테일, 표, KPI, 영향 범위 상자 등)만 둔다.
    클래스 접두사 ad-. 폭은 모든 탭이 같다(탭을 옮겨도 가장자리가 안 움직이게). */
 
-.page-content.admin-page { max-width: 1080px; display: flex; flex-direction: column; gap: var(--sp-4); }
-.main:has(.page-content.admin-page) .page-top { max-width: 1080px; }
-.admin-page .subtabs { margin-bottom: 0; }
+/* 폭은 page-mid(공용 --page-w 1080), 탭 아래 간격은 --page-gap으로 공용 규칙이 맞춘다 */
+.admin-page { --page-gap: var(--sp-4); display: flex; flex-direction: column; gap: var(--page-gap); }
 .admin-page [hidden] { display: none !important; }
 .ad-dlg [hidden] { display: none !important; }
 
@@ -20,7 +19,6 @@
 .ad-strong { color: var(--text); font-weight: 600; }
 .ad-warn { color: var(--warn); }
 .ad-end { margin-left: auto; }
-.ad-label { font-size: var(--fs-meta); color: var(--text-muted); }
 .ad-trunc { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ad-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
 .ad-spacer { margin-left: auto; }
@@ -40,32 +38,20 @@
 .ad-disabled-wrap .btn { pointer-events: none; }
 .ad-scroll { overflow-x: auto; }
 
-/* 필터·검색 줄 — 안의 컨트롤은 전부 같은 높이(30px)로 맞춘다 */
-.ad-toolbar { --ctrl-h: 30px; --ctrl-h-sm: 30px; gap: var(--sp-2); }
-.ad-search { flex: 0 1 260px; width: 260px; max-width: 100%; }
-.ad-toolbar .ad-row { --ctrl-h: 30px; --ctrl-h-sm: 30px; }
-.ad-toolbar select, .ad-toolbar .themed-select { min-width: 0; }
+/* 필터·검색 줄은 공용 .toolbar(전부 36px). 여기는 안쪽 배치만 */
+.toolbar .themed-select { min-width: 0; }
 .ad-week .themed-select { min-width: 190px; }
 
 /* ── 표 ── */
-.ad-tcard { padding: 8px 8px 10px; }
-.ad-tcard > .ad-row { padding: 6px 8px 2px; }
-.ad-t { width: 100%; border-collapse: collapse; }
-.ad-t th { padding: 6px 8px 8px; font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); text-align: left; white-space: nowrap; }
-.ad-t td { padding: 8px; border-top: 1px solid var(--border-soft); white-space: nowrap; vertical-align: middle; }
-.ad-t th.n, .ad-t td.n { text-align: right; }
-.ad-t td.r { text-align: right; }
-.ad-t td:first-child { border-radius: 6px 0 0 6px; }
-.ad-t td:last-child { border-radius: 0 6px 6px 0; }
+/* 표는 공용 .table(.is-stack: 좁은 화면에서 줄마다 카드) + .table-card. 여기는 관리 표에만 있는 칸 */
+.ad-tcard > .ad-row { padding: 0 8px 8px; }
 .ad-t td.r > .btn, .ad-t td.r > .ad-inline > .btn, .ad-t td.r > .ad-menu-wrap { margin-left: 6px; }
 .ad-t td.r > :first-child, .ad-t td.r > .ad-inline:first-child > .btn { margin-left: 0; }
 .ad-t td .ui-chip { vertical-align: middle; }
 .ad-t .ad-what { white-space: normal; min-width: 220px; line-height: 1.5; }
 .ad-t .ad-when { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .ad-t .btn.ad-w { min-width: 72px; }
-.ad-t tbody tr:first-child td { border-top: 0; }
 .ad-tcard > .ui-empty { margin: var(--sp-4) auto; }
-@media (hover: hover) { .ad-t tbody tr:hover td { background: var(--hover); } }
 .ad-details-row td { padding: 0; background: var(--sunken); border-radius: 6px; }
 .ad-details-row:hover td { background: var(--sunken) !important; }
 .ad-cellrow { display: inline-flex; align-items: center; gap: 6px; }
@@ -197,28 +183,17 @@
   .ad-details { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
-  .page-content.admin-page { gap: var(--sp-3); }
+  .admin-page { --page-gap: var(--sp-3); }
   .ad-kpi { grid-template-columns: repeat(2, 1fr); }
   .ad-kpi-3 { grid-template-columns: 1fr; }
-  .ad-search { flex: 1 1 100%; width: 100%; }
-  .ad-toolbar .ad-spacer { margin-left: 0; }
+  .toolbar .ad-spacer { margin-left: 0; }
   .ad-form { grid-template-columns: 64px minmax(0, 1fr); }
   .ad-dt { width: 100%; flex: 1 1 100%; }
   .ad-form-2 { grid-template-columns: 76px minmax(0, 1fr); }
   .ad-tracked-input { flex: 1 1 100%; width: 100%; }
   .ad-top-meta { white-space: normal; }
-  /* 표는 줄마다 카드로 — 가로 스크롤 없이 한 줄이 한 덩어리로 읽힌다 */
-  .ad-t thead { display: none; }
-  .ad-t, .ad-t tbody, .ad-t tr, .ad-t td { display: block; }
-  .ad-t tr { padding: 8px 4px; border-top: 1px solid var(--border-soft); }
-  .ad-t tbody tr:first-child { border-top: 0; }
-  .ad-t td { display: flex; align-items: center; gap: var(--sp-2); padding: 3px 4px; border: 0; white-space: normal; border-radius: 0; }
-  .ad-t td::before { content: attr(data-label); flex: none; width: 84px; font-size: var(--fs-meta); color: var(--text-muted); }
-  .ad-t td.r { justify-content: flex-end; flex-wrap: wrap; padding-top: 6px; }
-  .ad-t td.r::before { content: none; }
-  .ad-t td.n, .ad-t td.num { text-align: left; }
+  /* 줄마다 카드는 공용 .table.is-stack */
   .ad-t .ad-what { min-width: 0; }
-  .ad-t tr:hover td { background: transparent; }
   .ad-details-row { padding: 0 !important; }
   .ad-details-row td { display: block; padding: 0; }
   .ad-details-row td::before { content: none; }

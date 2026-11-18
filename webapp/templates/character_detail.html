@@ -93,11 +93,11 @@
         <div class="armory-stat"><span class="k">원정대</span><span class="v">{{ detail.expedition_level }}</span></div>
       </div>
       <div class="armory-stat-row">
-        <div class="armory-stat"><span class="k">아이템</span><span class="v">{{ detail.item_level }}</span></div>
+        <div class="armory-stat"><span class="k">아이템</span><span class="v">{{ detail.item_level | ilvl }}</span></div>
         <div class="armory-stat"><span class="k">명예</span><span class="v">{{ detail.honor_point }}</span></div>
       </div>
       <div class="armory-stat-row single">
-        <div class="armory-stat cp"><span class="k">전투력</span><span class="v">{{ detail.combat_power }}</span></div>
+        <div class="armory-stat cp"><span class="k">전투력</span><span class="v">{{ detail.combat_power | cp }}</span></div>
       </div>
       {% if detail.town_level %}
       <div class="armory-stat-row single">

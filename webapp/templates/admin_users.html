@@ -2,7 +2,7 @@
 {% import "_ui.html" as ui %}
 {% import "_admin_macros.html" as m %}
 {% block admin_body %}
-<div class="ad-row ad-toolbar">
+<div class="toolbar">
   {{ m.search("닉네임 · 디스코드 ID 검색", "#users-table", item="tr[data-row]") }}
   <a class="chip-btn{% if filter == 'all' %} on{% endif %}" href="/admin/users"{% if filter == 'all' %} aria-current="page"{% endif %}>전체 {{ total_count }}</a>
   <a class="chip-btn{% if filter == 'stale' %} on{% endif %}" href="/admin/users?filter=stale" data-tip="캐릭터 동기화가 {{ stale_days }}일 넘게 멈춘 유저 — API 키 만료가 의심됩니다"{% if filter == 'stale' %} aria-current="page"{% endif %}>API 만료 의심 {{ stale_count }}</a>
@@ -17,8 +17,8 @@
 {% endif %}
 </div>
 {% else %}
-<div class="ad-card ad-tcard">
-  <table class="ad-t" id="users-table">
+<div class="ui-card table-card ad-tcard">
+  <table class="table is-stack ad-t" id="users-table">
     <thead><tr><th>유저</th><th>캐릭터</th><th>마지막 활동</th><th>참여 중 공대</th><th></th></tr></thead>
     <tbody>
       {% for u in users %}

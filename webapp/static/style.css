@@ -158,10 +158,7 @@ select {
   margin: 0 auto;
 }
 
-/* 캐릭터 상세처럼 정보 밀도가 높은 페이지는 더 넓게 쓴다 */
-.page-content.page-wide {
-  max-width: 1320px;
-}
+/* 넓은 화면(page-wide)·중간(page-mid)·좁은(page-narrow) 폭은 아래 "공용 컴포넌트"의 --page-w 한 곳에서 정한다 */
 
 .welcome-banner {
   font-size: 18px;
@@ -1481,9 +1478,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 /* ── 일정 캘린더 ───────────────────────────────────────── */
 
-.calendar-page {
-  max-width: 960px;
-}
 
 .calendar-toolbar {
   display: flex;
@@ -4398,27 +4392,6 @@ select.settings-select {
 }
 
 
-.ui-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--sp-4);
-}
-
-.ui-filter {
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  background: var(--sunken);
-  color: var(--text-muted);
-  font-size: var(--fs-meta);
-  text-decoration: none;
-  white-space: nowrap;
-}
-@media (hover: hover) { .ui-filter:hover { color: var(--text); border-color: var(--accent-dim); } }
-.ui-filter.is-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-.ui-filter b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
 
 /* 전투력·타이머·인원처럼 "맞춰 읽는" 숫자 전용 — 본문 서체와 분리해 HUD 판독성을 준다 */
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -4678,7 +4651,6 @@ select.settings-select {
 @media (hover: hover) { .landing-guide a:hover { color: var(--text); background: none; } }
 
 /* ── 이용 가이드 ──────────────────────────────────────── */
-.guide-page { max-width: 760px; }
 .guide-steps { list-style: none; margin: var(--sp-5) 0 0; padding: 0; display: grid; gap: var(--sp-4); }
 .guide-step {
   padding: var(--sp-5);
@@ -4940,7 +4912,7 @@ select.settings-select {
 :focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--ring); }
 @media (forced-colors: active) { :focus-visible { outline: 2px solid CanvasText; } }
 
-button, a, summary, .ui-card, .account-tab, .armory-tab, .rank-tab, .ui-filter, .pager-num, .raid-card-diff-toggle,
+button, a, summary, .ui-card, .account-tab, .armory-tab, .rank-tab, .pager-num, .raid-card-diff-toggle,
 .raid-select-row, .settings-check, .themed-select-trigger, .themed-select-option, input, select, textarea {
   transition: background-color var(--t), border-color var(--t), color var(--t), box-shadow var(--t), transform var(--t), opacity var(--t), filter var(--t);
 }
@@ -5101,7 +5073,7 @@ button:disabled, .btn.is-disabled, a[aria-disabled="true"], input:disabled, sele
 /* 기존 필터·칩·탭 계열: 올림 = 테두리 --line-in + 글자 밝게, 누름 = 어두운 면, 선택은 각자 규칙 그대로 */
 @media (hover: hover) {
   .chip-btn:not(.on):not([aria-pressed="true"]):hover,
-  .ui-filter:not(.is-active):hover, .account-tab:not(.active):hover, .rank-role-btn:not(.is-active):hover,
+  .account-tab:not(.active):hover, .rank-role-btn:not(.is-active):hover,
   .raid-card-diff-toggle:not(.done):hover:not(:disabled), .raid-diff:hover, .pager-num:not(.is-active):hover,
   .calendar-view-btn:hover, .calendar-nav-btn:hover {
     border-color: var(--line-in); color: var(--text);
@@ -5109,7 +5081,7 @@ button:disabled, .btn.is-disabled, a[aria-disabled="true"], input:disabled, sele
   .armory-tab:not(.is-active):hover, .rank-tab:not(.is-active):hover { color: var(--text); }
   .admin-move-btn:hover:not(:disabled) { color: var(--text); border-color: var(--line-in); background: var(--hover); }
 }
-.chip-btn:active, .ui-filter:active, .account-tab:active, .pager-num:active { background: var(--press); }
+.chip-btn:active, .account-tab:active, .pager-num:active { background: var(--press); }
 
 /* ── 입력칸 ────────────────────────────────────────────────
    :is() 목록의 가장 구체적인 선택자(input:not(...) 7개)가 전체 명시도가 되어, 페이지별 입력 규칙
@@ -5320,10 +5292,7 @@ html.nav-rail .side-fold svg { transform: scaleX(-1); }
 /* 본문 */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 24px 40px 32px; overflow-x: auto; }
 /* 머리줄 — 본문 폭(.page-content)에 맞춘 한 줄. 왼쪽은 화면 제목 자리(block page_top), 오른쪽 끝에 알림 종. */
-.page-top { display: flex; align-items: center; gap: var(--sp-3); width: 100%; max-width: 900px; min-height: var(--ctrl-h); margin: 0 auto var(--sp-3); }
-.main:has(.page-content.page-wide) .page-top { max-width: 1320px; }
-.main:has(.page-content.calendar-page) .page-top { max-width: 960px; }
-.main:has(.page-content.guide-page) .page-top { max-width: 760px; }
+.page-top { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: var(--ctrl-h); margin: 0 auto var(--sp-3); }
 .page-top-title { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; }
 .page-top-title h1 { margin: 0; }
 .page-top .bell-slot { margin-left: auto; }
@@ -5337,8 +5306,6 @@ html.nav-rail .side-fold svg { transform: scaleX(-1); }
 }
 .bell .bell-cnt[hidden] { display: none; }
 
-/* 화면 묶음 탭(공대·원정대·관리) */
-.subtabs { margin-bottom: var(--sp-4); }
 
 /* 모바일 위 줄 / 하단 탭 — 데스크톱에서는 숨김 */
 .m-top, .tabbar { display: none; }
@@ -5617,3 +5584,175 @@ html.nav-rail .side-fold svg { transform: scaleX(-1); }
 
 /* 처리 중인 폼 — 같은 폼의 다른 제출 버튼으로 중복 제출하지 않게 */
 form[aria-busy="true"] :is(button, input[type="submit"]) { pointer-events: none; }
+
+/* ══════════════════════════════════════════════════════════════
+   공용 컴포넌트 — 스위치 · 난이도 세그먼트 · 표 · 툴바 · 검색칸 · 필드 라벨 · 체크박스
+   여러 화면이 각자 만들던 것(home .sw/.seg/.t, exp .exp-switch/.exp-table/.exp-label, party .pt-seg/.pt-table,
+   admin .ad-t/.ad-toolbar)을 한 벌로 모았다. 같은 것은 어느 화면에서나 같은 모양·같은 동작이어야 한다 —
+   화면 CSS에서 이 컴포넌트의 크기·색을 다시 정하지 말 것(배치만).
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 화면 폭: .page-content의 폭 클래스 하나로 머리줄(.page-top)까지 같이 맞춘다 ──
+   기본 900 · page-mid 1080(관리) · page-wide 1320(목록·달력·캐릭터) · page-narrow 760(가이드) */
+.main { --page-w: 900px; }
+.main:has(.page-content.page-mid) { --page-w: 1080px; }
+.main:has(.page-content.page-wide) { --page-w: 1320px; }
+.main:has(.page-content.page-narrow) { --page-w: 760px; }
+.page-content, .page-top, .page-above { max-width: var(--page-w); }
+/* 머리줄 위(제목 줄보다 먼저 보여야 하는 안내 — 게임 점검 등). base.html {% block above_top %} */
+.page-above { width: 100%; margin: 0 auto; }
+.page-above > .banner { margin-bottom: var(--sp-3); }
+
+/* ── 화면 묶음 탭 — 아래 간격은 항상 16px. 세로로 쌓는(gap) 화면은 --page-gap에 그 gap을 적어 두면 겹치지 않는다 ── */
+.page-content { --page-gap: 0px; }
+.subtabs { margin-bottom: calc(var(--sp-4) - var(--page-gap)); }
+/* 머리줄 안에 놓인 탭(공대): 밑줄 없이 컨트롤 높이로 */
+.page-top .subtabs { margin: 0; border-bottom: 0; flex: 0 1 auto; min-width: 0; }
+.page-top .subtabs a { height: var(--ctrl-h); margin-bottom: 0; }
+
+/* ── 떠 있는 메뉴(ui.js data-float) — 스크롤 칸 안에서도 잘리지 않게 화면 기준 ── */
+.menu[data-float] { z-index: 950; }
+
+/* ── 스위치: [트랙][켜짐/꺼짐] — 상태를 색만으로 구분하지 않는다. _ui.html switch() ── */
+.switch {
+  display: inline-flex; align-items: center; gap: var(--sp-2); flex: none;
+  min-height: var(--ctrl-h-sm); padding: 0; border: 0; border-radius: var(--r-sm); background: none;
+  color: var(--text); font: inherit; font-size: var(--fs-body); white-space: nowrap; cursor: pointer;
+}
+.switch-track {
+  position: relative; flex: none; box-sizing: border-box; width: 36px; height: 20px;
+  border-radius: var(--r-pill); background: var(--sunken); border: 1.5px solid var(--line-in);
+}
+.switch-track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--text-muted); transition: left var(--t), background-color var(--t);
+}
+.switch-state { min-width: 2.6em; font-size: var(--fs-meta); color: var(--text-muted); text-align: left; }
+.switch[aria-checked="true"] .switch-track { background: var(--accent-dim); border-color: var(--accent); }
+.switch[aria-checked="true"] .switch-track::after { left: 18px; background: var(--accent); }
+.switch[aria-checked="true"] .switch-state { color: var(--text); }
+@media (hover: hover) {
+  .switch:hover:not(:disabled) .switch-track { border-color: var(--line-in-hover); }
+  .switch[aria-checked="true"]:hover:not(:disabled) .switch-track { border-color: var(--accent); }
+}
+.switch:active:not(:disabled) .switch-track { filter: brightness(0.88); }
+.switch:focus-visible { box-shadow: none; }
+.switch:focus-visible .switch-track { box-shadow: var(--ring); }
+/* 처리 중 — 스피너 대신 흐리게(글자가 사라지면 상태를 못 읽는다) */
+.switch[aria-busy="true"] { color: var(--text) !important; opacity: 0.45; }
+.switch[aria-busy="true"]::after { content: none; }
+.switch[aria-busy="true"] > * { visibility: visible; }
+@media (pointer: coarse) { .switch { min-height: 44px; } }
+
+/* ── 난이도 세그먼트: 누르면 켜짐(✓), 다시 누르면 꺼짐. 40px(터치 44px) ──
+   켜짐 = .on 또는 aria-pressed="true" · 잠김 = .locked(aria-disabled) 또는 :disabled · 오류 = .err · 처리 중 = aria-busy
+   기본은 칸 폭 고정(숙제표 열 맞춤), .is-fill은 부모 폭을 나눠 채운다(공대 열기 레이드 카드). */
+.seg {
+  display: inline-flex; vertical-align: middle; overflow: hidden; max-width: 100%;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--sunken);
+}
+.seg.is-fill { display: flex; }
+.seg > button {
+  --spin: var(--accent);
+  flex: none; box-sizing: border-box; width: 58px; height: 40px; padding: 0 4px;
+  border: 0; border-left: 1px solid var(--border); border-radius: 0; background: transparent;
+  color: var(--text-muted); font: inherit; font-size: var(--fs-body); white-space: nowrap; cursor: pointer;
+}
+.seg.is-fill > button { flex: 1 1 0; width: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.seg > button:first-child { border-left: 0; }
+.seg > button:is(.on, [aria-pressed="true"]) { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.seg > button:is(.on, [aria-pressed="true"])::before { content: "\2713\00a0"; }
+@media (hover: hover) {
+  .seg > button:hover:not(:disabled):not(.on):not([aria-pressed="true"]):not(.locked) { background: var(--hover); color: var(--text); }
+  .seg > button:is(.on, [aria-pressed="true"]):hover:not(:disabled) { background: rgba(53, 214, 196, 0.24); }
+}
+.seg > button:active:not(:disabled):not(.locked) { background: var(--press); transform: none; filter: none; }
+.seg > button:focus-visible { box-shadow: var(--ring-in); position: relative; z-index: 1; }
+.seg > button[aria-busy="true"]::before { content: none; }
+.seg > button.err { background: var(--danger-soft); color: var(--danger); animation: seg-shake 0.3s; }
+.seg > button.err::before { content: "! "; }
+.seg > button:is(.locked, :disabled) {
+  opacity: 1; cursor: not-allowed; color: var(--text-muted); font-weight: 400;
+  background: repeating-linear-gradient(135deg, transparent 0 5px, rgba(130, 160, 157, 0.12) 5px 6px);
+}
+@keyframes seg-shake { 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+@media (max-width: 640px), (pointer: coarse) {
+  .seg > button { height: 44px; }
+  .seg:not(.is-fill) > button { width: 64px; }
+}
+
+/* ── 표: 머리글 12px 회색 600 · 본문 13px · 줄 구분선 · 올리면 줄 강조 ──
+   .n = 숫자 칸(오른쪽 맞춤, 고정폭 숫자) · .r = 오른쪽 맞춤(동작 버튼 칸) · .wrap = 줄바꿈 허용
+   .table-scroll로 감싸면 표 안에서만 가로로 스크롤, .is-sticky-first면 첫 열이 제자리.
+   .table-card = 표만 담는 카드(안쪽 여백 표준). .is-stack = 760px 이하에서 줄마다 카드(td data-label이 이름표). */
+.table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.table th {
+  padding: 0 var(--sp-2) var(--sp-2); vertical-align: bottom;
+  font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); text-align: left; white-space: nowrap;
+}
+.table td { padding: var(--sp-2); border-top: 1px solid var(--border-soft); white-space: nowrap; vertical-align: middle; }
+.table :is(th, td):is(.n, .r) { text-align: right; }
+.table td.n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.table td.wrap, .table th.wrap { white-space: normal; }
+.table tbody tr[hidden] { display: none; }
+.table td:first-child { border-radius: 6px 0 0 6px; }
+.table td:last-child { border-radius: 0 6px 6px 0; }
+@media (hover: hover) { .table tbody tr:hover > td { background: var(--hover); } }
+.table-scroll { overflow-x: auto; min-width: 0; }
+.table.is-sticky-first :is(th, td):first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); }
+@media (hover: hover) { .table.is-sticky-first tbody tr:hover > td:first-child { background: var(--hover); } }
+.ui-card.table-card { padding: var(--sp-3) var(--sp-2) var(--sp-2); gap: 0; }
+.ui-card.table-card > .ui-empty { margin: var(--sp-2); }
+@media (max-width: 760px) {
+  .table.is-stack thead { display: none; }
+  .table.is-stack, .table.is-stack tbody, .table.is-stack tr, .table.is-stack td { display: block; }
+  .table.is-stack tr { padding: var(--sp-2) 4px; border-top: 1px solid var(--border-soft); }
+  .table.is-stack tbody tr:first-child { border-top: 0; }
+  .table.is-stack td { display: flex; align-items: center; gap: var(--sp-2); padding: 3px 4px; border: 0; border-radius: 0; white-space: normal; text-align: left; }
+  .table.is-stack td::before { content: attr(data-label); flex: none; width: 84px; font-size: var(--fs-meta); color: var(--text-muted); }
+  .table.is-stack td.r { justify-content: flex-end; flex-wrap: wrap; padding-top: 6px; }
+  .table.is-stack td.r::before, .table.is-stack td:not([data-label])::before { content: none; }
+  .table.is-stack tbody tr:hover > td { background: transparent; }
+}
+
+/* ── 툴바: 필터·검색·동작 한 줄. 안의 컨트롤은 전부 --ctrl-h(36px) — 칩·작은 버튼·검색칸·드롭다운이 한 높이 ── */
+.toolbar { --ctrl-h-sm: var(--ctrl-h); display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
+.toolbar :is(.chip-btn, .btn, .field, .themed-select-trigger, select) { height: var(--ctrl-h); }
+.toolbar .btn.sm { padding: 0 var(--sp-3); }
+.toolbar .chip-btn { padding: 0 var(--sp-3); }
+.toolbar .chip-btn b { margin-left: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.toolbar .toolbar-end { margin-left: auto; }
+.toolbar form { margin: 0; }
+.page-content > .toolbar { margin-bottom: calc(var(--sp-4) - var(--page-gap)); }
+
+/* 검색칸 — 돋보기가 들어간 .field. 툴바 안에서는 260px, 좁은 화면에서는 한 줄 전체 */
+.field.search-field {
+  padding-left: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2382a09d' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.2-3.2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 11px center; background-size: 15px;
+}
+.toolbar .search-field { flex: 0 1 260px; width: 260px; max-width: 100%; }
+@media (max-width: 760px) {
+  .toolbar .search-field { flex: 1 1 100%; width: 100%; order: 9; }
+  .toolbar .toolbar-end { margin-left: 0; }
+}
+
+/* ── 필드 라벨: 입력칸 위(또는 옆)의 이름표 ── */
+.field-label { font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); }
+label.field-label, .field-label.is-stack { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.field-label .field-help { font-weight: 400; }
+
+/* ── 체크박스: <label class="checkbox"><input type="checkbox"><span class="ui-checkbox"></span>글</label> ── */
+.checkbox { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: var(--ctrl-h-sm); font-size: var(--fs-body); cursor: pointer; }
+.checkbox input[type="checkbox"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.checkbox input:checked ~ .ui-checkbox { background: var(--accent); border-color: var(--accent); }
+.checkbox input:checked ~ .ui-checkbox::after {
+  content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 9px;
+  border: solid var(--bg); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.checkbox input:focus-visible ~ .ui-checkbox { outline: 2px solid transparent; box-shadow: var(--ring); }
+@media (hover: hover) { .checkbox:hover input:not(:checked):not(:disabled) ~ .ui-checkbox { border-color: var(--line-in-hover); } }
+.checkbox:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+
+/* 드롭다운 폭 100% 변형(themed-select.js: select.is-block 또는 대화상자 안) */
+.themed-select.is-block { display: block; width: 100%; }

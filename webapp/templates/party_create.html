@@ -34,12 +34,12 @@
               {% for r in g.raids %}
               <div class="pt-rcard{% if not r.enterable %} is-locked{% endif %}" data-raid-card="{{ r.raid_name }}">
                 <div class="pt-rcard-top"><b>{{ r.short_name }}</b><span class="pt-meta">{% if r.min_level %}최소 {{ r.min_level }}{% endif %}</span></div>
-                <div class="pt-seg" role="group" aria-label="{{ r.raid_name }} 난이도">
+                <div class="seg is-fill" role="group" aria-label="{{ r.raid_name }} 난이도">
                   {% for d in r.difficulties %}
                   <button type="button" data-raid="{{ r.raid_name }}" data-diff="{{ d.name }}" data-min="{{ d.min_level }}" data-slots="{{ d.total_slots }}" data-split="{{ d.party_split or 0 }}" data-short="{{ r.short_name }}"
                           aria-pressed="false"{% if not d.enterable %} disabled data-tip="레벨 {{ d.min_level }} 필요"{% endif %}>{{ d.name }}</button>
                   {% endfor %}
-                  {% if not r.difficulties %}<span class="pt-meta" style="padding:0 8px;line-height:32px">난이도 미등록</span>{% endif %}
+                  {% if not r.difficulties %}<span class="pt-meta pt-seg-empty">난이도 미등록</span>{% endif %}
                 </div>
               </div>
               {% endfor %}
@@ -68,16 +68,16 @@
         <div class="pt-step-h"><span class="pt-k" id="k3">3</span><h2 id="step3">내 캐릭터 · 조건</h2><span class="pt-meta">입장 가능하고 이번 주 아직 안 간 캐릭터를 먼저 추천합니다</span></div>
         <div class="pt-chars" id="char-list" role="radiogroup" aria-label="참여할 캐릭터">
           {% for c in characters %}
-          <label class="pt-copt"><input type="radio" name="character_name" value="{{ c.character_name }}" data-role="{{ 'support' if c.is_support else 'dps' }}"><span class="pt-dot"></span><span class="pt-copt-name"><b>{{ c.character_name }}</b><span class="pt-meta">{{ c.character_class }} · {{ c.item_level }}</span></span><span class="pt-copt-why">{{ "서포터" if c.is_support else "딜러" }}</span></label>
+          <label class="pt-copt"><input type="radio" name="character_name" value="{{ c.character_name }}" data-role="{{ 'support' if c.is_support else 'dps' }}"><span class="pt-dot"></span><span class="pt-copt-name"><b>{{ c.character_name }}</b><span class="pt-meta">{{ c.character_class }} · <span class="num">{{ c.item_level | ilvl }}</span></span></span><span class="pt-copt-why">{{ "서포터" if c.is_support else "딜러" }}</span></label>
           {% endfor %}
           <label class="pt-copt is-on"><input type="radio" name="character_name" value="" checked><span class="pt-dot"></span><span class="pt-copt-name"><b>나중에 직접 참여</b></span><span class="pt-copt-why">파티장만 하고 자리는 비워 둠</span></label>
         </div>
-        <div class="pt-row"><span class="pt-label">숙련도</span>
+        <div class="pt-row"><span class="field-label pt-label">숙련도</span>
           <div class="pt-chips" role="group" aria-label="숙련도">
             {% for p in proficiency_options %}<button type="button" class="chip-btn{% if p.value == default_prof %} on{% endif %}" data-prof="{{ p.value }}" aria-pressed="{{ 'true' if p.value == default_prof else 'false' }}"{% if p.description %} data-tip="{{ p.description }}"{% endif %}>{{ p.label }}</button>{% endfor %}
           </div>
         </div>
-        <div class="pt-row"><label class="pt-label" for="memo-input">메모</label><input type="text" class="field pt-grow" id="memo-input" name="memo" maxlength="150" placeholder="예: 음성 필수, 9시 정각 출발" value="{{ preset.memo }}"></div>
+        <div class="pt-row"><label class="field-label pt-label" for="memo-input">메모</label><input type="text" class="field pt-grow" id="memo-input" name="memo" maxlength="150" placeholder="예: 음성 필수, 9시 정각 출발" value="{{ preset.memo }}"></div>
       </section>
     </div>
 
@@ -91,8 +91,8 @@
         </div>
         <div class="pt-row"><span class="pt-meta">구성</span><span class="pt-meta pt-end" id="prev-comp">딜 0/0 · 폿 0/0</span></div>
         <div class="pt-bal" id="prev-bal" aria-hidden="true"></div>
-        <span class="pt-meta">열면 이 레이드 구독자에게 DM이 갑니다</span>
-        <button type="submit" class="btn pri block" id="party-create-submit" data-busy-text="개설 중" disabled>공대 열기</button>
+        <span class="pt-meta" id="prev-subs" data-default="열면 이 레이드 구독자에게 DM이 갑니다">열면 이 레이드 구독자에게 DM이 갑니다</span>
+        <button type="submit" class="btn pri block is-block" id="party-create-submit" data-busy-text="개설 중" disabled>공대 열기</button>
         <span class="pt-meta" id="submit-hint">레이드와 일정을 고르면 열 수 있습니다</span>
       </div>
     </aside>

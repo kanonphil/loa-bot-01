@@ -379,8 +379,9 @@ def test_revert_clear_and_unlock_from_list_return_to_closed_tab(client, monkeypa
 
 USERS = [
     {"discord_id": "222", "registered_at": "2026-05-01T00:00:00", "representative": "리퍼짱", "discord_nick": "ripper",
-     "last_sync": "2026-05-02 04:00:00", "character_count": 6},
-    {"discord_id": "333", "registered_at": "2026-05-02T00:00:00", "representative": None, "last_sync": None, "character_count": 0},
+     "last_sync": "2026-05-02 04:00:00", "character_count": 6, "last_active_at": "2026-05-03 10:00:00"},
+    {"discord_id": "333", "registered_at": "2026-05-02T00:00:00", "representative": None, "last_sync": None, "character_count": 0,
+     "last_active_at": None},
 ]
 
 
@@ -399,17 +400,33 @@ def test_users_table_columns_character_count_and_party_participation(client, mon
     assert 'data-user-kick="222"' in body and 'data-user-kick="333"' in body
 
 
-def test_users_page_falls_back_to_per_user_character_lookup_when_count_missing(client, monkeypatch):
-    users = [{"discord_id": "222", "registered_at": "2026-05-01T00:00:00", "representative": "리퍼짱", "last_sync": "2026-05-02 04:00:00"}]
+def test_users_page_uses_row_fields_without_per_user_lookup(client, monkeypatch):
     with respx.mock:
         _admin(client, monkeypatch)
-        respx.get(f"{A}/users").mock(return_value=httpx.Response(200, json=users))
-        chars = respx.get(f"{A}/users/222/characters").mock(return_value=httpx.Response(200, json=[{"character_name": "a"}, {"character_name": "b"}]))
+        respx.get(f"{A}/users").mock(return_value=httpx.Response(200, json=USERS))
+        chars = respx.get(url__regex=rf"{A}/users/\d+/characters").mock(return_value=httpx.Response(200, json=[]))
         respx.get(f"{A}/parties").mock(return_value=httpx.Response(200, json={"open": [], "closed": []}))
         respx.get(f"{A}/status").mock(return_value=httpx.Response(200, json=STATUS))
         resp = client.get("/admin/users")
-    assert chars.call_count == 1
-    assert '<td class="num" data-label="캐릭터">2</td>' in resp.text
+    assert chars.call_count == 0
+    assert '<td class="num" data-label="캐릭터">6</td>' in resp.text
+    assert '<td class="num" data-label="캐릭터">0</td>' in resp.text
+    # last_active_at(UTC) → KST 표시
+    assert 'title="2026-05-03 19:00"' in resp.text
+
+
+def test_users_page_tolerates_missing_fields(client, monkeypatch):
+    users = [{"discord_id": "222", "registered_at": "2026-05-01T00:00:00", "representative": "리퍼짱",
+              "last_sync": "2026-05-02 04:00:00", "character_count": None, "last_active_at": None}]
+    with respx.mock:
+        _admin(client, monkeypatch)
+        respx.get(f"{A}/users").mock(return_value=httpx.Response(200, json=users))
+        respx.get(f"{A}/parties").mock(return_value=httpx.Response(200, json={"open": [], "closed": []}))
+        respx.get(f"{A}/status").mock(return_value=httpx.Response(200, json=STATUS))
+        resp = client.get("/admin/users")
+    assert resp.status_code == 200
+    assert '<td class="num" data-label="캐릭터"><span class="ad-muted">-</span></td>' in resp.text
+    assert 'title="2026-05-02 13:00"' in resp.text  # last_active_at이 없으면 동기화 시각
 
 
 IMPACT = {

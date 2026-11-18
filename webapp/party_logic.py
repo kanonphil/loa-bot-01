@@ -8,32 +8,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from webapp.format import KST, _parse, next_reset
+from webapp.format import KST, STATUS_LABELS, _parse, next_reset, status_view  # noqa: F401 — 상태 표기는 format 한 곳
 
 # 같은 캐릭터가 이 간격 안의 다른 공대에 있으면 같은 시간으로 본다
 CONFLICT_WINDOW = timedelta(hours=2)
 # 같은 레이드·난이도 공대가 이 간격 안에 모집 중이면 개설 전에 알려준다
 DUPLICATE_WINDOW = timedelta(hours=1)
 ACTIVE_STATUSES = ("recruiting", "full", "closed")
-
-STATUS_LABELS: dict[str, tuple[str, str]] = {
-    "recruiting": ("모집중", "accent"),
-    "full": ("파티완성", "warn"),
-    "closed": ("마감", ""),
-    "disbanded": ("종료", ""),
-    "cleared": ("클리어", "ok"),
-    "expired": ("기한 만료", "past"),
-    "cancelled": ("취소", "danger"),
-}
-
-
-def status_view(party: dict) -> tuple[str, str]:
-    """(라벨, 톤). 클리어(cleared_at이 찍힘)와 관리자 종료(disbanded인데 cleared_at 없음)를 구분한다."""
-    status = party.get("status")
-    if status == "disbanded" and party.get("cleared_at"):
-        status = "cleared"
-    return STATUS_LABELS.get(status, (str(status or ""), ""))
-
 
 def is_ended(party: dict) -> bool:
     return party.get("status") in ("disbanded", "expired")

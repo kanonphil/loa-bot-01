@@ -117,7 +117,7 @@ try:
         page.wait_for_timeout(700)
         after = sw.get_attribute("aria-checked")
         check("골드섬 스위치 토글", before == "false" and after == "true", f"{before}->{after}")
-        check("스위치 상태 글자", "켜짐" in page.locator("form[data-switch-json] [data-switch-state]").inner_text())
+        check("스위치 상태 글자", "켜짐" in page.locator("form[data-switch-json] .switch-state").inner_text())
         page.reload(wait_until="networkidle")
         check("새로고침 후에도 켜짐", page.locator('button[aria-labelledby="set-gold"]').get_attribute("aria-checked") == "true")
         page.locator('button[aria-labelledby="set-gold"]').click()

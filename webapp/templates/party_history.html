@@ -19,12 +19,9 @@
 {% endif %}
 {% else %}
 {% call ui.toolbar() %}
-  <label class="raid-search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-    <input type="search" class="js-list-filter" placeholder="레이드명으로 검색 (이 페이지 안에서)" aria-label="이력 검색" autocomplete="off"
-           data-filter-target="#history-list" data-filter-item=".ui-card" data-filter-text=".ui-card-title"
-           data-filter-no-result="#history-search-noresult">
-  </label>
+  <input type="search" class="field search-field js-list-filter" placeholder="레이드명 검색" aria-label="이력 검색" autocomplete="off"
+         data-filter-target="#history-list" data-filter-item=".ui-card" data-filter-text=".ui-card-title"
+         data-filter-no-result="#history-search-noresult">
 {% endcall %}
 <div class="ui-list" id="history-list">
   {% for e in entries %}

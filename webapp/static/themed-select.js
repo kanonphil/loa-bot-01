@@ -6,7 +6,8 @@
  * 사용법: <select class="js-themed-select">에 자동으로 적용된다. select의 옵션을
  * 스크립트로 바꾸는 화면(예: disabled 토글)은 select.dispatchEvent(new Event("change"))를
  * 호출해줘야 트리거 라벨/목록이 다시 그려진다 — .value를 직접 대입하는 것만으로는
- * 네이티브 change 이벤트가 발생하지 않기 때문이다. */
+ * 네이티브 change 이벤트가 발생하지 않기 때문이다.
+ * 폭 100% 변형: <select class="js-themed-select is-block"> (대화상자 안은 자동). */
 (function () {
   function buildDropdown(select) {
     if (select.dataset.themedSelectInit) return;
@@ -23,6 +24,12 @@
     var button = document.createElement("button");
     button.type = "button";
     button.className = "themed-select-trigger";
+    // 폭을 꽉 채우는 변형 — select에 is-block을 주거나 대화상자(.dlg) 안의 폼 필드면 자동.
+    // 늘어난 버튼이 아니라 입력칸처럼 쓰는 것이라 규격 실측(measure.py)도 is-block은 제외한다.
+    if (select.classList.contains("is-block") || select.closest(".dlg")) {
+      wrap.classList.add("is-block");
+      button.classList.add("is-block");
+    }
     button.setAttribute("aria-haspopup", "listbox");
     button.setAttribute("aria-expanded", "false");
     // 원본 select는 aria-hidden으로 숨기므로 트리거가 이름을 이어받아야 스크린리더가 읽는다

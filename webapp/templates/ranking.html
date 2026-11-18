@@ -20,10 +20,15 @@
       m == metric) }}
   {% endfor %}
   {% if metric == "combat_power" %}
-  <span class="ui-spacer"></span>
+  <span class="ui-row" role="group" aria-label="역할">
   {% for r in ["dps", "support"] %}
   {{ ui.filter_link(role_labels[r], "/ranking?metric=combat_power&role=" ~ r, r == role) }}
   {% endfor %}
+  </span>
+  {% endif %}
+  {% if entries %}
+  <input type="search" class="field search-field toolbar-end js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="랭킹 검색" autocomplete="off"
+         data-filter-target="#rank-table" data-filter-item="tbody tr" data-filter-no-result="#rank-search-noresult">
   {% endif %}
 {% endcall %}
 
@@ -40,22 +45,17 @@
 {{ ui.empty("표시할 데이터가 없습니다", icon="📊") }}
 {% endif %}
 {% else %}
-<label class="raid-search exp-search">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-  <input type="search" class="js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="랭킹 검색" autocomplete="off"
-         data-filter-target="#rank-table" data-filter-item="tbody tr" data-filter-no-result="#rank-search-noresult">
-</label>
-<div class="ui-card exp-tablecard">
-  <div class="exp-tablewrap">
-  <table class="exp-table" id="rank-table">
+<div class="ui-card table-card">
+  <div class="table-scroll">
+  <table class="table exp-table" id="rank-table">
     <thead>
       <tr>
         <th scope="col" class="exp-c-rank">#</th>
         <th scope="col">{% if metric == "weekly_clears" %}대표 캐릭터{% else %}캐릭터{% endif %}</th>
         <th scope="col" class="exp-c-class">직업</th>
-        <th scope="col" class="exp-c-num">{{ metric_labels[metric] }}</th>
+        <th scope="col" class="n">{{ metric_labels[metric] }}</th>
         {% if has_growth %}
-        <th scope="col" class="exp-c-num" aria-sort="{{ 'descending' if sort == 'growth' else ('ascending' if sort == 'growth_asc' else 'none') }}">
+        <th scope="col" class="n" aria-sort="{{ 'descending' if sort == 'growth' else ('ascending' if sort == 'growth_asc' else 'none') }}">
           {# 누를 때마다 큰 순 → 작은 순 → 원래 순위 #}
           <a class="exp-sort{% if sort %} is-on{% endif %}" href="/ranking?{{ base_q }}{% if sort == '' %}&sort=growth{% elif sort == 'growth' %}&sort=growth_asc{% endif %}"
              data-tip="{{ '눌러서 작은 순으로' if sort == 'growth' else ('눌러서 원래 순위로' if sort == 'growth_asc' else '눌러서 큰 순으로') }}">7일 성장<span aria-hidden="true" class="exp-sort-mark">{{ '▼' if sort == 'growth' else ('▲' if sort == 'growth_asc' else '↕') }}</span></a>
@@ -72,14 +72,14 @@
         <span class="exp-meta exp-class-inline">{{ e.character_class or "—" }}</span>
       </div></td>
       <td class="exp-c-class">{{ e.character_class or "—" }}</td>
-      <td class="exp-c-num num exp-value">
-        {% if metric == "combat_power" %}{{ "{:,.2f}".format(e.value|float) }}
-        {% elif metric == "item_level" %}{{ "%.2f"|format(e.value|float) }}
+      <td class="n exp-value">
+        {% if metric == "combat_power" %}{{ e.value | cp }}
+        {% elif metric == "item_level" %}{{ e.value | ilvl }}
         {% else %}{{ e.value|int }}개{% endif %}
       </td>
       {% if has_growth %}
       {% set g = e.cp_growth_7d %}
-      <td class="exp-c-num num">
+      <td class="n">
         {%- if g is none %}<span class="exp-meta" data-tip="기록이 7일 이상 쌓이면 표시됩니다">—</span>
         {%- elif g|float > 0 %}<span class="exp-up">▲ +{{ "{:,.2f}".format(g|float) }}</span>
         {%- elif g|float < 0 %}<span class="exp-down">▼ −{{ "{:,.2f}".format(g|float|abs) }}</span>

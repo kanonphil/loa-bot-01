@@ -124,6 +124,16 @@ def test_time_ago_buckets():
     assert _time_ago(None) == ""
 
 
+def test_open_invite_notification_goes_to_home_todo(client):
+    """초대 전용 화면은 없어졌다 — 초대 알림은 홈의 "할 일"로 바로."""
+    _login(client, discord_id="111")
+    client.post("/notifications/subscribe")
+    saved = asyncio.run(notification_store.add_notification("invited", "msg-9", "초대가 왔습니다", target_discord_id="111"))
+    resp = client.get(f"/notifications/{saved['id']}/open")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/main#todo"
+
+
 def test_open_marks_read_and_redirects_to_party(client):
     _login(client, discord_id="111")
     client.post("/notifications/subscribe")

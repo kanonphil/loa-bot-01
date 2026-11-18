@@ -2,7 +2,7 @@
 {% import "_ui.html" as ui %}
 {% import "_admin_macros.html" as m %}
 {% block admin_body %}
-<div class="ad-row ad-toolbar">
+<div class="toolbar">
   {% for key, label in kinds %}
   <a class="chip-btn{% if key == kind %} on{% endif %}" href="/admin/actions{% if key != 'all' %}?kind={{ key }}{% endif %}"{% if key == kind %} aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
@@ -14,8 +14,8 @@
 {% elif not items %}
 <div class="ad-card">{{ ui.empty("아직 기록이 없습니다", "강제 마감, 레이드 이름 변경, 유저 내보내기 같은 관리 작업이 여기에 남습니다.", icon="box") }}</div>
 {% else %}
-<div class="ad-card ad-tcard">
-  <table class="ad-t">
+<div class="ui-card table-card ad-tcard">
+  <table class="table is-stack ad-t">
     <thead><tr><th>언제</th><th>누가</th><th>무엇을</th><th>어디서</th><th></th></tr></thead>
     <tbody>
       {% for a in items %}

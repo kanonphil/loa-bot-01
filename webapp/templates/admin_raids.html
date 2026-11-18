@@ -5,7 +5,7 @@
 <div class="ad-md">
   {# ── 왼쪽: 카테고리별 레이드 목록 ── #}
   <div class="ad-card ad-lst" id="raid-list">
-    <input type="search" class="field ad-search" placeholder="레이드 검색" aria-label="레이드 검색" autocomplete="off"
+    <input type="search" class="field search-field ad-search" placeholder="레이드 검색" aria-label="레이드 검색" autocomplete="off"
            data-ad-filter="#raid-list" data-ad-item=".ad-ri" data-ad-group=".ad-ri-group" data-ad-noresult="#raid-list-noresult">
     {% for group in grouped %}
     {% if group.raids %}
@@ -130,7 +130,7 @@
       </div>
       {% if selected.difficulty_rows %}
       <div class="ad-scroll">
-      <table class="ad-t" id="diff-table">
+      <table class="table is-stack ad-t" id="diff-table">
         <thead><tr><th>난이도</th><th>입장 레벨</th><th>인원</th><th>파티 구성</th><th>클리어 골드</th><th></th></tr></thead>
         <tbody data-reorder-group>
           {% for d in selected.difficulty_rows %}

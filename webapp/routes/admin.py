@@ -21,7 +21,7 @@ from webapp import config, notification_store, party_events
 from webapp.auth.dependencies import require_admin
 from webapp.clients import bot_admin, bot_client
 from webapp.flash import redirect_result, redirect_with_toast
-from webapp.format import is_overdue_party, party_view
+from webapp.format import is_overdue_party, party_view, status_view
 from webapp.routes.party import _history_view
 from webapp.templating import templates
 from webapp.utils import kst_time, safe_local_path, time_ago
@@ -496,11 +496,8 @@ async def delete_class(name: str = Form(...), user: dict = Depends(require_admin
 # 줄에서 바로 하는 건 열기 · 강제 마감/재개 · 클리어 되돌리기 · 스레드 잠금 해제.
 # 강퇴·위임·일정 변경은 공대 상세의 "파티장 관리" 패널이 관리자에게도 열려 있어 거기로 보낸다.
 
-_CLOSED_LABELS = {"disbanded": ("클리어", "ok"), "expired": ("기한 만료", "warn")}
-
-
 def _closed_status_view(entry: dict) -> dict:
-    label, tone = _CLOSED_LABELS.get(entry["status"], (entry["status"], ""))
+    label, tone = status_view(entry)
     leader_slot = next((s for s in entry.get("slots") or [] if s["discord_id"] == entry["leader_id"]), None)
     return {**entry, "status_label": label, "status_tone": tone, "leader_character_name": leader_slot["character_name"] if leader_slot else None}
 
@@ -610,20 +607,6 @@ def _sync_age_days(last_sync: str | None, now_utc: datetime) -> int | None:
     return max(0, (now_utc - dt).days)
 
 
-async def _character_counts(uid: str, users: list[dict]) -> dict[str, int | None]:
-    """유저 목록 응답에 character_count가 없는 봇을 위한 대체 조회(동시 8개). 있으면 호출하지 않는다."""
-    if all("character_count" in u for u in users):
-        return {u["discord_id"]: u["character_count"] for u in users}
-    sem = asyncio.Semaphore(8)
-
-    async def one(u: dict):
-        async with sem:
-            chars = await _safe(bot_client.admin_get_user_characters(uid, u["discord_id"]))
-        return u["discord_id"], (len(chars) if isinstance(chars, list) else None)
-
-    return dict(await asyncio.gather(*(one(u) for u in users)))
-
-
 @router.get("/admin/users")
 async def admin_users_page(
     request: Request, filter: str = "all", user: dict = Depends(require_admin),
@@ -635,7 +618,6 @@ async def admin_users_page(
         bot_client.admin_list_users(uid, config.DISCORD_GUILD_ID),
         _safe(bot_client.admin_list_parties(config.DISCORD_GUILD_ID, uid), {"open": []}),
     )
-    char_counts = await _character_counts(uid, users)
     joined: dict[str, int] = {}
     leading: set[str] = set()
     for p in (parties or {}).get("open", []):
@@ -648,7 +630,9 @@ async def admin_users_page(
         age = _sync_age_days(u.get("last_sync"), now_utc)
         u["sync_age_days"] = age
         u["is_stale"] = age is None or age >= STALE_DAYS
-        u["char_count"] = char_counts.get(u["discord_id"])
+        # 봇이 한 번에 집계해 준다(character_count / last_active_at — 봇 internal.py admin_list_users
+        # 문서 참고). 필드가 없거나 null이면 "-"/동기화 시각으로 대신 보여준다.
+        u["char_count"] = u.get("character_count")
         last = u.get("last_active_at") or u.get("last_sync")
         u["last_seen"] = time_ago(last)
         u["last_seen_title"] = kst_time(last)

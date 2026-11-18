@@ -4,10 +4,9 @@
   // 슬롯/댓글이 보이던 문제. /parties/create, /parties/history는 폼/이력 화면이라 제외.
   var detailMatch = path.match(/^\/parties\/([^/]+)$/);
   var detailId = detailMatch && path !== "/parties/create" && path !== "/parties/history" ? detailMatch[1] : null;
-  // /invites: 파티장이 초대하거나 슬롯이 채워지면 바뀜, /raid-check: 파티장이 클리어하면 자동 체크가 들어옴
-  var isList = path === "/main" || path === "/parties" || path === "/calendar" || path === "/admin/parties" || path === "/invites";
-  var isRaidCheck = path === "/raid-check";
-  if (!isList && !isRaidCheck && !detailId) return;
+  // 홈(/main)은 초대·숙제표(파티장이 클리어하면 자동 체크)까지 담는다 — 옛 /invites, /raid-check는 홈으로 넘어간다
+  var isList = path === "/main" || path === "/parties" || path === "/calendar" || path === "/admin/parties";
+  if (!isList && !detailId) return;
 
   // 서버(party_events.py)가 보내는 이벤트 종류 — { type, message_id }
   //   created / reopened / slots / status / details : 공대 목록·참가자·상태·일정이 바뀜
@@ -20,7 +19,6 @@
   function isRelevant(event) {
     if (!event) return true; // 형식을 모르면 안전하게 갱신
     if (detailId) return String(event.message_id) === detailId;
-    if (isRaidCheck) return event.type === "cleared";
     return !!LIST_TYPES[event.type];
   }
 

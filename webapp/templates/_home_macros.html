@@ -15,14 +15,14 @@
     {% elif d.eligible | length == 1 %}
     <button type="button" data-diff="{{ d.name }}" aria-pressed="false" data-x-set data-x-char="{{ d.eligible[0].name }}">{{ d.name }}</button>
     {% else %}
-    <button type="button" data-diff="{{ d.name }}" aria-pressed="false" data-x-set data-home-menu aria-haspopup="menu" aria-expanded="false" aria-controls="xm-{{ where }}-{{ idx }}-{{ loop.index0 }}">{{ d.name }}</button>
+    <button type="button" data-diff="{{ d.name }}" aria-pressed="false" data-x-set data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="xm-{{ where }}-{{ idx }}-{{ loop.index0 }}">{{ d.name }}</button>
     {% endif %}
     {% endfor %}
   </span>
   {% if not x.cleared %}
   {% for d in x.diffs if d.eligible | length > 1 %}
-  <div class="menu hw-x-menu" id="xm-{{ where }}-{{ idx }}-{{ x.diffs.index(d) }}" role="menu" aria-label="{{ d.name }} 클리어 캐릭터" hidden>
-    {% for c in d.eligible %}<button type="button" class="menu-item" role="menuitem" data-x-pick="{{ c.name }}" data-x-diff="{{ d.name }}">{{ c.name }}<span class="menu-state num">{{ '%.1f' | format(c.item_level or 0) }}</span></button>{% endfor %}
+  <div class="menu hw-x-menu" data-float id="xm-{{ where }}-{{ idx }}-{{ x.diffs.index(d) }}" role="menu" aria-label="{{ d.name }} 클리어 캐릭터" hidden>
+    {% for c in d.eligible %}<button type="button" class="menu-item" role="menuitem" data-x-pick="{{ c.name }}" data-x-diff="{{ d.name }}">{{ c.name }}<span class="menu-state num">{{ c.item_level | ilvl }}</span></button>{% endfor %}
   </div>
   {% endfor %}
   {% endif %}

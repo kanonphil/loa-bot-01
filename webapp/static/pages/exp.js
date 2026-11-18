@@ -92,7 +92,6 @@
   document.querySelectorAll("form[data-switch-json]").forEach(function (form) {
     var sw = form.querySelector('[role="switch"]');
     var field = form.querySelector('input[name="enabled"]');
-    var state = form.querySelector("[data-switch-state]");
     if (!sw || !field) return;
     form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -110,9 +109,8 @@
         return res.json();
       }).then(function (data) {
         if (!data.success) { toast("err", data.reason || "저장하지 못했습니다."); return; }
-        sw.setAttribute("aria-checked", next ? "true" : "false");
+        window.uiSwitch(sw, next);
         field.value = next ? "0" : "1";
-        if (state) state.textContent = next ? "켜짐" : "꺼짐";
         toast("ok", data.message || (next ? "알림을 켰습니다." : "알림을 껐습니다."));
       }).catch(function () {
         toast("err", "저장하지 못했습니다. 잠시 후 다시 시도해주세요.");
@@ -143,11 +141,7 @@
   // ── 5) 알림 소리 — 이 브라우저(localStorage)에만 저장 ──
   var soundSwitch = document.getElementById("notif-sound-toggle");
   if (soundSwitch) {
-    var soundState = document.getElementById("notif-sound-state");
-    function paintSound(on) {
-      soundSwitch.setAttribute("aria-checked", on ? "true" : "false");
-      if (soundState) soundState.textContent = on ? "켜짐" : "꺼짐";
-    }
+    function paintSound(on) { window.uiSwitch(soundSwitch, on); }
     var on = true;
     try { on = localStorage.getItem("notifSoundOff") !== "1"; } catch (e) { /* 저장소가 막혀 있으면 켜진 채로 */ }
     paintSound(on);

@@ -246,6 +246,101 @@ def test_reschedule_rejects_past_date(client, fake_bot):
     assert "과거" in body["reason"]
 
 
+def test_reschedule_without_memo_keeps_existing_memo(client, fake_bot):
+    """웹이 메모를 /memo로 따로 저장하게 되면서 일정 변경 요청엔 memo가 빠져 온다 — 지우면 안 된다."""
+    asyncio.run(db.update_party_memo("999", "기존 메모"))
+    resp = client.post(
+        "/api/internal/parties/999/reschedule",
+        json={"discord_id": LEADER_ID, "scheduled_datetime": "2099-05-20T21:00"},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    assert asyncio.run(db.get_party("999"))["memo"] == "기존 메모"
+    # 사유 줄에 기존 메모를 다시 실어 보내지 않는다
+    _, _, _, fake_user = fake_bot
+    sent = [c.args[0] for c in fake_user.send.await_args_list]
+    assert sent and all("기존 메모" not in s for s in sent)
+
+
+def test_reschedule_with_explicit_null_memo_clears_it(client, fake_bot):
+    asyncio.run(db.update_party_memo("999", "기존 메모"))
+    resp = client.post(
+        "/api/internal/parties/999/reschedule",
+        json={"discord_id": LEADER_ID, "scheduled_datetime": "2099-05-20T21:00", "memo": None},
+        headers=HEADERS,
+    )
+    assert resp.json()["success"] is True
+    assert asyncio.run(db.get_party("999"))["memo"] is None
+
+
+# ── 메모만 변경 ─────────────────────────────────────────────
+
+def test_memo_update_by_leader_refreshes_embed_without_dm(client, fake_bot, monkeypatch):
+    import bot.ui.views as views
+
+    _, fake_channel, fake_message, fake_user = fake_bot
+    send_dm = AsyncMock()
+    monkeypatch.setattr(views, "_send_dm", send_dm)
+    resp = client.post(
+        "/api/internal/parties/999/memo",
+        json={"discord_id": LEADER_ID, "memo": "  디코 음성 필수  "},
+        headers=HEADERS,
+    )
+    body = resp.json()
+    assert body["success"] is True and body["memo"] == "디코 음성 필수"
+    assert asyncio.run(db.get_party("999"))["memo"] == "디코 음성 필수"
+    fake_message.edit.assert_awaited()       # 디스코드 임베드 갱신
+    send_dm.assert_not_awaited()             # DM 없음
+    fake_user.send.assert_not_awaited()
+    fake_channel.send.assert_not_awaited()   # 스레드 공지도 없음
+
+
+def test_memo_empty_clears_memo(client, fake_bot):
+    asyncio.run(db.update_party_memo("999", "기존 메모"))
+    resp = client.post(
+        "/api/internal/parties/999/memo", json={"discord_id": LEADER_ID, "memo": "  "}, headers=HEADERS
+    )
+    assert resp.json()["success"] is True
+    assert asyncio.run(db.get_party("999"))["memo"] is None
+
+
+def test_memo_rejected_for_non_leader(client, fake_bot):
+    resp = client.post(
+        "/api/internal/parties/999/memo", json={"discord_id": MEMBER_ID, "memo": "x"}, headers=HEADERS
+    )
+    body = resp.json()
+    assert body["success"] is False and "파티장만" in body["reason"]
+    assert asyncio.run(db.get_party("999"))["memo"] is None
+
+
+def test_memo_rejected_when_party_ended(client, fake_bot):
+    asyncio.run(db.disband_party("999"))
+    resp = client.post(
+        "/api/internal/parties/999/memo", json={"discord_id": LEADER_ID, "memo": "x"}, headers=HEADERS
+    )
+    assert resp.json()["success"] is False
+
+
+def test_memo_by_admin_is_logged_leader_is_not(client, fake_bot, monkeypatch):
+    import aiosqlite
+    import config
+
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    client.post("/api/internal/parties/999/memo", json={"discord_id": LEADER_ID, "memo": "파티장"}, headers=HEADERS)
+    resp = client.post("/api/internal/parties/999/memo", json={"discord_id": "111", "memo": "관리자"}, headers=HEADERS)
+    assert resp.json()["success"] is True
+    assert asyncio.run(db.get_party("999"))["memo"] == "관리자"
+
+    async def actions():
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            cur = await conn.execute("SELECT actor_discord_id, action, source FROM admin_actions")
+            return await cur.fetchall()
+
+    rows = asyncio.run(actions())
+    assert [(r[0], r[1]) for r in rows] == [("111", "party.memo")]
+    assert rows[0][2] == "web"
+
+
 # ── 파티장 위임 ─────────────────────────────────────────────
 
 def test_transfer_leader_to_member(client, fake_bot):

@@ -8,19 +8,12 @@ from fastapi import APIRouter, Depends, Request
 from webapp import config
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
+from webapp.format import status_view
 from webapp.templating import templates
 
 router = APIRouter()
 
 KST = timezone(timedelta(hours=9))
-
-STATUS_LABELS = {
-    "recruiting": "모집중",
-    "full": "파티완성",
-    "closed": "마감",
-    "disbanded": "클리어",
-    "expired": "기한 만료",
-}
 
 # Python datetime.weekday(): 월=0, 화=1, 수=2, 목=3, 금=4, 토=5, 일=6
 _WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
@@ -71,12 +64,12 @@ def _week_start_of(dt: datetime) -> datetime:
 
 
 def _make_party_entry(p: dict, dt: datetime) -> dict:
-    label = STATUS_LABELS.get(p["status"], p["status"])
-    if p["status"] == "disbanded" and "cleared_at" in p and not p.get("cleared_at"):
-        label = "종료"  # 관리자가 종료한 공대는 클리어가 아니다
+    label, _tone = status_view(p)  # 관리자가 종료한 공대는 "종료"(클리어 아님) — format.status_view
     return {
         **p,
         "status_label": label,
+        # 색 클래스 — 관리자 종료(disbanded, 클리어 아님)는 클리어 초록이 아니라 기한 만료처럼 흐리게
+        "status_class": "ended" if p["status"] == "disbanded" and label != "클리어" else p["status"],
         "time_label": dt.strftime("%H:%M"),
         "is_active": p["status"] not in ("disbanded", "expired"),
     }

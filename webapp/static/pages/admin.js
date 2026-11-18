@@ -8,17 +8,13 @@
   function toast(kind, msg) { if (window.showToast) window.showToast(kind, msg); }
   function text(el, v) { if (el) el.textContent = v; }
 
-  // 대화상자 안의 드롭다운은 입력칸처럼 폭을 꽉 채우는 게 의도다(늘어난 버튼이 아니라 폼 필드) — 규격 실측이 구분할 수 있게 표시
-  // (themed-select는 DOMContentLoaded에서 트리거를 만든다 — 그 뒤에 붙도록 같은 이벤트에 등록)
-  document.addEventListener("DOMContentLoaded", function () {
-    $$(".ad-dlg .themed-select-trigger").forEach(function (t) { t.classList.add("is-block"); });
-  });
-
   // ── 모달: data-dlg-open="#id" / [data-dlg-close] / Esc / 바깥 클릭 ──
-  var openDlg = null;    // 열려 있는 .dlg-back(body에 붙은 래퍼)
-  var openHolder = null; // 닫혀 있을 때 .dlg를 보관하는 .ad-modal
+  var openDlg = null;    // 열려 있는 .dlg-back.ad-modal
   var openerEl = null;
   var FOCUSABLE = 'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])';
+
+  // 모달은 페이지 어디에 그려져 있든 body 끝으로 — fixed 배경이 조상의 배치·쌓임 순서에 묶이지 않게
+  $$(".ad-modal").forEach(function (m) { document.body.appendChild(m); });
 
   function visibleFocusables(root) {
     return $$(FOCUSABLE, root).filter(function (el) {
@@ -28,25 +24,18 @@
   function openModal(holder, from) {
     if (!holder || openDlg) return;
     if (window.uiPopup) window.uiPopup.close(false);
-    var dlg = $(".dlg", holder);
-    var wrap = document.createElement("div");
-    wrap.className = "dlg-back";
-    wrap.appendChild(dlg);
-    document.body.appendChild(wrap);
-    openDlg = wrap;
-    openHolder = holder;
+    holder.hidden = false;
+    openDlg = holder;
     openerEl = from || document.activeElement;
-    var first = $("input:not([type=hidden]):not([disabled]), textarea, .themed-select-trigger", wrap) ||
-      visibleFocusables(wrap).filter(function (b) { return !b.hasAttribute("data-dlg-close"); })[0] ||
-      visibleFocusables(wrap)[0];
+    var first = $("input:not([type=hidden]):not([disabled]), textarea, .themed-select-trigger", holder) ||
+      visibleFocusables(holder).filter(function (b) { return !b.hasAttribute("data-dlg-close"); })[0] ||
+      visibleFocusables(holder)[0];
     if (first) first.focus();
   }
   function closeModal() {
     if (!openDlg) return;
-    openHolder.appendChild($(".dlg", openDlg));
-    openDlg.parentNode.removeChild(openDlg);
+    openDlg.hidden = true;
     openDlg = null;
-    openHolder = null;
     if (openerEl && document.contains(openerEl) && openerEl.focus) openerEl.focus();
     openerEl = null;
   }
@@ -64,7 +53,7 @@
     if (!openDlg || e.defaultPrevented) return;
     if (e.key === "Escape") {
       // 그 위에 확인 대화상자가 떠 있으면 그쪽 Esc가 먼저 처리한다(캡처 단계에서 이미 막았다)
-      var stack = $$(".dlg-back");
+      var stack = $$(".dlg-back").filter(function (b) { return !b.hidden; });
       if (stack[stack.length - 1] !== openDlg) return;
       e.preventDefault();
       closeModal();

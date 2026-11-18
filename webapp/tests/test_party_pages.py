@@ -101,6 +101,45 @@ def test_create_check_degrades_without_summary(client):
     assert data["has_summary"] is False and data["options"] == []
 
 
+def _check_subs(client, subs_response, **params):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(f"{B}/parties").mock(return_value=httpx.Response(200, json=[]))
+        respx.get(f"{B}/raids").mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(f"{B}/raid-check-summary").mock(return_value=httpx.Response(200, json=summary([])))
+        route = respx.get(f"{B}/raid-subscribers-count").mock(return_value=subs_response)
+        data = client.get("/parties/create/check", params=params).json()
+    return data, route
+
+
+def test_create_check_reports_subscriber_count(client):
+    when = (NOW + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    data, route = _check_subs(client, httpx.Response(200, json={"count": 3}),
+                              raid_name="종막", difficulty="노말", scheduled_datetime=when)
+    assert data["subscribers"] == 3
+    q = route.calls[0].request.url.params
+    assert q["raid_name"] == "종막" and q["difficulty"] == "노말" and q["discord_id"] == "111" and q["scheduled_datetime"] == when
+
+
+def test_create_check_subscribers_null_on_bot_error_or_no_raid(client):
+    data, _ = _check_subs(client, httpx.Response(500), raid_name="종막", difficulty="노말", scheduled_datetime="")
+    assert data["subscribers"] is None
+    when = (NOW + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    data, route = _check_subs(client, httpx.Response(200, json={"count": 3}), raid_name="", difficulty="", scheduled_datetime=when)
+    assert data["subscribers"] is None and not route.called
+
+
+def test_create_form_has_subscriber_preview_line(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(f"{B}/raids").mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(f"{B}/parties/proficiency-options").mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
+        respx.get(f"{B}/raid-check-summary").mock(return_value=httpx.Response(200, json=summary([])))
+        respx.get(f"{B}/user-party-history").mock(return_value=httpx.Response(200, json={"entries": [], "has_more": False, "total_count": 0}))
+        body = client.get("/parties/create").text
+    assert 'id="prev-subs" data-default="열면 이 레이드 구독자에게 DM이 갑니다"' in body
+
+
 # ── 다시 열기 ─────────────────────────────────────────────
 
 def test_create_form_offers_recent_openings_as_reopen_chips(client):
@@ -280,6 +319,16 @@ def test_expired_party_shows_status_line_and_no_controls(client):
         assert forbidden not in body
 
 
+def test_ended_party_hides_recruiting_only_info(client):
+    """끝난 공대에는 모집 중일 때만 의미 있는 빈자리 알림 대기 수를 보이지 않는다."""
+    for status, cleared in (("expired", None), ("disbanded", NOW.isoformat()), ("disbanded", None)):
+        p = party("p1", status=status, cleared_at=cleared, waitlist_count=3, slots=[slot(1, "222", "파티장")])
+        body = _detail(client, p).text
+        assert "빈자리 알림 대기" not in body
+    live = party("p1", waitlist_count=3, slots=[slot(1, "222", "파티장")])
+    assert "빈자리 알림 대기 3명" in _detail(client, live).text
+
+
 def test_cleared_party_status_line_and_admin_revert_only_when_cleared(client):
     cleared = party("p1", status="disbanded", cleared_at=NOW.isoformat(), slots=[slot(1, "222", "파티장")])
     body = _detail(client, cleared).text
@@ -312,6 +361,8 @@ def test_calendar_labels_expired_and_admin_disband(client):
         resp = client.get("/calendar?view=week&week_start=" + NOW.strftime("%Y-%m-%d"))
     assert "기한 만료" in resp.text and "종료" in resp.text and "클리어" in resp.text
     assert 'href="/parties/e"' not in resp.text  # 끝난 공대는 모집글 링크를 만들지 않는다
+    # 관리자 종료는 클리어(초록)와 다른 흐린 색, 클리어는 그대로
+    assert 'class="calendar-party status-ended"' in resp.text and 'class="calendar-party status-disbanded"' in resp.text
 
 
 def test_history_labels_expired_distinct_from_clear(client):

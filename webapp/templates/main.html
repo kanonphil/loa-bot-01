@@ -3,9 +3,7 @@
 {% import "_home_macros.html" as hm %}
 {% block head %}<link rel="stylesheet" href="/static/pages/home.css?v={{ static_version }}">{% endblock %}
 {% block page_top %}<h1>이번 주</h1>{{ ui.chip("리셋까지 " ~ (reset.countdown | replace(" 뒤", "")), reset.tone) }}{% endblock %}
-{% block content %}
-<div class="page-content page-wide home" id="home">
-
+{% block above_top %}
 {% if maintenance %}
 <div class="banner {{ 'warn' if maintenance.active else 'info' }}" role="status">
   <b class="banner-mark" aria-hidden="true">{{ '!' if maintenance.active else 'i' }}</b>
@@ -13,6 +11,10 @@
   {% if maintenance.link %}<a class="lnk sp" href="{{ maintenance.link }}" target="_blank" rel="noopener noreferrer">공지 보기</a>{% endif %}
 </div>
 {% endif %}
+{% endblock %}
+{% block content %}
+<div class="page-content page-wide home" id="home">
+
 {% if summary_failed %}
 {{ ui.banner("숙제표를 불러오지 못했습니다. 봇 서버가 응답하지 않습니다.", "err", "새로고침", "home-reload") }}
 {% endif %}
@@ -26,7 +28,7 @@
     {% set hw = homework %}
     <section class="ui-card hc-hw" id="hw" aria-labelledby="hw-title"
              data-hw data-filter="{{ 'on' if hw.filter_default else 'off' }}">
-      <div class="hw-head">
+      <div class="hw-head toolbar">
         <h2 class="ui-card-title" id="hw-title">숙제</h2>
         <span class="hw-count"><b class="num"><span data-hw-done>{{ hw.done }}</span>/<span data-hw-total>{{ hw.total }}</span></b> <span class="muted">완료</span></span>
         <span class="hw-head-spacer"></span>
@@ -36,8 +38,8 @@
         {% set sel = hw.select_characters %}
         {% if sel | length > 1 %}
         <div class="hw-menu-wrap">
-          <button type="button" class="btn sm ghost" data-home-menu aria-haspopup="menu" aria-expanded="false" aria-controls="hw-select-menu">레이드 고르기</button>
-          <div class="menu hw-select-menu" id="hw-select-menu" role="menu" aria-label="레이드를 고를 캐릭터" hidden>
+          <button type="button" class="btn sm ghost" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="hw-select-menu">레이드 고르기</button>
+          <div class="menu hw-select-menu" id="hw-select-menu" data-float="end" role="menu" aria-label="레이드를 고를 캐릭터" hidden>
             {% for c in sel %}
             <a class="menu-item" role="menuitem" href="/raid-check/select/{{ c.name | urlencode }}">{{ c.name }}<span class="menu-state">{{ c.cls }}</span></a>
             {% endfor %}
@@ -58,7 +60,7 @@
           {% for row in hw.rows %}
           <div class="hw-row" data-row="{{ row.name }}" data-done="{{ row.done }}" data-total="{{ row.total }}"{% if hw.filter_default and not row.remaining %} hidden{% endif %}>
             <div class="ln"></div>
-            <div class="who"><b class="trunc">{{ row.name }}</b><span>{{ row.cls }} · <span class="num">{{ '%.1f' | format(row.item_level or 0) }}</span></span></div>
+            <div class="who"><b class="trunc">{{ row.name }}</b><span>{{ row.cls }} · <span class="num">{{ row.item_level | ilvl }}</span></span></div>
             {% for cell in row.cells %}
             <div>
               {% if cell %}
@@ -86,7 +88,7 @@
       <div class="hw-mobile">
         {% for row in hw.rows %}
         <div class="ui-card hm-card" data-row="{{ row.name }}" data-done="{{ row.done }}" data-total="{{ row.total }}"{% if hw.filter_default and not row.remaining %} hidden{% endif %}>
-          <div class="hm-head"><b class="trunc">{{ row.name }}</b><span class="meta trunc">{{ row.cls }} · {{ '%.1f' | format(row.item_level or 0) }}</span><span class="num hm-count" data-char-count="{{ row.name }}">{{ row.done }}/{{ row.total }}</span></div>
+          <div class="hm-head"><b class="trunc">{{ row.name }}</b><span class="meta trunc">{{ row.cls }} · <span class="num">{{ row.item_level | ilvl }}</span></span><span class="num hm-count" data-char-count="{{ row.name }}">{{ row.done }}/{{ row.total }}</span></div>
           {% for cell in row.cells if cell %}
           <div class="mrow"><b>{{ cell.short_name }}</b>
             <span class="seg" role="group" aria-label="{{ row.name }} · {{ cell.short_name }}" data-char="{{ row.name }}" data-raid="{{ cell.raid_name }}" data-short="{{ cell.short_name }}">
@@ -135,7 +137,7 @@
           </div>
           <div class="inv-pick" hidden>
             <select name="character_name" class="field js-themed-select" aria-label="참여 캐릭터">
-              {% for q in inv.qualifying %}<option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>{% endfor %}
+              {% for q in inv.qualifying %}<option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level | ilvl }})</option>{% endfor %}
             </select>
             <select name="role" class="field js-themed-select" aria-label="역할">
               <option value="dps">딜러</option>
@@ -191,7 +193,7 @@
     <section class="ui-card hc-today" aria-labelledby="today-title">
       <div class="ui-row"><h2 class="ui-card-title" id="today-title">오늘의 콘텐츠</h2><span class="meta">{{ today.date }}</span></div>
       {% if today.tabs | length > 1 %}
-      <div class="ui-row" role="group" aria-label="콘텐츠 종류">
+      <div class="toolbar" role="group" aria-label="콘텐츠 종류">
         {% for t in today.tabs %}<button type="button" class="chip-btn" data-today-tab="{{ loop.index0 }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ t.label }}</button>{% endfor %}
       </div>
       {% endif %}
@@ -207,7 +209,8 @@
       </div>
       {% endfor %}
       <div class="ui-row hc-switch-row">
-        <button type="button" class="sw{% if gold_island_subscribed %} on{% endif %}" role="switch" aria-checked="{{ 'true' if gold_island_subscribed else 'false' }}" data-gold-switch><i aria-hidden="true"></i>골드섬 10분 전 디스코드 알림</button>
+        <span class="hc-switch-label" id="gold-sw-label">골드섬 10분 전 디스코드 알림</span><span class="ui-spacer"></span>
+        {{ ui.switch(gold_island_subscribed, labelledby="gold-sw-label", attrs="data-gold-switch") }}
       </div>
     </section>
     {% elif loa_note %}
@@ -226,7 +229,7 @@
         </div>
         {% endfor %}
       </div>
-      <a class="btn sm ghost block" href="/tools/auction-calculator">분배금 계산기에서 쓰기</a>
+      <a class="btn sm ghost block is-block" href="/tools/auction-calculator">분배금 계산기에서 쓰기</a>
     </section>
     {% endif %}
 

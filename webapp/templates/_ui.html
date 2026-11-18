@@ -76,14 +76,26 @@
 </div>
 {% endmacro %}
 
-{# ── Toolbar — 필터 + 주요 동작. 목록형 화면 상단은 전부 이 형태 ── #}
-{% macro toolbar() %}
-<div class="ui-toolbar">{{ caller() }}</div>
+{# ── Toolbar — 필터·검색·동작 한 줄(style.css .toolbar). 안의 컨트롤은 전부 36px로 맞춰진다.
+   검색칸은 <input type="search" class="field search-field">, 오른쪽 끝으로 밀 것은 .toolbar-end ── #}
+{% macro toolbar(extra="", label="") %}
+<div class="toolbar{% if extra %} {{ extra }}{% endif %}"{% if label %} role="group" aria-label="{{ label }}"{% endif %}>{{ caller() }}</div>
 {% endmacro %}
 
-{# ── Filter — 툴바 안에 들어가는 링크형 필터 ── #}
+{# ── Filter — 툴바 안의 링크형 필터. 공대 목록·관리 탭과 같은 칩(.chip-btn) ── #}
 {% macro filter_link(label, href, active=false, count=none) -%}
-<a class="ui-filter{% if active %} is-active{% endif %}" href="{{ href }}">{{ label }}{% if count is not none %} <b>{{ count }}</b>{% endif %}</a>
+<a class="chip-btn{% if active %} on{% endif %}" href="{{ href }}"{% if active %} aria-current="true"{% endif %}>{{ label }}{% if count is not none %}<b>{{ count }}</b>{% endif %}</a>
+{%- endmacro %}
+
+{# ── Switch — [트랙][켜짐/꺼짐]. 이름은 줄의 다른 글자를 labelledby로 가리킨다(색만으로 상태를 알리지 않게 글자를 같이 둔다).
+   type="submit"이면 감싼 폼이 제출한다. state_text를 주면 그 글자로 고정(예: "불러오지 못함").
+   스크립트에서 상태를 바꿀 때는 window.uiSwitch(btn, on). ── #}
+{% macro switch(on, labelledby="", id="", type="button", disabled=false, tip="", state_text="", attrs="") -%}
+<button type="{{ type }}" class="switch" role="switch" aria-checked="{{ 'true' if on else 'false' }}"
+        {%- if labelledby %} aria-labelledby="{{ labelledby }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}
+        {%- if disabled %} disabled{% endif %}{% if tip %} data-tip="{{ tip }}"{% endif %}{% if state_text %} data-fixed-state{% endif %} {{ attrs | safe }}>
+  <i class="switch-track" aria-hidden="true"></i><span class="switch-state" aria-hidden="true">{{ state_text or ("켜짐" if on else "꺼짐") }}</span>
+</button>
 {%- endmacro %}
 
 {# ── Banner — 화면 위 안내 줄. tone: err(봇 서버 끊김) · warn(게임 점검) · info(실시간 갱신 보류)

@@ -1,6 +1,7 @@
 // 토스트 — 오른쪽 아래, 5초 뒤 사라짐(마우스를 올리거나 버튼에 포커스가 있으면 멈춤).
 //   window.showToast(kind, message, {actionLabel, onAction, duration})   kind: "ok" | "err" | "info"
-//   옛 호출 형식 showToast(message, "success"|"error"|"info")도 그대로 받는다(party-live.js 등).
+//   호출은 전부 이 순서(kind 먼저)로 쓴다. 옛 형식 showToast(message, "success"|"error"|"info")와
+//   kind 별칭("success"/"error")도 하위 호환으로만 받는다.
 // ?toast= 플래시(webapp/flash.py)와 htmx X-Toast 헤더도 여기서 띄운다.
 (function () {
   var DURATION_MS = 5000;

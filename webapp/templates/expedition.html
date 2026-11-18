@@ -26,7 +26,7 @@
 
 <div class="exp-listhead">
   <h2 class="exp-h">내 캐릭터</h2><span class="ui-chip">{{ characters|length }}</span>
-  {% if character_groups|length == 1 and character_groups[0].last_sync %}<span class="exp-meta">마지막 동기화 {{ character_groups[0].last_sync }}</span>{% endif %}
+  {% if character_groups|length == 1 and character_groups[0].last_sync %}<span class="exp-meta">마지막 동기화 <time title="{{ character_groups[0].last_sync_at|kst_time }}">{{ character_groups[0].last_sync }}</time></span>{% endif %}
   <form method="post" action="/expedition/sync" class="exp-sync" data-sync-form>
     <span class="exp-meta" data-sync-note role="status" aria-live="polite">아이템 레벨은 매일 04시에 자동으로 갱신됩니다.</span>
     <button type="submit" class="btn" data-busy-text="동기화 중">전체 동기화</button>
@@ -34,12 +34,11 @@
 </div>
 
 {% if characters|length > 5 %}
-<label class="raid-search exp-search">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-  <input type="search" class="js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="캐릭터 검색" autocomplete="off"
+<div class="toolbar">
+  <input type="search" class="field search-field js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="캐릭터 검색" autocomplete="off"
          data-filter-target="#expedition-groups" data-filter-item=".exp-char" data-filter-text=".exp-char-main"
          data-filter-no-result="#expedition-search-noresult">
-</label>
+</div>
 {% endif %}
 
 <div id="expedition-groups" class="exp-groups">
@@ -49,7 +48,7 @@
   <div class="exp-group-head">
     <h3 class="exp-sub expedition-account-title">{{ group.label }}</h3>
     <span class="ui-chip">{{ group.characters|length }}</span>
-    {% if group.last_sync %}<span class="exp-meta exp-push">마지막 동기화 {{ group.last_sync }}</span>{% endif %}
+    {% if group.last_sync %}<span class="exp-meta exp-push">마지막 동기화 <time title="{{ group.last_sync_at|kst_time }}">{{ group.last_sync }}</time></span>{% endif %}
   </div>
   {% endif %}
   <ul class="exp-grid">
@@ -57,10 +56,10 @@
     <li class="ui-card exp-char">
       <a class="exp-char-main" href="/characters/{{ c.character_name | urlencode }}">
         <span class="exp-char-name trunc">{{ c.character_name }}</span>
-        <span class="exp-meta">{{ c.character_class or "—" }} &middot; <span class="num">{% if c.item_level is not none %}{{ "%.2f"|format(c.item_level|float) }}{% else %}—{% endif %}</span></span>
+        <span class="exp-meta">{{ c.character_class or "—" }} &middot; <span class="num">{% if c.item_level is not none %}{{ c.item_level | ilvl }}{% else %}—{% endif %}</span></span>
       </a>
       <dl class="exp-char-stats">
-        <div><dt>전투력</dt><dd class="num">{% if c.combat_power is not none %}{{ "{:,.2f}".format(c.combat_power|float) }}{% else %}—{% endif %}</dd></div>
+        <div><dt>전투력</dt><dd class="num">{{ c.combat_power | cp }}</dd></div>
         <div><dt>7일 변화</dt>
           <dd class="num">{% if c.cp_growth_7d is not none %}{% set g = c.cp_growth_7d|float -%}
             {%- if g > 0 %}<span class="exp-up">▲ +{{ "{:,.2f}".format(g) }}</span>{% elif g < 0 %}<span class="exp-down">▼ −{{ "{:,.2f}".format(g|abs) }}</span>{% else %}<span class="exp-meta">변화 없음</span>{% endif %}
@@ -106,15 +105,15 @@
     <h3 class="exp-sub">부계정 추가</h3>
     <p class="exp-meta">다른 로스트아크 계정의 API 키를 등록하면 그 계정의 원정대 캐릭터가 전부 자동으로 추가됩니다.</p>
     <div class="exp-acc-grid">
-      <label class="exp-label">
+      <label class="field-label">
         <span>로스트아크 API 키</span>
         <input type="password" name="api_key" class="field" required autocomplete="off" aria-describedby="exp-acc-help" data-field="api_key">
       </label>
-      <label class="exp-label">
+      <label class="field-label">
         <span>검증용 캐릭터 이름</span>
         <input type="text" name="character_name" class="field" maxlength="12" required autocomplete="off" aria-describedby="exp-acc-help" data-field="character_name">
       </label>
-      <button type="submit" class="btn pri" data-busy-text="확인 중">계정 추가</button>
+      <button type="submit" class="btn pri is-block" data-busy-text="확인 중">계정 추가</button>
     </div>
     <p class="field-help" id="exp-acc-help" data-help>검증용 캐릭터는 그 계정에 있는 캐릭터 아무거나 하나면 됩니다.</p>
   </form>

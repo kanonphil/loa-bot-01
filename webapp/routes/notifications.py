@@ -86,7 +86,7 @@ async def open_notification(notification_id: int, user: dict = Depends(get_curre
     if not notif:
         return RedirectResponse("/parties", status_code=303)
     if notif["type"] == "invited":
-        return RedirectResponse("/invites", status_code=303)
+        return RedirectResponse("/main#todo", status_code=303)  # 초대는 홈 "할 일"에서 수락/거절
     if notif["type"] in ("cancelled", "kicked"):
         # 취소된 파티는 이미 삭제됐고, 강퇴된 파티는 들어갈 수 없다 — 목록으로
         return redirect_with_toast("/parties", notif.get("text") or "", "info")

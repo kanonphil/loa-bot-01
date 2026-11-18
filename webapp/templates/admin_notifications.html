@@ -2,7 +2,7 @@
 {% import "_ui.html" as ui %}
 {% import "_admin_macros.html" as m %}
 {% block admin_body %}
-<div class="ad-row ad-toolbar">
+<div class="toolbar">
   {% for key, label in tabs %}
   <a class="chip-btn{% if key == tab %} on{% endif %}" href="/admin/notifications?tab={{ key }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
@@ -30,8 +30,8 @@
   {% if not logs %}
   <div class="ad-card">{{ ui.empty("발송 로그가 없습니다", "새 공대 알림 DM을 보내면 여기에 기록됩니다.", icon="bell") }}</div>
   {% else %}
-  <div class="ad-card ad-tcard">
-    <table class="ad-t" id="log-table">
+  <div class="ui-card table-card ad-tcard">
+    <table class="table is-stack ad-t" id="log-table">
       <thead><tr><th>발송 시각</th><th>받은 사람</th><th>레이드</th><th>난이도</th><th></th></tr></thead>
       <tbody>
         {% for l in logs %}
@@ -58,7 +58,7 @@
     </div>
     <div class="ad-bc-grid">
       <form method="post" action="/admin/notifications/broadcast" id="bc-form" class="ad-bc-form">
-        <label class="ad-label" for="bc-content">공지 내용</label>
+        <label class="field-label" for="bc-content">공지 내용</label>
         <textarea class="field" id="bc-content" name="content" rows="6" maxlength="1500" required placeholder="예: 이번 주 수요일 점검 이후 공대 일정이 조정됩니다."></textarea>
         <div class="ad-row">
           <span class="ad-meta"><span class="num" data-bc-len>0</span>/1500자 · 보낸 DM은 되돌릴 수 없습니다</span>
@@ -66,7 +66,7 @@
         </div>
       </form>
       <div class="ad-bc-preview">
-        <span class="ad-label">미리보기</span>
+        <span class="field-label">미리보기</span>
         <div class="ad-dm" aria-live="polite">
           <b class="ad-dm-from">{{ get_guild_name() or "로아봇" }}</b>
           <p class="ad-dm-body" id="bc-preview" data-empty="내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.">내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.</p>

@@ -40,19 +40,8 @@ def _max_item_level(characters: list[dict]) -> float:
     return max((c.get("item_level") or 0) for c in characters) if characters else 0
 
 
-_HISTORY_STATUS = {
-    "recruiting": ("모집중", "accent"),
-    "full": ("파티완성", "warn"),  # "클리어"(ok, 초록)와 구분되게 골드로 — 둘 다 초록이면 구분이 어려웠다
-    "closed": ("마감", ""),
-    "disbanded": ("클리어", "ok"),
-    "cleared": ("클리어", "ok"),
-    "expired": ("기한 만료", "past"),
-    "cancelled": ("취소", "danger"),
-}
-
-
 def _history_view(entry: dict) -> dict:
-    label, tone = _HISTORY_STATUS.get(entry["status"], (entry["status"], ""))
+    label, tone = party_logic.status_view(entry)
     return {**entry, "status_label": label, "status_tone": tone}
 
 
@@ -215,10 +204,20 @@ async def _create_check_data(
     """개설 화면의 일정 안내·중복 경고·캐릭터 추천을 한 번에 계산한다 — 화면이 레이드·난이도·일정을 바꿀 때마다 부른다."""
     now = datetime.now(KST)
     target = _parse(scheduled_datetime) if scheduled_datetime else None
-    parties, raids, summary = await asyncio.gather(
+
+    async def _none():
+        return None
+
+    # 구독자 수: 레이드·난이도를 다 골랐을 때만 묻는다. 봇 오류면 None(화면은 줄을 숨긴다).
+    subscribers_call = (
+        _safe(bot_party.get_raid_subscribers_count(raid_name, difficulty, discord_id, scheduled_datetime))
+        if raid_name and difficulty else _none()
+    )
+    parties, raids, summary, subscribers = await asyncio.gather(
         bot_client.list_parties(config.DISCORD_GUILD_ID),
         bot_client.get_raids(),
         _safe(bot_party.get_raid_check_summary(discord_id)),
+        subscribers_call,
     )
     info = raids.get(raid_name) or {}
     diff = (info.get("difficulties") or {}).get(difficulty) or {}
@@ -245,6 +244,8 @@ async def _create_check_data(
         "duplicates": duplicates,
         "options": options,
         "has_summary": summary is not None,
+        # 열면 "새 공대" DM을 받을 구독자 수(int) — 레이드·난이도 미선택이거나 봇 오류면 None
+        "subscribers": subscribers if (info and diff) else None,
     }
 
 
@@ -715,13 +716,30 @@ async def reschedule_party(
     request: Request,
     message_id: str,
     scheduled_datetime: str = Form(...),
+    memo: str | None = Form(None),
+    user: dict = Depends(get_current_user),
+):
+    # 메모는 이제 /memo로 따로 저장한다. 예전 폼처럼 memo 필드를 보내면 그대로 반영하고,
+    # 필드가 아예 없으면 봇에 memo를 빼고 보내 기존 메모를 유지한다.
+    if memo is None:
+        result = await bot_client.reschedule_party(message_id, user["discord_id"], scheduled_datetime)
+    else:
+        result = await bot_client.reschedule_party(
+            message_id, user["discord_id"], scheduled_datetime, memo.strip() or None
+        )
+    return _redirect_with_result(message_id, result, "일정을 변경하지 못했습니다.", "일정을 변경했습니다. 파티원에게 안내가 갑니다.")
+
+
+@router.post("/parties/{message_id}/memo")
+async def update_party_memo(
+    request: Request,
+    message_id: str,
     memo: str = Form(""),
     user: dict = Depends(get_current_user),
 ):
-    result = await bot_client.reschedule_party(
-        message_id, user["discord_id"], scheduled_datetime, memo.strip() or None
-    )
-    return _redirect_with_result(message_id, result, "일정을 변경하지 못했습니다.", "일정을 변경했습니다. 파티원에게 안내가 갑니다.")
+    """메모만 저장 — 일정 변경과 달리 파티원에게 DM이 가지 않는다."""
+    result = await bot_client.update_party_memo(message_id, user["discord_id"], memo.strip()[:150] or None)
+    return _redirect_with_result(message_id, result, "메모를 저장하지 못했습니다.", "메모를 저장했습니다.")
 
 
 @router.post("/parties/{message_id}/transfer-leader")

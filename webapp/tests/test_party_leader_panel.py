@@ -208,6 +208,62 @@ def test_reschedule_action_calls_bot_with_datetime(client):
     assert resp.status_code == 303
     assert without_toast(resp.headers["location"]) == "/parties/p1"
     assert reschedule_route.called
+    import json as _json
+    assert _json.loads(reschedule_route.calls[0].request.content)["memo"] == "새 공지"  # 예전 폼 하위호환
+
+
+def test_reschedule_without_memo_field_omits_memo_so_bot_keeps_it(client):
+    import json as _json
+    with respx.mock:
+        log_in(client, discord_id="111")
+        route = respx.post(RESCHEDULE_URL).mock(return_value=httpx.Response(200, json={"success": True}))
+        client.post("/parties/p1/reschedule", data={"scheduled_datetime": "2026-05-21T21:00"})
+    payload = _json.loads(route.calls[0].request.content)
+    assert payload == {"discord_id": "111", "scheduled_datetime": "2026-05-21T21:00"}
+
+
+MEMO_URL = "http://bot-server.internal/api/internal/parties/p1/memo"
+
+
+def test_memo_submit_posts_to_bot_and_toasts(client):
+    import json as _json
+    from webapp.tests.conftest import toast_of
+    with respx.mock:
+        log_in(client, discord_id="111")
+        route = respx.post(MEMO_URL).mock(return_value=httpx.Response(200, json={"success": True, "memo": "음성 필수"}))
+        resp = client.post("/parties/p1/memo", data={"memo": "  음성 필수 "})
+    assert resp.status_code == 303
+    assert without_toast(resp.headers["location"]) == "/parties/p1"
+    assert toast_of(resp.headers["location"]) == ("메모를 저장했습니다.", "success")
+    assert _json.loads(route.calls[0].request.content) == {"discord_id": "111", "memo": "음성 필수"}
+
+
+def test_memo_submit_empty_clears_and_failure_shows_reason(client):
+    import json as _json
+    with respx.mock:
+        log_in(client, discord_id="111")
+        route = respx.post(MEMO_URL).mock(return_value=httpx.Response(200, json={"success": False, "reason": "파티장만 사용할 수 있습니다."}))
+        resp = client.post("/parties/p1/memo", data={"memo": ""})
+    assert _json.loads(route.calls[0].request.content)["memo"] is None
+    assert "join_error=" in resp.headers["location"]
+
+
+def test_leader_sees_separate_memo_form_and_reschedule_pop_without_memo(client):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(PARTY_DETAIL_URL).mock(return_value=httpx.Response(200, json={**PARTY, "memo": "기존 메모"}))
+        respx.get(COMMENTS_URL).mock(return_value=httpx.Response(200, json=[]))
+        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(PROFICIENCY_URL).mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
+        respx.get(SUPPORT_CLASSES_URL).mock(return_value=httpx.Response(200, json=["홀리나이트"]))
+        respx.get(INVITABLE_USERS_URL).mock(return_value=httpx.Response(200, json={"success": True, "users": [], "available_slots": []}))
+        resp = client.get("/parties/p1")
+    body = resp.text
+    assert 'action="/parties/p1/memo"' in body and 'value="기존 메모"' in body
+    assert "일정·메모 변경" not in body
+    pop = body[body.index('id="reschedule-pop"'):]
+    pop = pop[:pop.index("</form>")]
+    assert 'name="memo"' not in pop
 
 
 def test_leader_sees_edit_difficulty_form(client):

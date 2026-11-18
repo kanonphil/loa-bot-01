@@ -34,6 +34,12 @@ router = APIRouter(dependencies=[Depends(verify_webapp_key)])
 async def verify_user(discord_id: str):
   """discord_id가 /api등록을 마친 계정인지 확인. 웹 로그인 게이트에 사용."""
   registered = await db.user_exists(discord_id)
+  if registered:
+    # 웹 접속 기록(관리자 유저 목록의 last_active_at) — 웹앱이 유저당 분당 1회 이하로 부른다.
+    try:
+      await db.touch_user_last_seen(discord_id)
+    except Exception:
+      pass  # 기록 실패가 로그인 게이트를 막으면 안 된다
   return {"discord_id": discord_id, "registered": registered}
 
 
@@ -764,18 +770,50 @@ class ReschedulePartyBody(BaseModel):
 
 @router.post("/parties/{message_id}/reschedule")
 async def reschedule_party(message_id: str, body: ReschedulePartyBody):
+  """일정 변경(파티원 DM 발송). memo 키를 아예 빼고 보내면 기존 메모를 그대로 두고,
+  memo를 보내면(null 포함) 그 값으로 바꾼다 — 웹은 메모를 /memo로 따로 저장한다."""
   from datetime import datetime
   from bot.api import bot_ref
-  from bot.ui.views import KST, _reschedule_party_core
+  from bot.ui.views import KST, MEMO_UNCHANGED, _reschedule_party_core
 
   try:
     dt_kst = datetime.fromisoformat(body.scheduled_datetime).replace(tzinfo=KST)
   except ValueError:
     return {"success": False, "reason": "일정 형식이 올바르지 않습니다."}
 
+  memo = body.memo if "memo" in body.model_fields_set else MEMO_UNCHANGED
   return await _reschedule_party_core(
-    bot_ref.get_bot(), message_id, body.discord_id, dt_kst, body.memo
+    bot_ref.get_bot(), message_id, body.discord_id, dt_kst, memo
   )
+
+
+class PartyMemoBody(BaseModel):
+  discord_id: str
+  memo: str | None = None
+
+
+@router.post("/parties/{message_id}/memo")
+async def update_party_memo(message_id: str, body: PartyMemoBody):
+  """메모만 변경(파티장 또는 관리자). 임베드는 갱신하고 DM은 보내지 않는다.
+  응답: {"success": bool, "reason": str|None, "memo": str|None(성공 시)}."""
+  from bot.api import bot_ref
+  from bot.ui.views import _update_party_memo_core
+
+  return await _update_party_memo_core(bot_ref.get_bot(), message_id, body.discord_id, body.memo)
+
+
+@router.get("/raid-subscribers-count")
+async def raid_subscribers_count(
+  raid_name: str, difficulty: str, discord_id: str | None = None, scheduled_datetime: str | None = None,
+):
+  """지금 이 레이드/난이도로 공대를 열면 "새 공대" DM을 받을 사람 수 → {"count": n}.
+  실제 발송과 같은 규칙(views._new_party_dm_targets): 해당 난이도·'전체' 구독자(중복 1회)에서
+  개설자(discord_id)와 일정 주차(scheduled_datetime, KST ISO — 없으면 이번 주)에 같은 레이드의
+  다른 활성 공대에 이미 있는 사람을 뺀다. DM 차단 여부는 미리 알 수 없어 포함된다."""
+  from bot.ui.views import _new_party_dm_targets
+
+  targets = await _new_party_dm_targets(raid_name, difficulty, discord_id, scheduled_datetime or None)
+  return {"count": len(targets)}
 
 
 class TransferLeaderBody(BaseModel):
@@ -1333,21 +1371,21 @@ async def admin_notify_party(message_id: str, body: AdminNotifyPartyBody):
 
 @router.get("/admin/users")
 async def admin_list_users(discord_id: str, guild_id: str | None = None, q: str | None = None):
+  """등록 유저 목록. 행마다:
+  - representative, registered_at, discord_nick(guild_id를 줬을 때)
+  - last_sync: 캐릭터 캐시 마지막 갱신(user_characters.cached_at 최댓값), 없으면 null
+  - character_count: 등록 캐릭터 수(user_characters 행 수, 없으면 0)
+  - last_active_at: 공대 참여(party_slots.joined_at, 아직 정리 안 된 공대만)·공대 댓글
+    (party_comments.created_at)·레이드 클리어 체크(raid_completions.completed_at)·웹 로그인/
+    세션 재확인(users.last_seen_at, verify-user가 찍음) 중 가장 늦은 시각, 하나도 없으면 null.
+  시각은 전부 SQLite CURRENT_TIMESTAMP 형식의 UTC("YYYY-MM-DD HH:MM:SS", 시간대 표기 없음) —
+  웹앱 utils.time_ago/kst_time이 naive를 UTC로 읽는 것과 맞다. 집계는 쿼리 한 번
+  (db.get_admin_user_list)."""
   err = _require_admin(discord_id)
   if err:
     raise HTTPException(status_code=403, detail=err)
 
-  import aiosqlite
-
-  async with aiosqlite.connect(db.DB_PATH) as conn:
-    conn.row_factory = aiosqlite.Row
-    cur = await conn.execute(
-      "SELECT u.discord_id, u.registered_at, "
-      f"{db._REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative, "
-      "(SELECT MAX(uc.cached_at) FROM user_characters uc WHERE uc.discord_id=u.discord_id) AS last_sync "
-      "FROM users u ORDER BY u.registered_at DESC"
-    )
-    users = [dict(r) for r in await cur.fetchall()]
+  users = await db.get_admin_user_list()
 
   if guild_id:
     from bot.api import bot_ref

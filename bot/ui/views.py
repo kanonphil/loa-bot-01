@@ -877,8 +877,13 @@ async def _log_kick(
     )
 
 
+# _reschedule_party_core의 memo 자리에 넘기면 메모를 건드리지 않는다(웹이 메모를 따로
+# 저장하게 바뀐 뒤 일정 변경 요청에 memo가 빠져 오는 경우). None은 여전히 "메모 지우기".
+MEMO_UNCHANGED = object()
+
+
 async def _reschedule_party_core(
-    bot: discord.Client, message_id: str, discord_id: str, dt_kst: datetime, memo: str | None,
+    bot: discord.Client, message_id: str, discord_id: str, dt_kst: datetime, memo,
     *, source: str | None = None,
 ) -> dict:
     """일정/메모 변경 — 디스코드 관리 패널과 웹 API가 공유. 날짜 입력 파싱(디스코드는
@@ -899,7 +904,10 @@ async def _reschedule_party_core(
 
     scheduled_time = _format_schedule(dt_kst)
     await db.update_party_schedule(message_id, scheduled_time, dt_kst.isoformat())
-    await db.update_party_memo(message_id, memo)
+    if memo is MEMO_UNCHANGED:
+        memo = None  # 아래 DM의 "사유"로 기존 메모를 다시 보내지 않는다
+    else:
+        await db.update_party_memo(message_id, memo)
     await _log_party_admin_action(
         party, discord_id, "party.reschedule", f"일정 변경 ({party.get('scheduled_time')} → {scheduled_time})",
         source=source, detail={"from": party.get("scheduled_datetime"), "to": dt_kst.isoformat()},
@@ -930,6 +938,32 @@ async def _reschedule_party_core(
         _rename_party_thread_later(bot, updated)
 
     return {"success": True, "reason": None, "scheduled_time": scheduled_time}
+
+
+async def _update_party_memo_core(
+    bot: discord.Client, message_id: str, discord_id: str, memo: str | None,
+    *, source: str | None = None,
+) -> dict:
+    """메모만 변경 — 웹 공대 상세의 메모 저장. 권한·종료 검사와 관리자 기록은 일정 변경과
+    같고, 디스코드 임베드는 갱신하지만 파티원 DM·스레드 공지는 보내지 않는다(일정이
+    바뀐 게 아니라서). 빈 문자열/None이면 메모를 지운다."""
+    party = await db.get_party(message_id)
+    err = _require_leader_or_admin(party, discord_id)
+    if err:
+        return {"success": False, "reason": err}
+    if party["status"] in db.ENDED_STATUSES:
+        return {"success": False, "reason": "이미 종료된 파티입니다."}
+    memo = (memo or "").strip()[:150] or None
+
+    await db.update_party_memo(message_id, memo)
+    await _log_party_admin_action(
+        party, discord_id, "party.memo", "메모 변경" if memo else "메모 삭제",
+        source=source, detail={"from": party.get("memo"), "to": memo},
+    )
+    updated = await db.get_party(message_id)
+    if bot and updated:
+        await _refresh_party_embed_with_reserved(bot, updated)
+    return {"success": True, "reason": None, "memo": memo}
 
 
 async def _edit_party_difficulty_core(
@@ -2357,30 +2391,48 @@ async def _notify_new_party_subscribers(
     scheduled_time: str, scheduled_datetime: str | None, thread_id: str, new_msg_id: str,
 ) -> None:
     """새 공대 구독자 DM 발송 (생성자·이미 해당 레이드 참여 중인 유저 제외)."""
-    subscribers = await db.get_raid_subscribers(raid_name, difficulty)
-    if subscribers:
-        # 이번 주 해당 레이드에 이미 참여 중인 유저 집합
-        party_week_key = db.get_week_key_for_dt(scheduled_datetime) if scheduled_datetime else db.get_week_key()
-        already_in: set[str] = set()
-        for sub_id in subscribers:
-            slots = await db.get_user_active_slots_in_raid(sub_id, raid_name, new_msg_id, party_week_key)
-            if slots:
-                already_in.add(sub_id)
-
+    targets = await _new_party_dm_targets(raid_name, difficulty, leader_id, scheduled_datetime, new_msg_id)
+    if targets:
         dm_embed = discord.Embed(
             title=f"🔔 {raid_name} {difficulty} 새 공대가 모집을 시작했습니다!",
             url=f"https://discord.com/channels/{guild_id}/{thread_id}/{new_msg_id}",
             description=f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**",
             color=0x3498DB,
         )
-        for sub_id in subscribers:
-            if sub_id != leader_id and sub_id not in already_in:
-                try:
-                    user = await _get_user(bot, sub_id)
-                    await user.send(embed=dm_embed)
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    pass
-                await db.log_notification(sub_id, raid_name, difficulty, new_msg_id)
+        for sub_id in targets:
+            try:
+                user = await _get_user(bot, sub_id)
+                await user.send(embed=dm_embed)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+            await db.log_notification(sub_id, raid_name, difficulty, new_msg_id)
+
+
+async def _new_party_dm_targets(
+    raid_name: str, difficulty: str, leader_id: str | None, scheduled_datetime: str | None,
+    new_msg_id: str = "",
+) -> list[str]:
+    """새 공대 구독자 DM을 받을 사람 — 실제 발송(_notify_new_party_subscribers)과 개설 화면의
+    "구독자 N명" 미리보기(/api/internal/raid-subscribers-count)가 같은 규칙을 쓰도록 한 곳에 둔다.
+    규칙: 이 레이드의 해당 난이도 또는 '전체' 난이도 구독자(같은 사람은 한 번) 중에서
+    개설자(leader_id)와, 공대 일정이 속한 주차(일정 없으면 이번 주)에 같은 레이드의 다른
+    활성 공대(모집중/만석/마감)에 이미 들어가 있는 사람을 뺀다. DM 차단 여부는 보내 봐야
+    알 수 있어 빼지 않는다."""
+    subscribers = list(dict.fromkeys(await db.get_raid_subscribers(raid_name, difficulty)))
+    if not subscribers:
+        return []
+    try:
+        party_week_key = db.get_week_key_for_dt(scheduled_datetime) if scheduled_datetime else db.get_week_key()
+    except ValueError:
+        party_week_key = db.get_week_key()
+    targets = []
+    for sub_id in subscribers:
+        if sub_id == leader_id:
+            continue
+        if await db.get_user_active_slots_in_raid(sub_id, raid_name, new_msg_id, party_week_key):
+            continue
+        targets.append(sub_id)
+    return targets
 
 
 async def _post_party(

@@ -9,12 +9,12 @@
   <div class="member-card-stats">
     <div class="member-card-stat">
       <span class="member-card-stat-label">아이템 레벨</span>
-      <span class="member-card-stat-value">{{ detail.item_level }}</span>
+      <span class="member-card-stat-value">{{ detail.item_level | ilvl }}</span>
     </div>
     {% if detail.combat_power %}
     <div class="member-card-stat">
       <span class="member-card-stat-label">전투력</span>
-      <span class="member-card-stat-value member-card-stat-cp">{{ detail.combat_power }}</span>
+      <span class="member-card-stat-value member-card-stat-cp">{{ detail.combat_power | cp }}</span>
     </div>
     {% endif %}
   </div>

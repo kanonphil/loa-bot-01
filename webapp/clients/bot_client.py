@@ -628,12 +628,31 @@ async def kick_member(message_id: str, discord_id: str, target_discord_id: str) 
     return resp.json()
 
 
+_OMIT = object()
+
+
 async def reschedule_party(
-    message_id: str, discord_id: str, scheduled_datetime: str, memo: str | None
+    message_id: str, discord_id: str, scheduled_datetime: str, memo=_OMIT
 ) -> dict:
+    """memo를 안 넘기면 요청에서 memo 키를 빼서 봇이 기존 메모를 그대로 둔다(None은 메모 삭제)."""
+    payload = {"discord_id": discord_id, "scheduled_datetime": scheduled_datetime}
+    if memo is not _OMIT:
+        payload["memo"] = memo
     resp = await _get_client().post(
         f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/reschedule",
-        json={"discord_id": discord_id, "scheduled_datetime": scheduled_datetime, "memo": memo},
+        json=payload,
+        headers=_headers(),
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def update_party_memo(message_id: str, discord_id: str, memo: str | None) -> dict:
+    """메모만 변경 — 봇이 임베드만 갱신하고 DM은 보내지 않는다."""
+    resp = await _get_client().post(
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/memo",
+        json={"discord_id": discord_id, "memo": memo},
         headers=_headers(),
         timeout=10,
     )
