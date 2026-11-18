@@ -464,6 +464,12 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE raid_difficulties ADD COLUMN clear_gold INTEGER")
         except Exception:
             pass
+        # 웹 접속 시각(UTC, CURRENT_TIMESTAMP 형식) — 웹앱이 로그인/세션 재확인 때 부르는
+        # /api/internal/verify-user가 찍는다(유저당 최대 분당 1회). 관리자 유저 목록의 last_active_at 재료.
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMP")
+        except Exception:
+            pass
         # on_message가 메시지마다 channel_id로 파티를 찾는다
         await db.execute("CREATE INDEX IF NOT EXISTS idx_parties_channel ON parties(channel_id)")
         await db.commit()
@@ -688,6 +694,57 @@ async def user_exists(discord_id: str) -> bool:
         )
         row = await cur.fetchone()
     return row is not None
+
+
+async def touch_user_last_seen(discord_id: str) -> None:
+    """users.last_seen_at을 지금(UTC)으로. 미등록 유저면 아무 일도 없다."""
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE users SET last_seen_at=CURRENT_TIMESTAMP WHERE discord_id=?", (discord_id,)
+        )
+        await db.commit()
+
+
+# 관리자 유저 목록(GET /api/internal/admin/users)의 집계 — 유저별 쿼리 없이 한 번에.
+# last_active_at = 아래 시각 중 가장 늦은 것(전부 SQLite CURRENT_TIMESTAMP, 즉 UTC
+# "YYYY-MM-DD HH:MM:SS" — 같은 형식이라 MAX 문자열 비교가 곧 시간 비교):
+#   - party_slots.joined_at        현재 남아 있는 공대 참여(주간 정리로 지워진 공대는 빠짐)
+#   - party_comments.created_at    공대 댓글(디스코드 스레드·웹 모두)
+#   - raid_completions.completed_at 레이드 클리어 체크(수동 체크·공대 클리어 모두)
+#   - users.last_seen_at           웹 로그인/세션 재확인(verify-user)
+# 캐릭터 동기화(cached_at)는 자동 갱신도 섞여 있어 넣지 않는다 — 그건 last_sync로 따로 준다.
+_ADMIN_USER_LIST_SQL = (
+    "WITH act(discord_id, t) AS ("
+    "  SELECT discord_id, joined_at FROM party_slots"
+    "  UNION ALL SELECT discord_id, created_at FROM party_comments"
+    "  UNION ALL SELECT discord_id, completed_at FROM raid_completions"
+    "  UNION ALL SELECT discord_id, last_seen_at FROM users"
+    "), last_act AS ("
+    "  SELECT discord_id, MAX(t) AS last_active_at FROM act WHERE t IS NOT NULL GROUP BY discord_id"
+    "), char_agg AS ("
+    "  SELECT discord_id, COUNT(*) AS character_count, MAX(cached_at) AS last_sync"
+    "  FROM user_characters GROUP BY discord_id"
+    ") "
+    "SELECT u.discord_id, u.registered_at, "
+    "{representative} AS representative, "
+    "ca.last_sync AS last_sync, COALESCE(ca.character_count, 0) AS character_count, "
+    "la.last_active_at AS last_active_at "
+    "FROM users u "
+    "LEFT JOIN char_agg ca ON ca.discord_id=u.discord_id "
+    "LEFT JOIN last_act la ON la.discord_id=u.discord_id "
+    "ORDER BY u.registered_at DESC"
+)
+
+
+async def get_admin_user_list() -> list[dict]:
+    """등록 유저 전체 + representative/last_sync/character_count/last_active_at (위 주석 참고)."""
+    sql = _ADMIN_USER_LIST_SQL.replace(
+        "{representative}", _REPRESENTATIVE_CHARACTER_SQL.format(alias="u")
+    )
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(sql)
+        return [dict(r) for r in await cur.fetchall()]
 
 
 # ──────────────────────────────────────────────

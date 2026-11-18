@@ -195,7 +195,13 @@
           {% endif %}
 
           <span class="pt-set-label">공지 / 메모</span>
-          <div class="pt-row"><span class="pt-grow trunc">{{ party.memo or "없음" }}</span><button type="button" class="btn sm" data-pop-open="reschedule-pop" aria-haspopup="dialog" aria-controls="reschedule-pop" aria-expanded="false">일정·메모 변경</button></div>
+          <div class="pt-stack">
+            <form method="post" action="/parties/{{ mid }}/memo" class="pt-row" id="memo-form">
+              <input type="text" class="field pt-grow" name="memo" maxlength="150" value="{{ party.memo or '' }}" placeholder="예: 음성 필수 (비우면 삭제)" aria-label="공지 / 메모">
+              <button type="submit" class="btn" data-busy-text="저장 중">저장</button>
+            </form>
+            <span class="pt-meta">메모 저장은 파티원에게 DM을 보내지 않습니다. 일정은 위의 "일정 변경"에서 바꿉니다.</span>
+          </div>
 
           <span class="pt-set-label">게스트 초대</span>
           <div class="pt-row">
@@ -268,7 +274,6 @@
         <button type="button" class="btn sm" data-adjust-minutes="1440">+1일</button>
       </div>
       <label>새 일정<input type="text" class="field" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정" data-initial="{{ party.scheduled_datetime or '' }}"></label>
-      <label>공지 / 메모 (비우면 삭제)<input type="text" class="field" name="memo" maxlength="150" value="{{ party.memo or '' }}" placeholder="예: 음성 필수"></label>
       <span class="pt-meta">저장하면 파티원에게 일정 변경 DM이 갑니다.</span>
       <div class="pt-pop-actions"><button type="button" class="btn sm" data-pop-close>닫기</button><button type="submit" class="btn sm pri" data-busy-text="변경 중">변경</button></div>
     </form>

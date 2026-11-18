@@ -365,6 +365,12 @@
       } else {
         dup.hidden = true;
       }
+      var subs = $("#prev-subs"), n = raidIn.value ? res.subscribers : null;
+      if (subs) {
+        // 숫자를 모르면(봇 응답 없음) 원래 안내 문구 그대로
+        subs.textContent = n > 0 ? "열면 구독자 " + n + "명에게 DM이 갑니다"
+          : (n === 0 ? "이 난이도 구독자가 없어 DM은 가지 않습니다" : subs.getAttribute("data-default"));
+      }
       if (res.has_summary && raidIn.value) {
         state.options = res.options;
         renderChars(res.options);

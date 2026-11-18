@@ -59,12 +59,13 @@ def register(app, g):
     # ── 유저 ──
     stale = (datetime.utcnow() - timedelta(days=42)).strftime("%Y-%m-%d %H:%M:%S")
     fresh = (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+    active = (datetime.utcnow() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
     users = [
-        {"discord_id": ME, "representative": "발키리", "discord_nick": "valkyrie", "character_count": 3, "registered_at": now.isoformat(), "last_sync": fresh},
-        {"discord_id": "222", "representative": "리퍼짱", "discord_nick": "ripper", "character_count": 6, "registered_at": now.isoformat(), "last_sync": fresh},
-        {"discord_id": "333", "representative": "버서커", "discord_nick": "berserk", "character_count": 3, "registered_at": now.isoformat(), "last_sync": stale},
-        {"discord_id": "444", "representative": "바드님", "discord_nick": "bard", "character_count": 4, "registered_at": now.isoformat(), "last_sync": fresh},
-        {"discord_id": "999", "representative": None, "discord_nick": None, "character_count": 0, "registered_at": now.isoformat(), "last_sync": None},
+        {"discord_id": ME, "representative": "발키리", "discord_nick": "valkyrie", "character_count": 3, "registered_at": now.isoformat(), "last_sync": fresh, "last_active_at": active},
+        {"discord_id": "222", "representative": "리퍼짱", "discord_nick": "ripper", "character_count": 6, "registered_at": now.isoformat(), "last_sync": fresh, "last_active_at": fresh},
+        {"discord_id": "333", "representative": "버서커", "discord_nick": "berserk", "character_count": 3, "registered_at": now.isoformat(), "last_sync": stale, "last_active_at": stale},
+        {"discord_id": "444", "representative": "바드님", "discord_nick": "bard", "character_count": 4, "registered_at": now.isoformat(), "last_sync": fresh, "last_active_at": None},
+        {"discord_id": "999", "representative": None, "discord_nick": None, "character_count": 0, "registered_at": now.isoformat(), "last_sync": None, "last_active_at": None},
     ]
     get("/api/internal/admin/users", lambda: j(users))
     get("/api/internal/admin/users/{uid}/characters", lambda uid: j([

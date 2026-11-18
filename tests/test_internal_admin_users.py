@@ -149,6 +149,48 @@ def test_list_users_includes_last_sync(client):
     assert target["last_sync"] is not None  # update_character_cache가 cached_at을 찍는다
 
 
+def test_list_users_includes_character_count_and_last_active_at(client):
+    import aiosqlite
+
+    async def setup():
+        await db.add_character(TARGET_ID, "부캐릭")
+        await db.set_user_api_key("555", "dummy-key-5")  # 활동·캐릭터 전혀 없음
+        await db.set_user_api_key("777", "dummy-key-7")
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            # 모든 활동 시각을 과거로 돌려 놓고 소스별로 최신값이 이기는지 본다
+            await conn.execute("UPDATE party_slots SET joined_at='2026-01-01 00:00:00'")
+            await conn.execute(
+                "INSERT INTO party_comments (party_message_id, discord_id, author_name, content, source, created_at) "
+                "VALUES ('900', ?, 'x', 'hi', 'web', '2026-02-01 00:00:00')", (TARGET_ID,)
+            )
+            await conn.execute(
+                "INSERT INTO raid_completions (discord_id, character_name, raid_name, difficulty, week_key, completed_at) "
+                "VALUES (?, '메인캐릭', '종막', '노말', '2026-03-04', '2026-03-05 12:00:00')", (TARGET_ID,)
+            )
+            await conn.commit()
+
+    asyncio.run(setup())
+    resp = client.get("/api/internal/admin/users", params={"discord_id": ADMIN_ID}, headers=HEADERS)
+    rows = {u["discord_id"]: u for u in resp.json()}
+    assert rows[TARGET_ID]["character_count"] == 2
+    assert rows[TARGET_ID]["last_active_at"] == "2026-03-05 12:00:00"
+    assert rows["555"]["character_count"] == 0
+    assert rows["555"]["last_active_at"] is None
+
+    # 웹 로그인/세션 재확인(verify-user)도 활동으로 센다
+    assert client.get("/api/internal/verify-user", params={"discord_id": "777"}, headers=HEADERS).json()["registered"]
+    rows = {u["discord_id"]: u for u in client.get(
+        "/api/internal/admin/users", params={"discord_id": ADMIN_ID}, headers=HEADERS).json()}
+    seen = rows["777"]["last_active_at"]
+    assert seen is not None and "T" not in seen and seen > "2026-03-05 12:00:00"
+
+
+def test_verify_user_does_not_create_row_for_unregistered(client):
+    resp = client.get("/api/internal/verify-user", params={"discord_id": "888"}, headers=HEADERS)
+    assert resp.json()["registered"] is False
+    assert asyncio.run(db.user_exists("888")) is False
+
+
 def test_get_stale_users_flags_never_synced_and_old(client):
     import aiosqlite
 

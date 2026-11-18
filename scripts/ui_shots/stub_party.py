@@ -54,6 +54,14 @@ def install(ns: dict) -> None:
     async def create():
         return j({"success": True, "message_id": "p1"})
 
+    @app.post("/api/internal/parties/{mid}/memo")
+    async def memo(mid: str):
+        return j({"success": True, "reason": None})
+
+    @app.get("/api/internal/raid-subscribers-count")
+    async def subscribers_count(raid_name: str, difficulty: str):
+        return j({"count": 3 if raid_name == "종막" else 0})
+
     sup = {"홀리나이트", "바드", "도화가", "발키리"}
 
     @app.get("/api/internal/raid-check-summary")

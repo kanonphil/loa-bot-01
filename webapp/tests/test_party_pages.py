@@ -101,6 +101,45 @@ def test_create_check_degrades_without_summary(client):
     assert data["has_summary"] is False and data["options"] == []
 
 
+def _check_subs(client, subs_response, **params):
+    with respx.mock:
+        log_in(client, discord_id="111")
+        respx.get(f"{B}/parties").mock(return_value=httpx.Response(200, json=[]))
+        respx.get(f"{B}/raids").mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(f"{B}/raid-check-summary").mock(return_value=httpx.Response(200, json=summary([])))
+        route = respx.get(f"{B}/raid-subscribers-count").mock(return_value=subs_response)
+        data = client.get("/parties/create/check", params=params).json()
+    return data, route
+
+
+def test_create_check_reports_subscriber_count(client):
+    when = (NOW + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    data, route = _check_subs(client, httpx.Response(200, json={"count": 3}),
+                              raid_name="종막", difficulty="노말", scheduled_datetime=when)
+    assert data["subscribers"] == 3
+    q = route.calls[0].request.url.params
+    assert q["raid_name"] == "종막" and q["difficulty"] == "노말" and q["discord_id"] == "111" and q["scheduled_datetime"] == when
+
+
+def test_create_check_subscribers_null_on_bot_error_or_no_raid(client):
+    data, _ = _check_subs(client, httpx.Response(500), raid_name="종막", difficulty="노말", scheduled_datetime="")
+    assert data["subscribers"] is None
+    when = (NOW + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+    data, route = _check_subs(client, httpx.Response(200, json={"count": 3}), raid_name="", difficulty="", scheduled_datetime=when)
+    assert data["subscribers"] is None and not route.called
+
+
+def test_create_form_has_subscriber_preview_line(client):
+    with respx.mock:
+        log_in(client)
+        respx.get(f"{B}/raids").mock(return_value=httpx.Response(200, json=RAIDS))
+        respx.get(f"{B}/parties/proficiency-options").mock(return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": ""}]))
+        respx.get(f"{B}/raid-check-summary").mock(return_value=httpx.Response(200, json=summary([])))
+        respx.get(f"{B}/user-party-history").mock(return_value=httpx.Response(200, json={"entries": [], "has_more": False, "total_count": 0}))
+        body = client.get("/parties/create").text
+    assert 'id="prev-subs" data-default="열면 이 레이드 구독자에게 DM이 갑니다"' in body
+
+
 # ── 다시 열기 ─────────────────────────────────────────────
 
 def test_create_form_offers_recent_openings_as_reopen_chips(client):

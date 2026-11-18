@@ -146,7 +146,7 @@ async def adm_status(): return j({"is_online": True, "uptime_str": "3일 4시간
 @app.get("/api/internal/admin/forum-channel")
 async def adm_forum(): return j({"forum_channel_id": "700", "forum_channel_name": "공대모집", "channels": [{"id": "700", "name": "공대모집"}]})
 @app.get("/api/internal/admin/users")
-async def adm_users(): return j([{"discord_id": ME, "representative": "발키리", "character_count": 3, "registered_at": now.isoformat(), "last_sync": now.isoformat(), "is_admin": True}])
+async def adm_users(): return j([{"discord_id": ME, "representative": "발키리", "character_count": 3, "registered_at": now.isoformat(), "last_sync": now.isoformat(), "last_active_at": now.isoformat(), "is_admin": True}])
 @app.get("/api/internal/admin/raids/references")
 async def adm_refs(): return j({"parties_live": 1, "parties_all": 2, "party_history": 12, "raid_completions": 88, "raid_subscriptions": 3, "character_raid_selection": 5, "notification_logs": 4})
 @app.get("/api/internal/job-classes")

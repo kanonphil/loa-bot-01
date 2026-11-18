@@ -11,8 +11,10 @@ HISTORY_URL = "http://bot-server.internal/api/internal/admin/users/222/history"
 DELETE_URL = "http://bot-server.internal/api/internal/admin/users/222/delete"
 
 USERS = [
-    {"discord_id": "222", "registered_at": "2026-05-01T00:00:00", "representative": "메인캐릭"},
-    {"discord_id": "333", "registered_at": "2026-05-02T00:00:00", "representative": None},
+    {"discord_id": "222", "registered_at": "2026-05-01T00:00:00", "representative": "메인캐릭",
+     "character_count": 1, "last_active_at": "2026-05-03 10:00:00"},
+    {"discord_id": "333", "registered_at": "2026-05-02T00:00:00", "representative": None,
+     "character_count": 0, "last_active_at": None},
 ]
 
 
