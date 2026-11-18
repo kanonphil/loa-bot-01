@@ -1,56 +1,66 @@
 {% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}<a class="btn sm ghost" href="/more">← 더보기</a><h1>경매 분배금 계산기</h1>{% endblock %}
 {% block content %}
-<div class="page-content">
-<h1>경매 입찰 계산기</h1>
-<p class="party-meta">공대 경매 아이템의 템 가격을 기준으로, 직접 사용할 때와 되팔 때 각각 손해를 보지 않는 입찰가를 계산합니다.</p>
+<div class="page-content exp-page">
+<p class="exp-meta exp-caption">공대 경매 아이템의 템 가격을 기준으로, 직접 사용할 때와 되팔 때 각각 손해를 보지 않는 입찰가를 계산합니다.</p>
 
-<div class="calc-card">
-  <label class="calc-field">
-    <span class="board-write-label">템 가격 (골드)</span>
-    <input type="number" id="calc-price" min="0" step="1" placeholder="예: 100000">
-  </label>
+<div class="exp-calc">
+  <section class="ui-card exp-card" aria-labelledby="calc-in-title">
+    <h2 class="exp-h" id="calc-in-title">입력</h2>
 
-  <fieldset class="calc-party-size-field">
-    <legend class="board-write-label">인원</legend>
-    <label class="calc-radio"><input type="radio" name="calc-party-size" value="8" checked> 8</label>
-    <label class="calc-radio"><input type="radio" name="calc-party-size" value="4"> 4</label>
-    <label class="calc-radio">
-      <input type="radio" name="calc-party-size" value="custom" id="calc-party-size-custom-radio">
-      <input type="number" id="calc-party-size-custom" min="2" step="1" value="2" disabled aria-label="직접 입력 인원">
+    <label class="exp-label">
+      <span>템 가격 (골드)</span>
+      <input type="number" id="calc-price" class="field" min="0" step="1" placeholder="예: 100000" inputmode="numeric">
     </label>
-  </fieldset>
 
-  <div class="calc-result-section">
-    <h2 class="calc-result-heading">직접사용</h2>
-    <div class="calc-result-row">
-      <span>입찰적정가</span>
-      <strong id="calc-use-bid">0 골드</strong>
+    {% if price_items %}
+    <div class="exp-label">
+      <span id="calc-market-label">시세에서 가져오기</span>
+      <select id="calc-market" class="js-themed-select" aria-label="시세에서 가져오기">
+        <option value="">아이템 선택</option>
+        {% for it in price_items %}
+        <option value="{{ it.current }}">{{ it.name }} · {{ "{:,}".format(it.current) }} 골드{% if it.change_pct is not none %} ({{ "%+.1f"|format(it.change_pct) }}%){% endif %}</option>
+        {% endfor %}
+      </select>
+      <span class="field-help">전일 평균 대비 변동률입니다.{% if prices_ago %} 시세 확인 {{ prices_ago }}.{% endif %} 고르면 위 가격 칸에 채워집니다.</span>
     </div>
-    <div class="calc-result-row">
-      <span>분배금</span>
-      <strong id="calc-use-distribution">0 골드</strong>
-    </div>
-  </div>
+    {% endif %}
 
-  <div class="calc-result-section">
-    <h2 class="calc-result-heading">판매</h2>
-    <div class="calc-result-row">
-      <span>수수료</span>
-      <strong id="calc-sell-fee">0 골드</strong>
+    <fieldset class="exp-fieldset">
+      <legend class="exp-label"><span>인원</span></legend>
+      <div class="exp-segrow">
+        <label class="chip-btn exp-seg"><input type="radio" name="calc-party-size" value="8" checked><span>8인</span></label>
+        <label class="chip-btn exp-seg"><input type="radio" name="calc-party-size" value="4"><span>4인</span></label>
+        <label class="chip-btn exp-seg"><input type="radio" name="calc-party-size" value="custom" id="calc-party-size-custom-radio"><span>직접 입력</span></label>
+        <input type="number" id="calc-party-size-custom" class="field exp-custom-size" min="2" step="1" value="2" disabled aria-label="직접 입력 인원">
+      </div>
+    </fieldset>
+  </section>
+
+  <section class="ui-card exp-card" aria-labelledby="calc-out-title">
+    <h2 class="exp-h" id="calc-out-title">결과</h2>
+
+    <div class="exp-result" aria-live="polite">
+      <h3 class="exp-sub">직접 사용</h3>
+      <div class="exp-result-hero">
+        <span class="exp-meta">입찰 적정가</span>
+        <strong class="num" id="calc-use-bid">0 골드</strong>
+      </div>
+      <div class="exp-result-row"><span>분배금</span><strong class="num" id="calc-use-distribution">0 골드</strong></div>
     </div>
-    <div class="calc-result-row">
-      <span>손익분기점</span>
-      <strong id="calc-sell-breakeven">0 골드</strong>
+
+    <div class="exp-result" aria-live="polite">
+      <h3 class="exp-sub">판매</h3>
+      <div class="exp-result-hero">
+        <span class="exp-meta">손익분기점</span>
+        <strong class="num" id="calc-sell-breakeven">0 골드</strong>
+      </div>
+      <div class="exp-result-row"><span>수수료 (5%)</span><strong class="num" id="calc-sell-fee">0 골드</strong></div>
+      <div class="exp-result-row"><span>분배금</span><strong class="num" id="calc-sell-distribution">0 골드</strong></div>
+      <div class="exp-result-row"><span>판매 차익</span><strong class="num" id="calc-sell-profit">0 골드</strong></div>
     </div>
-    <div class="calc-result-row">
-      <span>분배금</span>
-      <strong id="calc-sell-distribution">0 골드</strong>
-    </div>
-    <div class="calc-result-row">
-      <span>판매차익</span>
-      <strong id="calc-sell-profit">0 골드</strong>
-    </div>
-  </div>
+  </section>
 </div>
 </div>
 

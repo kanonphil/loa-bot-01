@@ -16,6 +16,23 @@ _METRIC_LABELS = {
     "weekly_clears": "주간 클리어",
 }
 _ROLE_LABELS = {"dps": "딜러", "support": "서포터"}
+_GROWTH_SORTS = ("growth", "growth_asc")
+
+
+def _growth(entry: dict) -> float | None:
+    value = entry.get("cp_growth_7d")
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sort_by_growth(entries: list[dict], descending: bool) -> list[dict]:
+    """성장값이 없는(기록이 7일 미만인) 줄은 방향과 상관없이 맨 아래로."""
+    known = [e for e in entries if _growth(e) is not None]
+    unknown = [e for e in entries if _growth(e) is None]
+    known.sort(key=lambda e: _growth(e), reverse=descending)
+    return known + unknown
 
 
 @router.get("/ranking")
@@ -23,6 +40,7 @@ async def ranking_page(
     request: Request,
     metric: str = "combat_power",
     role: str = "dps",
+    sort: str = "",
     user: dict = Depends(get_current_user),
 ):
     if metric not in _METRICS:
@@ -35,6 +53,12 @@ async def ranking_page(
     entries = data.get("entries", [])
     for i, e in enumerate(entries):
         e["rank"] = i + 1
+        e.setdefault("cp_growth_7d", None)  # 봇이 아직 안 주는 동안은 "—"
+    # 7일 성장은 전투력 랭킹에만 있다. 순위(#)는 전투력 기준 그대로 두고 줄 순서만 바꾼다.
+    if metric != "combat_power" or sort not in _GROWTH_SORTS:
+        sort = ""
+    if sort:
+        entries = _sort_by_growth(entries, descending=sort == "growth")
     return templates.TemplateResponse(
         request,
         "ranking.html",
@@ -47,5 +71,7 @@ async def ranking_page(
             "role": role,
             "role_labels": _ROLE_LABELS,
             "entries": entries,
+            "sort": sort,
+            "has_growth": metric == "combat_power",
         },
     )

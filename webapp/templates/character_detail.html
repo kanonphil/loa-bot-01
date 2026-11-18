@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
 {% block content %}
 {# 목걸이/귀걸이/반지 카드 — 1열(목걸이+귀걸이)과 2열(반지)에서 재사용 #}
 {% macro accessory_card(a) %}
@@ -111,6 +112,29 @@
       <button type="submit" class="armory-sync-btn" data-busy-text="동기화 중…">동기화</button>
     </form>
     {% endif %}
+
+    {# 전투력 기록 — 캐릭터 상세 본문은 건드리지 않고 왼쪽 정보 카드 맨 아래에만 붙인다 #}
+    <section class="exp-cp" aria-labelledby="exp-cp-title">
+      <div class="exp-cp-head"><h2 id="exp-cp-title">전투력 기록</h2><span class="exp-meta">최근 90일</span></div>
+      {% if cp_chart %}
+      {% set d = cp_chart.delta %}
+      <div class="exp-cp-now">
+        <b class="num">{{ "{:,.2f}".format(cp_chart.last) }}</b>
+        {% if d > 0 %}<span class="exp-up num">▲ +{{ "{:,.2f}".format(d) }}</span>{% elif d < 0 %}<span class="exp-down num">▼ −{{ "{:,.2f}".format(d|abs) }}</span>{% else %}<span class="exp-meta">변화 없음</span>{% endif %}
+      </div>
+      <div class="exp-cp-plot" role="img" aria-label="전투력 기록: {{ cp_chart.first_date }} {{ '{:,.2f}'.format(cp_chart.first) }}에서 {{ cp_chart.last_date }} {{ '{:,.2f}'.format(cp_chart.last) }}까지, 기록 {{ cp_chart.count }}일">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <polygon class="exp-cp-area" points="{{ cp_chart.area }}"/>
+          <polyline class="exp-cp-line" points="{{ cp_chart.line }}" vector-effect="non-scaling-stroke" fill="none"/>
+        </svg>
+        <i class="exp-cp-dot" style="left: {{ '%.2f'|format(cp_chart.end_x) }}%; top: {{ '%.2f'|format(cp_chart.end_y) }}%"></i>
+      </div>
+      <div class="exp-cp-axis num"><span>{{ cp_chart.first_date[5:] }}</span><span>{{ cp_chart.last_date[5:] }}</span></div>
+      <p class="exp-cp-range exp-meta">최저 <span class="num">{{ "{:,.2f}".format(cp_chart.low) }}</span> · 최고 <span class="num">{{ "{:,.2f}".format(cp_chart.high) }}</span></p>
+      {% else %}
+      <p class="exp-meta exp-cp-empty">기록이 이틀 이상 쌓이면 그래프가 나타납니다. 매일 04시 자동 동기화와 동기화 버튼을 누를 때 하루 한 번 저장됩니다.</p>
+      {% endif %}
+    </section>
   </aside>
 
   <div class="armory-main">
