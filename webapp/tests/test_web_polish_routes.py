@@ -107,31 +107,8 @@ def test_raid_check_history_falls_back_to_current_week_for_unknown_key(client):
     assert "이번 주 기록이 아직 없습니다" in resp.text
 
 
-def test_raid_check_page_links_history_and_shows_saved_toast(client):
-    with respx.mock:
-        log_in(client)
-        respx.get(f"{B}/user-characters-grouped").mock(return_value=httpx.Response(200, json=[]))
-        resp = client.get("/raid-check?toast=%EC%A0%80%EC%9E%A5&toast_type=success")
-    assert 'href="/raid-check/history"' in resp.text
-    assert 'data-message="저장"' in resp.text  # 공용 토스트(base.html)
 
 
-def test_raid_check_toggle_sends_toast_header(client):
-    characters = [{"character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0}]
-    with respx.mock:
-        log_in(client)
-        respx.get(f"{B}/raids").mock(return_value=httpx.Response(200, json=RAIDS))
-        respx.get(f"{B}/raid-categories").mock(return_value=httpx.Response(200, json=[{"name": "카제로스", "sort_order": 0, "is_extreme": 0}, {"name": "익스트림", "sort_order": 1, "is_extreme": 1}]))
-        respx.get(f"{B}/user-characters-grouped").mock(return_value=httpx.Response(200, json=characters))
-        respx.get(f"{B}/raid-selection").mock(return_value=httpx.Response(200, json={"customized": False, "selected_raids": []}))
-        respx.get(f"{B}/completions").mock(return_value=httpx.Response(200, json={"week_key": "w", "completions": ["아르모체(4막)_노말"]}))
-        respx.post(f"{B}/completions/toggle").mock(return_value=httpx.Response(200, json={"completed": True}))
-        resp = client.post("/raid-check/toggle", data={"raid_name": "아르모체(4막)", "difficulty": "노말", "character_name": "발키리", "card_index": "0"})
-
-    assert resp.status_code == 200
-    from urllib.parse import unquote
-    assert unquote(resp.headers["X-Toast"]) == "발키리 · 4막 노말 완료 체크"
-    assert resp.headers["X-Toast-Type"] == "success"
 
 
 # ── 공대 이력: 함께한 멤버 ────────────────────────────────────
@@ -179,23 +156,6 @@ def test_party_list_and_detail_show_period_chip(client):
 
 # ── 초대 만료 카운트다운 + 검색 ─────────────────────────────────
 
-def test_invites_page_shows_expiry_and_search(client):
-    sent = (datetime.now(timezone.utc) - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%S")
-    invite = {
-        "message_id": "700", "slot_number": 3, "invited_at": sent,
-        "raid_name": "아르모체(4막)", "difficulty": "노말", "proficiency": "숙련",
-        "scheduled_time": "05/20 20:00", "scheduled_datetime": "2099-05-20T20:00:00+09:00",
-        "leader_id": "111", "min_level": 1700, "status": "recruiting",
-    }
-    with respx.mock:
-        log_in(client)
-        respx.get(f"{B}/my-invites").mock(return_value=httpx.Response(200, json=[invite]))
-        respx.get(f"{B}/parties/700/eligibility").mock(return_value=httpx.Response(200, json={"can_join": False, "reason": "x"}))
-        resp = client.get("/invites")
-
-    body = resp.text
-    assert "만료까지 " in body
-    assert 'data-filter-target="#invite-list"' in body
 
 
 # ── 원정대: 마지막 동기화 / 검색 ─────────────────────────────

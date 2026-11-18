@@ -1,230 +1,266 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
+{% import "_home_macros.html" as hm %}
+{% block head %}<link rel="stylesheet" href="/static/pages/home.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}<h1>이번 주</h1>{{ ui.chip("리셋까지 " ~ (reset.countdown | replace(" 뒤", "")), reset.tone) }}{% endblock %}
 {% block content %}
-<div class="page-content">
-{# 홈 개편 전까지 홈에서 레이드 체크·초대로 가는 길(왼쪽 메뉴에서 빠졌다) #}
-<nav class="home-links" aria-label="홈 바로가기">
-  <a class="btn" href="/raid-check">레이드 체크<span class="nav-badge" data-badge="raid_check" hidden></span></a>
-  <a class="btn" href="/invites">내게 온 초대<span class="nav-badge" data-badge="invites" hidden></span></a>
-</nav>
-<h1>메인</h1>
+<div class="page-content page-wide home" id="home">
 
-{% if not characters %}
-{{ ui.empty(
-    "등록된 캐릭터가 없습니다",
-    "로스트아크 API 키를 넣으면 원정대 캐릭터가 한 번에 들어옵니다.",
-    "원정대 연결", "/expedition", "🧭") }}
-{% else %}
+{% if maintenance %}
+<div class="banner warn" role="status">
+  <b class="banner-mark" aria-hidden="true">!</b>
+  <span>{{ maintenance.title }}{% if maintenance.period %} · {{ maintenance.period }}{% endif %}</span>
+  {% if maintenance.link %}<a class="lnk sp" href="{{ maintenance.link }}" target="_blank" rel="noopener noreferrer">공지 보기</a>{% endif %}
+</div>
+{% endif %}
+{% if summary_failed %}
+{{ ui.banner("숙제표를 불러오지 못했습니다. 봇 서버가 응답하지 않습니다.", "err", "새로고침", "home-reload") }}
+{% endif %}
 
-<div class="dash-stack">
+<div class="home-grid">
 
-  {# ── 내게 온 초대: 1시간 뒤 만료되는데 모바일에선 사이드바 배지가 안 보였다 ── #}
-  {% if invites %}
-  <section class="dash-section">
-    <h2 class="dash-section-title">
-      내게 온 초대
-      {{ ui.chip(invite_count ~ "건", "warn") }}
-    </h2>
-    <div class="ui-list">
-      {% for inv in invites %}
-      {% call ui.card(stripe="warn") %}
-        <div class="ui-row">
-          <span class="ui-card-title">{{ inv.raid_name }} {{ inv.difficulty }}</span>
-          {{ ui.chip(inv.proficiency) }}
-          <span class="ui-spacer"></span>
-          <span class="ui-card-meta">{{ inv.slot_number }}번 슬롯</span>
-          {% if inv.expiry %}{{ ui.chip(inv.expiry.label, inv.expiry.tone) }}{% endif %}
-        </div>
-        <div class="ui-row">
-          <span class="ui-card-meta">{{ inv.schedule.when }}</span>
-          {% if inv.schedule.countdown %}{{ ui.chip(inv.schedule.countdown, inv.schedule.tone) }}{% endif %}
-        </div>
-        {% if inv.qualifying %}
-        <form method="post" action="/invites/{{ inv.message_id }}/accept" class="party-join-form invite-accept-form">
-          <select name="character_name" class="js-themed-select invite-char-select" aria-label="참여 캐릭터">
-            {% for q in inv.qualifying %}
-            <option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>
+  {# ══ 왼쪽: 숙제표 · 이번 주 골드 ══ #}
+  <div class="home-main">
+
+    {% if has_characters %}
+    {% set hw = homework %}
+    <section class="ui-card hc-hw" id="hw" aria-labelledby="hw-title"
+             data-hw data-filter="{{ 'on' if hw.filter_default else 'off' }}">
+      <div class="hw-head">
+        <h2 class="ui-card-title" id="hw-title">숙제</h2>
+        <span class="hw-count"><b class="num"><span data-hw-done>{{ hw.done }}</span>/<span data-hw-total>{{ hw.total }}</span></b> <span class="muted">완료</span></span>
+        <span class="hw-head-spacer"></span>
+        {% if hw.filter_default %}
+        <button type="button" class="chip-btn" data-hw-filter aria-pressed="true">숙제 남은 캐릭터만</button>
+        {% endif %}
+        {% set sel = hw.select_characters %}
+        {% if sel | length > 1 %}
+        <div class="hw-menu-wrap">
+          <button type="button" class="btn sm ghost" data-home-menu aria-haspopup="menu" aria-expanded="false" aria-controls="hw-select-menu">레이드 고르기</button>
+          <div class="menu hw-select-menu" id="hw-select-menu" role="menu" aria-label="레이드를 고를 캐릭터" hidden>
+            {% for c in sel %}
+            <a class="menu-item" role="menuitem" href="/raid-check/select/{{ c.name | urlencode }}">{{ c.name }}<span class="menu-state">{{ c.cls }}</span></a>
             {% endfor %}
-          </select>
-          <select name="role" class="js-themed-select invite-role-select" aria-label="역할">
-            <option value="dps">딜러</option>
-            <option value="support">서포터</option>
-          </select>
-          <button type="submit" data-busy-text="수락 중…">수락</button>
-          <button type="submit" class="party-leave-btn" form="decline-{{ inv.message_id }}">거절</button>
-        </form>
-        <script>
-          (function () {
-            var form = document.currentScript.previousElementSibling;
-            var isSupportMap = {{ inv.character_is_support | tojson }};
-            var charSelect = form.querySelector(".invite-char-select");
-            var roleSelect = form.querySelector(".invite-role-select");
-            var supportOption = roleSelect.querySelector('option[value="support"]');
-            function syncRole() {
-              var isSupport = isSupportMap[charSelect.value];
-              supportOption.disabled = !isSupport;
-              if (isSupport) roleSelect.value = "support";
-              else if (roleSelect.value === "support") roleSelect.value = "dps";
-              roleSelect.dispatchEvent(new Event("change"));
-            }
-            charSelect.addEventListener("change", syncRole);
-            syncRole();
-          })();
-        </script>
-        {% else %}
-        <div class="ui-row">
-          <p class="party-cannot-join">{{ inv.cannot_accept_reason or "참여 가능한 캐릭터가 없습니다." }}</p>
-          <span class="ui-spacer"></span>
-          <button type="submit" class="party-leave-btn" form="decline-{{ inv.message_id }}">거절</button>
+          </div>
         </div>
+        {% elif sel %}
+        <a class="btn sm ghost" href="/raid-check/select/{{ sel[0].name | urlencode }}">레이드 고르기</a>
+        {% endif %}
+        <a class="btn sm ghost" href="/raid-check/history">지난 주 기록</a>
+      </div>
+      {{ ui.gauge(hw.pct, "ok" if hw.total and hw.done >= hw.total else "") }}
+
+      {# 데스크톱: 한 표(캐릭터 행 × 레이드 열). 열이 많으면 표 안에서만 가로로 스크롤 #}
+      <div class="hw-scroll hw-desktop{% if hw.scroll %} is-wide{% endif %}">
+        <div class="hw" style="--hw-cols: {{ hw.grid_cols }}">
+          <div class="hd">캐릭터</div>
+          {% for col in hw.columns %}<div class="hd">{{ col.short_name }}</div>{% endfor %}
+          {% for row in hw.rows %}
+          <div class="hw-row" data-row="{{ row.name }}" data-done="{{ row.done }}" data-total="{{ row.total }}"{% if hw.filter_default and not row.remaining %} hidden{% endif %}>
+            <div class="ln"></div>
+            <div class="who"><b class="trunc">{{ row.name }}</b><span>{{ row.cls }} · <span class="num">{{ '%.1f' | format(row.item_level or 0) }}</span></span></div>
+            {% for cell in row.cells %}
+            <div>
+              {% if cell %}
+              <span class="seg" role="group" aria-label="{{ row.name }} · {{ cell.short_name }}" data-char="{{ row.name }}" data-raid="{{ cell.raid_name }}" data-short="{{ cell.short_name }}">
+                {% for d in cell.diffs %}<button type="button" data-diff="{{ d.name }}" aria-pressed="{{ 'true' if d.on else 'false' }}"{% if d.on %} class="on"{% endif %}>{{ d.name }}</button>{% endfor %}
+              </span>
+              {% else %}<span class="na" aria-label="입장 불가">—</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+
+          {% for x in extreme %}
+          <div class="hw-row hw-x">
+            <div class="ln dash"></div>
+            <div class="who"><b>{{ x.short_name }} {{ ui.chip("원정대 주 1회", "warn") }}</b><span>{{ x.raid_name }}{% if x.period %} · {{ x.period.label }}{% endif %}</span></div>
+            <div data-solo>{{ hm.extreme_seg(x, "d", loop.index0) }}</div>
+            {% if x.cleared %}<div class="hw-x-note"><b>{{ x.character_name }}</b>로 클리어</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# 모바일: 캐릭터마다 카드 한 장, 레이드는 한 줄씩 #}
+      <div class="hw-mobile">
+        {% for row in hw.rows %}
+        <div class="ui-card hm-card" data-row="{{ row.name }}" data-done="{{ row.done }}" data-total="{{ row.total }}"{% if hw.filter_default and not row.remaining %} hidden{% endif %}>
+          <div class="hm-head"><b class="trunc">{{ row.name }}</b><span class="meta trunc">{{ row.cls }} · {{ '%.1f' | format(row.item_level or 0) }}</span><span class="num hm-count" data-char-count="{{ row.name }}">{{ row.done }}/{{ row.total }}</span></div>
+          {% for cell in row.cells if cell %}
+          <div class="mrow"><b>{{ cell.short_name }}</b>
+            <span class="seg" role="group" aria-label="{{ row.name }} · {{ cell.short_name }}" data-char="{{ row.name }}" data-raid="{{ cell.raid_name }}" data-short="{{ cell.short_name }}">
+              {% for d in cell.diffs %}<button type="button" data-diff="{{ d.name }}" aria-pressed="{{ 'true' if d.on else 'false' }}"{% if d.on %} class="on"{% endif %}>{{ d.name }}</button>{% endfor %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        {% for x in extreme %}
+        <div class="ui-card hm-card">
+          <div class="hm-head"><b>{{ x.short_name }}</b>{{ ui.chip("원정대 주 1회", "warn") }}{% if x.period %}<span class="meta trunc">{{ x.period.label }}</span>{% endif %}</div>
+          <div class="mrow"><b class="trunc">{% if x.cleared %}{{ x.character_name }}{% else %}{{ x.raid_name }}{% endif %}</b>{{ hm.extreme_seg(x, "m", loop.index0) }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% elif not summary_failed %}
+    <section class="ui-card hc-hw">
+      {{ ui.empty("등록된 캐릭터가 없습니다", "로스트아크 API 키를 넣으면 원정대 캐릭터가 한 번에 들어옵니다.", "원정대 연결", "/expedition", "🧭") }}
+    </section>
+    {% endif %}
+
+    {% include "_home_gold.html" %}
+  </div>
+
+  {# ══ 오른쪽: 할 일 → 내 일정 → 오늘의 콘텐츠 → 시세 → 이벤트 → 들어갈 만한 공대 ══ #}
+  <div class="home-side">
+
+    {% if todo_count %}
+    <section class="ui-card has-stripe is-warn hc-todo" id="todo" aria-labelledby="todo-title">
+      <div class="ui-row"><h2 class="ui-card-title" id="todo-title">할 일</h2>{{ ui.chip(todo_count ~ "건", "warn") }}</div>
+      {% for inv in invites %}
+      <div class="item">
+        <div class="ui-row nowrap"><b class="trunc">{{ inv.raid_name }} {{ inv.difficulty }} 초대</b>{{ ui.chip(inv.proficiency) }}{% if inv.expiry %}<span class="meta item-end">{{ inv.expiry.label }}</span>{% endif %}</div>
+        {% set first = inv.qualifying[0] if inv.qualifying else none %}
+        <div class="meta trunc">{{ inv.schedule.when }} · {{ inv.slot_number }}번 자리{% if first %} · <span data-inv-char>{{ first.name }}</span>{% endif %}</div>
+        {% if first %}
+        <form method="post" action="/invites/{{ inv.message_id }}/accept" class="inv-form" data-supports='{{ inv.character_is_support | tojson }}'>
+          <div class="ui-row">
+            <button type="submit" class="btn sm pri" data-busy-text="수락 중">수락</button>
+            {% if inv.qualifying | length > 1 or inv.character_is_support[first.name] %}
+            <button type="button" class="btn sm" data-inv-toggle aria-expanded="false">{{ '캐릭터 바꾸기' if inv.qualifying | length > 1 else '역할 바꾸기' }}</button>
+            {% endif %}
+            <button type="submit" class="btn sm danger" form="decline-{{ inv.message_id }}">거절</button>
+          </div>
+          <div class="inv-pick" hidden>
+            <select name="character_name" class="field js-themed-select" aria-label="참여 캐릭터">
+              {% for q in inv.qualifying %}<option value="{{ q.name }}">{{ q.name }} ({{ q['class'] }}, {{ q.level }})</option>{% endfor %}
+            </select>
+            <select name="role" class="field js-themed-select" aria-label="역할">
+              <option value="dps">딜러</option>
+              <option value="support">서포터</option>
+            </select>
+          </div>
+        </form>
+        {% else %}
+        <div class="ui-row"><span class="meta">{{ inv.cannot_accept_reason or "참여 가능한 캐릭터가 없습니다." }}</span><button type="submit" class="btn sm danger item-end" form="decline-{{ inv.message_id }}">거절</button></div>
         {% endif %}
         <form id="decline-{{ inv.message_id }}" method="post" action="/invites/{{ inv.message_id }}/decline" hidden
               data-confirm-title="{{ inv.raid_name }} {{ inv.difficulty }} 초대를 거절할까요?" data-confirm="거절한 초대는 되돌릴 수 없습니다." data-confirm-ok="거절" data-confirm-danger></form>
-      {% endcall %}
+      </div>
       {% endfor %}
-    </div>
-    {% if invite_count > invites | length %}
-    <a class="dash-card-link" href="/invites">초대 전체 보기 &rarr;</a>
-    {% endif %}
-  </section>
-  {% endif %}
-
-  {# ── 처리 안 한 내 공대: 일정이 지났는데 클리어/취소를 안 눌렀다 ── #}
-  {% if overdue_parties %}
-  <section class="dash-section">
-    <h2 class="dash-section-title">처리가 필요한 내 공대 {{ ui.chip(overdue_parties | length ~ "건", "danger") }}</h2>
-    <p class="settings-desc">일정이 지났는데 아직 모집중/파티완성 상태입니다. 클리어 처리하면 참여자 전원의 이번 주 완료가 자동 체크되고, 취소하면 스레드가 정리됩니다.</p>
-    <div class="ui-list">
       {% for p in overdue_parties %}
-      {% call ui.card(stripe="danger") %}
+      <div class="item">
+        <div class="ui-row nowrap"><b class="trunc">{{ p.raid_name }} {{ p.difficulty }}</b>{{ ui.chip("일정 지남", "danger") }}<span class="meta item-end">{{ p.filled }}/{{ p.total_slots }}명</span></div>
         <div class="ui-row">
-          <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
-          {{ ui.chip("일정 지남", "danger") }}
-          <span class="ui-spacer"></span>
-          <span class="ui-card-meta">{{ p.schedule.when }} · {{ p.filled }}/{{ p.total_slots }}명</span>
-        </div>
-        <div class="ui-row dash-overdue-actions">
-          <a class="ui-btn is-ghost" href="/parties/{{ p.message_id }}">상세 보기</a>
           <form method="post" action="/parties/{{ p.message_id }}/clear"
                 data-confirm-title="{{ p.raid_name }} {{ p.difficulty }} 공대를 클리어 처리할까요?" data-confirm="참여자 전원의 이번 주 완료가 자동으로 체크됩니다." data-confirm-ok="클리어 처리">
-            <button type="submit" class="leader-btn leader-btn-success" data-busy-text="처리 중…">클리어</button>
+            <button type="submit" class="btn sm ok" data-busy-text="처리 중">클리어 처리</button>
           </form>
+          <a class="btn sm" href="/parties/{{ p.message_id }}">열기</a>
           <form method="post" action="/parties/{{ p.message_id }}/cancel"
                 data-confirm-title="{{ p.raid_name }} {{ p.difficulty }} 공대를 취소할까요?" data-confirm="디스코드 스레드가 삭제되고 파티원에게 안내가 갑니다." data-confirm-ok="공대 취소" data-confirm-danger>
             <input type="hidden" name="reason" value="일정 경과">
-            <button type="submit" class="leader-btn leader-btn-danger" data-busy-text="취소 중…">취소</button>
+            <button type="submit" class="btn sm danger" data-busy-text="취소 중">취소</button>
           </form>
         </div>
-      {% endcall %}
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
-  {# ── 급한 것: 내가 속한 임박 공대 ── #}
-  <section class="dash-section">
-    <h2 class="dash-section-title">
-      내 공대
-      {% if my_party_count %}{{ ui.chip(my_party_count ~ "건", "accent") }}{% endif %}
-    </h2>
-    {% if not urgent_parties %}
-    {{ ui.empty(
-        "예정된 내 공대가 없습니다",
-        "입장 가능한 모집을 찾거나 직접 열어보세요.",
-        "공대 개설", "/parties/create", "📭") }}
-    {% else %}
-    <div class="ui-list">
-      {% for p in urgent_parties %}
-      {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.schedule.tone or p.status_tone) %}
-        <div class="ui-row">
-          {% if p.schedule.countdown %}{{ ui.chip(p.schedule.countdown, p.schedule.tone) }}{% endif %}
-          <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
-          <span class="ui-spacer"></span>
-          {% if p.leader_id == user.discord_id %}{{ ui.chip("내가 파티장") }}{% endif %}
-        </div>
-        <div class="ui-row">
-          <span class="ui-card-meta">{{ p.schedule.when }}</span>
-          <span class="ui-spacer"></span>
-          {% if p.leader and p.leader.open_slots %}{{ ui.chip("빈자리 " ~ p.leader.open_slots, "warn") }}{% endif %}
-          {% if p.leader and not p.leader.has_support and p.slots %}{{ ui.chip("서포터 없음", "warn") }}{% endif %}
-          {{ ui.chip(p.status_label, p.status_tone) }}
-        </div>
-        {{ ui.slotbar(p.slots, p.total_slots, p.pct) }}
-      {% endcall %}
-      {% endfor %}
-    </div>
-    {% endif %}
-  </section>
-
-  {# ── 내 진행: 이번 주 레이드 ── #}
-  <section class="dash-section">
-    <h2 class="dash-section-title">
-      이번 주 진행
-      {{ ui.chip("리셋 " ~ reset.countdown, reset.tone, "다음 초기화 " ~ reset.when) }}
-    </h2>
-    {% call ui.card() %}
-      <div class="ui-row">
-        {{ ui.stat(progress.done ~ "/" ~ progress.total, "원정대 전체 레이드") }}
-        <span class="ui-spacer"></span>
-        <a class="ui-btn is-ghost" href="/raid-check">레이드 체크</a>
       </div>
-      {{ ui.gauge(progress_pct, "ok" if progress.total and progress.done >= progress.total else "") }}
-      {% if remaining_characters %}
-      <div class="ui-row">
-        <span class="ui-card-meta">남은 캐릭터</span>
-        {% for c in remaining_characters[:6] %}
-        {{ ui.chip(c.character_name ~ " · " ~ c.remaining, "", c.character_class ~ " · " ~ (c.item_level or "?")) }}
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="ui-card hc-sched" aria-labelledby="sched-title">
+      <div class="ui-row"><h2 class="ui-card-title" id="sched-title">내 일정</h2><span class="ui-spacer"></span><a class="btn sm ghost" href="/calendar">달력으로</a></div>
+      {% if schedule %}
+      <div class="tl-list">
+        {% for s in schedule %}
+        <a class="tl" href="{{ s.href }}">
+          <span class="when">{{ s.when_day }}<span class="num">{{ s.when_time }}</span></span>
+          <span class="what"><b class="trunc">{{ s.title }}</b><span class="meta trunc">{{ s.meta }}</span></span>
+          {% if s.countdown %}{{ ui.chip(s.countdown, s.tone) }}{% else %}<span></span>{% endif %}
+        </a>
         {% endfor %}
       </div>
       {% else %}
-      <p class="ui-card-meta">이번 주 레이드를 전부 끝냈습니다.</p>
+      <p class="hc-muted">예정된 공대가 없습니다. <a class="lnk" href="/parties">공대 둘러보기</a></p>
       {% endif %}
-      {% if progress.extreme %}
-      <div class="ui-row dash-extreme-row">
-        <span class="ui-card-meta">익스트림 · 원정대 주 1회</span>
-        {% for x in progress.extreme %}
-        {% if x.cleared %}{{ ui.chip(x.short_name ~ " · " ~ x.character_name ~ " · " ~ x.difficulty, "ok") }}
-        {% else %}{{ ui.chip(x.short_name ~ " · 미클리어", "warn") }}{% endif %}
-        {% endfor %}
+    </section>
+
+    {% if today %}
+    <section class="ui-card hc-today" aria-labelledby="today-title">
+      <div class="ui-row"><h2 class="ui-card-title" id="today-title">오늘의 콘텐츠</h2><span class="meta">{{ today.date }}</span></div>
+      {% if today.tabs | length > 1 %}
+      <div class="ui-row" role="group" aria-label="콘텐츠 종류">
+        {% for t in today.tabs %}<button type="button" class="chip-btn" data-today-tab="{{ loop.index0 }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ t.label }}</button>{% endfor %}
       </div>
       {% endif %}
-    {% endcall %}
-  </section>
-
-  {# ── 기회: 내가 들어갈 수 있는 모집 ── #}
-  <section class="dash-section">
-    <h2 class="dash-section-title">
-      들어갈 만한 공대
-      {% if opportunity_count %}{{ ui.chip(opportunity_count ~ "건", "ok") }}{% endif %}
-    </h2>
-    {% if not opportunities %}
-    {{ ui.empty(
-        "지금 들어갈 수 있는 모집이 없습니다",
-        "내 캐릭터 레벨로 입장 가능하고 아직 참여하지 않은 공대만 추립니다.",
-        "전체 목록 보기", "/parties", "🔍") }}
-    {% else %}
-    <div class="ui-list">
-      {% for p in opportunities %}
-      {% call ui.card(href="/parties/" ~ p.message_id, stripe="ok") %}
-        <div class="ui-row">
-          <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
-          {{ ui.chip(p.proficiency) }}
-          <span class="ui-spacer"></span>
-          {{ ui.chip("최소 " ~ p.min_level) }}
+      {% for t in today.tabs %}
+      <div class="isle-list" data-today-panel="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>
+        {% for it in t.rows %}
+        <div class="isle">
+          <span class="thumb">{% if it.icon %}<img src="{{ it.icon }}" alt="" loading="lazy">{% else %}{{ t.label[:1] }}{% endif %}</span>
+          <span class="what"><span class="what-line"><b class="trunc">{{ it.name }}</b>{% if it.is_gold %}{{ ui.chip("골드", "warn") }}{% endif %}</span>{% if it.rewards %}<span class="meta trunc">보상: {{ it.rewards }}</span>{% endif %}</span>
+          <span class="isle-when">{% if it.time %}<span class="num">{{ it.time }}</span>{% endif %}{% if it.rel %}<span class="meta">{{ it.rel }}</span>{% endif %}</span>
         </div>
-        <div class="ui-row">
-          <span class="ui-card-meta">{{ p.schedule.when }}</span>
-          {% if p.schedule.countdown %}{{ ui.chip(p.schedule.countdown, p.schedule.tone) }}{% endif %}
-        </div>
-        {{ ui.slotbar(p.slots, p.total_slots, p.pct) }}
-      {% endcall %}
+        {% endfor %}
+      </div>
       {% endfor %}
-    </div>
-    <a class="dash-card-link" href="/parties?filter=eligible">입장 가능한 공대 전체 보기 &rarr;</a>
+      <div class="ui-row hc-switch-row">
+        <button type="button" class="sw{% if gold_island_subscribed %} on{% endif %}" role="switch" aria-checked="{{ 'true' if gold_island_subscribed else 'false' }}" data-gold-switch><i aria-hidden="true"></i>골드섬 10분 전 디스코드 알림</button>
+      </div>
+    </section>
+    {% elif loa_note %}
+    <section class="ui-card hc-today"><h2 class="ui-card-title">오늘의 콘텐츠</h2><p class="hc-muted">{{ loa_note }}</p></section>
     {% endif %}
-  </section>
 
+    {% if prices %}
+    <section class="ui-card hc-price" aria-labelledby="price-title">
+      <div class="ui-row"><h2 class="ui-card-title" id="price-title">시세</h2><span class="meta">1시간마다 갱신</span></div>
+      <div class="tl-list">
+        {% for p in prices %}
+        <div class="price">
+          <span class="what"><b class="trunc">{{ p.name }}</b><span class="meta">최근 7일</span></span>
+          {% if p.spark %}<svg width="92" height="28" viewBox="0 0 92 28" aria-hidden="true" class="spark is-{{ p.dir or 'flat' }}"><polyline points="{{ p.spark.points }}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="{{ p.spark.last[0] }}" cy="{{ p.spark.last[1] }}" r="2.4" fill="currentColor"/></svg>{% else %}<span></span>{% endif %}
+          <span class="num pct is-{{ p.dir or 'flat' }}">{{ p.pct }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <a class="btn sm ghost block" href="/tools/auction-calculator">분배금 계산기에서 쓰기</a>
+    </section>
+    {% endif %}
+
+    {% if events %}
+    <section class="ui-card hc-event" aria-labelledby="event-title">
+      <div class="ui-row"><h2 class="ui-card-title" id="event-title">진행 중 이벤트</h2>{{ ui.chip(events.count) }}</div>
+      <div class="tl-list">
+        {% for e in events.rows %}
+        {% if e.link %}<a class="tl" href="{{ e.link }}" target="_blank" rel="noopener noreferrer">{% else %}<div class="tl">{% endif %}
+          <span class="when">종료<span class="num">{{ e.dday }}</span></span>
+          <span class="what"><b class="trunc">{{ e.title }}</b><span class="meta trunc">{{ e.until }}</span></span>
+          {% if e.soon %}{{ ui.chip("곧 종료", "warn") }}{% else %}<span></span>{% endif %}
+        {% if e.link %}</a>{% else %}</div>{% endif %}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if opportunities %}
+    <section class="ui-card hc-opp" aria-labelledby="opp-title">
+      <div class="ui-row"><h2 class="ui-card-title" id="opp-title">들어갈 만한 공대</h2>{{ ui.chip(opportunity_count, "ok") }}<span class="ui-spacer"></span><a class="lnk meta" href="/parties?filter=eligible">전체 보기</a></div>
+      <div class="tl-list">
+        {% for p in opportunities %}
+        <a class="tl" href="/parties/{{ p.message_id }}">
+          <span class="when">{{ p.schedule.when.rpartition(' ')[0] }}<span class="num">{{ p.schedule.when.rpartition(' ')[2] }}</span></span>
+          <span class="what"><b class="trunc">{{ p.raid_name }} {{ p.difficulty }}</b><span class="meta trunc">{{ p.proficiency }} · 최소 {{ p.min_level }}</span></span>
+          <span class="num">{{ p.filled }}/{{ p.total_slots }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
 </div>
-{% endif %}
 </div>
+<script src="/static/pages/home.js?v={{ static_version }}"></script>
 {% endblock %}

@@ -2,7 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
-<a href="/raid-check" class="party-back-link">&larr; 레이드 체크로</a>
+<a href="/main" class="party-back-link">&larr; 홈으로</a>
 <div class="party-list-header">
   <h1>주차별 클리어 기록</h1>
 </div>
@@ -21,7 +21,7 @@
 
 {% if not characters %}
 {% if is_current %}
-{{ ui.empty("이번 주 기록이 아직 없습니다", "레이드 체크에서 완료를 누르면 여기에 남습니다.", "레이드 체크", "/raid-check", "🗓️") }}
+{{ ui.empty("이번 주 기록이 아직 없습니다", "홈의 숙제표에서 완료를 누르면 여기에 남습니다.", "홈으로", "/main", "🗓️") }}
 {% else %}
 {{ ui.empty(selected_label ~ " 주차에 남긴 기록이 없습니다", icon="🗓️") }}
 {% endif %}

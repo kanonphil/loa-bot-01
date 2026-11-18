@@ -1,0 +1,22 @@
+{# 이번 주 골드 — 관리자가 레이드 난이도에 클리어 골드를 넣었을 때만. /main/gold 로 이 조각만 다시 받아 간다. #}
+{% if gold %}
+<section class="ui-card hc-gold" id="home-gold" aria-labelledby="gold-title">
+  <div class="ui-row"><h2 class="ui-card-title" id="gold-title">이번 주 골드</h2><span class="meta">완료한 레이드 × 관리자가 정한 클리어 골드</span></div>
+  <div class="ui-row gold-sum">
+    <b class="num gold-num">{{ '{:,}'.format(gold.earned) }}</b><span class="muted">/ {{ '{:,}'.format(gold.total) }} 골드</span>
+    <span class="ui-spacer"></span><span class="meta">남은 레이드 {{ gold.remaining_raids }}개</span>
+  </div>
+  <div class="ui-gauge is-gold" role="presentation"><i style="width: {{ [[gold.pct, 0] | max, 100] | min }}%"></i></div>
+  <div class="gold-scroll">
+    <table class="t">
+      <thead><tr><th scope="col">캐릭터</th><th scope="col" class="r">받음</th><th scope="col" class="r">남음</th></tr></thead>
+      <tbody>
+        {% for r in gold.rows %}
+        <tr><td>{{ r.name }}</td><td class="num r{% if r.earned %} gold-num{% endif %}">{{ '{:,}'.format(r.earned) }}</td><td class="num r">{{ '{:,}'.format(r.remaining) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="meta">클리어 골드는 관리자가 입력한 값 기준입니다.</p>
+</section>
+{% endif %}

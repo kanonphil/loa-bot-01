@@ -29,6 +29,7 @@ from webapp.routes import (
     events,
     expedition,
     invites,
+    loa,
     more,
     notifications,
     pages,
@@ -156,6 +157,7 @@ app.include_router(raid_check.router)
 app.include_router(ranking.router)
 app.include_router(party.router)
 app.include_router(invites.router)
+app.include_router(loa.router)
 app.include_router(calendar.router)
 app.include_router(tools.router)
 app.include_router(more.router)

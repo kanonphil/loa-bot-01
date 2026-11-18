@@ -1,0 +1,30 @@
+{# 홈 숙제표 전용 조각 #}
+
+{# 익스트림 난이도 버튼 줄 — 하나라도 클리어했으면 선택한 난이도만 눌러서 해제하고 나머지는 잠근다.
+   입장 가능한 캐릭터가 여럿이면 누를 때 캐릭터를 고르는 메뉴(.menu)가 열린다. idx는 같은 화면의 메뉴 id를 겹치지 않게 하는 번호. #}
+{% macro extreme_seg(x, where, idx) %}
+<div class="hw-menu-wrap">
+  <span class="seg" role="group" aria-label="{{ x.short_name }} 원정대 클리어" data-x-raid="{{ x.raid_name }}" data-short="{{ x.short_name }}" data-x-by="{{ x.character_name or '' }}" data-x-prev="{{ x.difficulty or '' }}">
+    {% for d in x.diffs %}
+    {% if d.on %}
+    <button type="button" class="on" data-diff="{{ d.name }}" aria-pressed="true" data-x-clear>{{ d.name }}</button>
+    {% elif x.cleared %}
+    <button type="button" class="locked" data-diff="{{ d.name }}" aria-pressed="false" aria-disabled="true" data-tip="이번 주는 {{ x.difficulty }}로 이미 클리어했습니다">{{ d.name }}</button>
+    {% elif not d.eligible %}
+    <button type="button" class="locked" data-diff="{{ d.name }}" aria-pressed="false" aria-disabled="true" data-tip="입장 가능한 캐릭터가 없습니다">{{ d.name }}</button>
+    {% elif d.eligible | length == 1 %}
+    <button type="button" data-diff="{{ d.name }}" aria-pressed="false" data-x-set data-x-char="{{ d.eligible[0].name }}">{{ d.name }}</button>
+    {% else %}
+    <button type="button" data-diff="{{ d.name }}" aria-pressed="false" data-x-set data-home-menu aria-haspopup="menu" aria-expanded="false" aria-controls="xm-{{ where }}-{{ idx }}-{{ loop.index0 }}">{{ d.name }}</button>
+    {% endif %}
+    {% endfor %}
+  </span>
+  {% if not x.cleared %}
+  {% for d in x.diffs if d.eligible | length > 1 %}
+  <div class="menu hw-x-menu" id="xm-{{ where }}-{{ idx }}-{{ x.diffs.index(d) }}" role="menu" aria-label="{{ d.name }} 클리어 캐릭터" hidden>
+    {% for c in d.eligible %}<button type="button" class="menu-item" role="menuitem" data-x-pick="{{ c.name }}" data-x-diff="{{ d.name }}">{{ c.name }}<span class="menu-state num">{{ '%.1f' | format(c.item_level or 0) }}</span></button>{% endfor %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endmacro %}

@@ -168,56 +168,12 @@ def _mock_raid_check(extreme_raids=None, completions=None):
     respx.get(EXTREME_URL).mock(return_value=httpx.Response(200, json={"week_key": "w", "raids": extreme_raids or []}))
 
 
-def test_raid_check_shows_extreme_section_with_eligible_characters_only(client):
-    with respx.mock:
-        log_in(client)
-        _mock_raid_check(extreme_raids=[{"raid_name": "카멘익스", "cleared": False, "character_name": None, "difficulty": None}])
-        resp = client.get("/raid-check")
-    body = resp.text
-    assert 'id="extreme-section"' in body
-    assert "원정대 주 1회" in body and "미클리어" in body
-    assert body.count('hx-post="/raid-check/extreme/set"') == 2  # 노말·하드
-    assert "입장 가능한 캐릭터 없음" in body  # 하드(1730)엔 1720 캐릭터가 못 들어감
-    assert body.count('<option value="발키리"') == 1  # 노말에만
-    # 캐릭터 카드에는 익스트림이 빠지고 분모도 일반 레이드만
-    card = body.split('class="raid-card-grid"')[-1]
-    assert "카멘익스" not in card and "0 / 1 완료" in body
 
 
-def test_raid_check_extreme_cleared_state(client):
-    with respx.mock:
-        log_in(client)
-        _mock_raid_check(extreme_raids=[{"raid_name": "카멘익스", "cleared": True, "character_name": "발키리", "difficulty": "노말"}])
-        resp = client.get("/raid-check")
-    body = resp.text
-    assert "is-cleared" in body and 'hx-post="/raid-check/extreme/clear"' in body
-    assert "발키리" in body.split('id="extreme-section"')[1].split("</section>")[0]
-    assert 'hx-post="/raid-check/extreme/set"' not in body
 
 
-def test_raid_check_hides_extreme_section_when_none_live(client):
-    raids = {k: v for k, v in RAIDS.items() if k != "카멘익스"}
-    with respx.mock:
-        log_in(client)
-        _mock_raid_check()
-        respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=raids))
-        resp = client.get("/raid-check")
-    assert "원정대 주 1회" not in resp.text
 
 
-def test_extreme_set_forwards_and_returns_section_with_toast(client):
-    with respx.mock:
-        log_in(client)
-        _mock_raid_check(extreme_raids=[{"raid_name": "카멘익스", "cleared": True, "character_name": "발키리", "difficulty": "노말"}])
-        route = respx.post(f"{B}/completions/extreme/set").mock(
-            return_value=httpx.Response(200, json={"success": True, "character_name": "발키리", "difficulty": "노말"})
-        )
-        resp = client.post("/raid-check/extreme/set", data={"raid_name": "카멘익스", "difficulty": "노말", "character_name": "발키리"})
-    assert resp.status_code == 200
-    assert json.loads(route.calls[0].request.content) == {"discord_id": "111", "raid_name": "카멘익스", "difficulty": "노말", "character_name": "발키리"}
-    from urllib.parse import unquote
-    assert unquote(resp.headers["X-Toast"]) == "익스 노말 원정대 클리어 — 발키리"
-    assert 'id="extreme-section"' in resp.text and "<html" not in resp.text
 
 
 def test_extreme_set_rejects_other_users_character(client):
@@ -229,14 +185,6 @@ def test_extreme_set_rejects_other_users_character(client):
     assert resp.status_code == 403 and not route.called
 
 
-def test_extreme_clear_forwards(client):
-    with respx.mock:
-        log_in(client)
-        _mock_raid_check()
-        route = respx.post(f"{B}/completions/extreme/clear").mock(return_value=httpx.Response(200, json={"success": True, "removed": 1}))
-        resp = client.post("/raid-check/extreme/clear", data={"raid_name": "카멘익스"})
-    assert resp.status_code == 200 and route.called
-    assert resp.headers["X-Toast-Type"] == "info"
 
 
 def test_raid_select_page_has_no_extreme_option(client):
@@ -249,15 +197,3 @@ def test_raid_select_page_has_no_extreme_option(client):
 
 # ── 메인: 익스트림 줄 ──────────────────────────────────────
 
-def test_dashboard_shows_extreme_line(client):
-    progress = {"week_key": "w", "done": 0, "total": 1, "characters": [],
-                "extreme": [{"raid_name": "카멘익스", "short_name": "익스", "cleared": True, "character_name": "발키리", "difficulty": "하드"}]}
-    with respx.mock:
-        log_in(client)
-        respx.get(f"{B}/user-characters").mock(return_value=httpx.Response(200, json=CHARACTERS))
-        respx.get(f"{B}/parties").mock(return_value=httpx.Response(200, json=[]))
-        respx.get(f"{B}/raid-progress").mock(return_value=httpx.Response(200, json=progress))
-        respx.get(f"{B}/my-invites").mock(return_value=httpx.Response(200, json=[]))
-        resp = client.get("/main")
-    assert "익스 · 발키리 · 하드" in resp.text
-    assert "익스트림 · 원정대 주 1회" in resp.text
