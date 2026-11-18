@@ -281,16 +281,59 @@ async def resolve_api_key_for_character(discord_id: str, char_name: str, fallbac
     return fallback_key
 
 
-async def delete_user_and_leave_parties(bot, discord_id: str) -> None:
+async def get_user_delete_impact(discord_id: str) -> dict:
+    """관리자 유저 삭제 확인 창용 — 삭제하면 같이 사라지거나 바뀌는 것.
+    active_parties[].handover_to는 delete_user_and_leave_parties가 실제로 넘길 대상과 같은
+    규칙(남은 파티원 중 첫 슬롯, 없으면 None = 공대 종료)이다."""
+    characters = await db.get_user_characters(discord_id)
+    api_keys = await db.list_user_api_keys(discord_id)
+    done = await db.get_week_completions_by_character(discord_id, db.get_week_key())
+
+    parties: list[dict] = []
+    seen: set[str] = set()
+    for party in await db.get_user_parties(discord_id) + await db.get_parties_led_by(discord_id):
+        if party["message_id"] in seen:
+            continue
+        seen.add(party["message_id"])
+        is_leader = party.get("leader_id") == discord_id
+        handover = None
+        if is_leader:
+            others = [s for s in await db.get_party_slots(party["message_id"]) if s["discord_id"] != discord_id]
+            if others:
+                handover = {"discord_id": others[0]["discord_id"], "name": others[0].get("character_name")}
+        parties.append({
+            "message_id": party["message_id"],
+            "raid_name": party.get("raid_name"),
+            "difficulty": party.get("difficulty"),
+            "is_leader": is_leader,
+            "handover_to": handover,
+        })
+
+    return {
+        "characters": len(characters),
+        "api_keys": len(api_keys),
+        "active_parties": parties,
+        "completions_this_week": sum(len(v) for v in done.values()),
+    }
+
+
+async def delete_user_and_leave_parties(
+    bot, discord_id: str, *, actor_discord_id: str | None = None, source: str = "web",
+) -> None:
     """관리자 유저 삭제 — 참여 중이던 활성 공대에서 먼저 정상 경로(_leave_party_core)로 나가게
     한 뒤(파티장이면 다음 파티원에게 위임, 아무도 없으면 종료, 만석→모집중 복원, 임베드 갱신)
     데이터를 지운다. 예전엔 슬롯만 지워서 4/4 공대가 3/4인데도 'full'로 남거나, 파티장이
     지워진 공대의 leader_id가 없는 사람을 가리켰다.
-    웹(/admin/users/{id}/delete)과 관리자 API(DELETE /api/users/{id})가 공유."""
+    웹(/admin/users/{id}/delete)과 관리자 API(DELETE /api/users/{id})가 공유.
+    관리자 활동 기록에는 "유저 삭제" 한 줄만 남긴다(그 과정의 위임/종료는 따로 남기지 않음)."""
+    from bot.services.admin_log import actor_name, record_admin_action
     from bot.ui.views import (
         _leave_party_core, _refresh_party_embed_with_reserved, _transfer_leader_core,
         _admin_disband_party_core,
     )
+
+    impact = await get_user_delete_impact(discord_id)
+    target_name = await actor_name(discord_id)
 
     for party in await db.get_user_parties(discord_id):
         await _leave_party_core(bot, party["message_id"], discord_id)
@@ -299,12 +342,19 @@ async def delete_user_and_leave_parties(bot, discord_id: str) -> None:
     for party in await db.get_parties_led_by(discord_id):
         slots = await db.get_party_slots(party["message_id"])
         if slots:
-            await _transfer_leader_core(bot, party["message_id"], "", slots[0]["discord_id"], as_admin=True)
+            await _transfer_leader_core(
+                bot, party["message_id"], "", slots[0]["discord_id"], as_admin=True, log_admin=False,
+            )
         else:
-            await _admin_disband_party_core(bot, party["message_id"], "", as_admin=True)
+            await _admin_disband_party_core(bot, party["message_id"], "", as_admin=True, log_admin=False)
 
     invited_parties = await db.get_user_invites(discord_id)
     await db.delete_user(discord_id)
+    await record_admin_action(
+        actor_discord_id, source, "user.delete",
+        f"유저 {target_name} 삭제 · 캐릭터 {impact['characters']}, 진행 중 공대 {len(impact['active_parties'])}",
+        target=discord_id, detail=impact,
+    )
     if bot:
         # 예약(초대) 슬롯 표시도 지워지도록 임베드 갱신
         for inv in invited_parties:

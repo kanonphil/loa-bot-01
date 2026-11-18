@@ -298,6 +298,67 @@ CREATE TABLE IF NOT EXISTS party_clear_completions (
     week_key        TEXT NOT NULL,
     PRIMARY KEY (message_id, discord_id, character_name)
 );
+
+-- 범용 키-값 설정(관리자가 웹에서 정하는 값 — 예: 거래소 추적 아이템 목록 JSON).
+CREATE TABLE IF NOT EXISTS app_settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT
+);
+
+-- 로스트아크 공용 데이터(공지/이벤트/캘린더/시세)의 마지막 정상 스냅샷 — 재시작해도
+-- 카드가 비지 않게 한다(bot/services/loa_content.py).
+CREATE TABLE IF NOT EXISTS loa_content_cache (
+    key          TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    fetched_at   TEXT NOT NULL
+);
+
+-- 추적 아이템 이름 → 거래소 아이템 id(POST /markets/items 검색으로 한 번 찾아 둔다).
+CREATE TABLE IF NOT EXISTS loa_market_items (
+    name          TEXT PRIMARY KEY,
+    item_id       INTEGER NOT NULL,
+    category_code INTEGER,
+    icon          TEXT,
+    resolved_at   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS loa_gold_island_subs (
+    discord_id  TEXT PRIMARY KEY,
+    created_at  TEXT
+);
+
+-- 골드 섬 DM 발송 기록 — 하루 한 번(재시작해도 중복 발송 안 되게 DB에 남긴다).
+CREATE TABLE IF NOT EXISTS loa_gold_island_dm (
+    discord_id  TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    PRIMARY KEY (discord_id, date)
+);
+
+-- 캐릭터 전투력/아이템레벨 일별 기록(하루 한 줄, 같은 날 다시 쓰면 덮어쓴다).
+CREATE TABLE IF NOT EXISTS character_cp_history (
+    character_name  TEXT NOT NULL,
+    date            TEXT NOT NULL,
+    combat_power    REAL,
+    item_level      REAL,
+    PRIMARY KEY (character_name, date)
+);
+
+-- 관리자 활동 기록(웹·디스코드·관리자 API 공통). undo_json이 있으면 되돌리기 가능.
+CREATE TABLE IF NOT EXISTS admin_actions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    at                TEXT NOT NULL,
+    actor_discord_id  TEXT,
+    actor_name        TEXT,
+    source            TEXT,
+    action            TEXT NOT NULL,
+    target            TEXT,
+    summary           TEXT,
+    detail_json       TEXT,
+    undo_json         TEXT,
+    undone_at         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_actions_at ON admin_actions(at);
 """
 
 
@@ -398,6 +459,11 @@ async def init_db() -> None:
                 await db.execute(f"ALTER TABLE parties ADD COLUMN {col} {definition}")
             except Exception:
                 pass
+        # 난이도별 클리어 골드(관리자 입력, 비어 있으면 NULL — 주간 골드 합산에서 0으로 센다)
+        try:
+            await db.execute("ALTER TABLE raid_difficulties ADD COLUMN clear_gold INTEGER")
+        except Exception:
+            pass
         # on_message가 메시지마다 channel_id로 파티를 찾는다
         await db.execute("CREATE INDEX IF NOT EXISTS idx_parties_channel ON parties(channel_id)")
         await db.commit()
@@ -881,8 +947,60 @@ async def update_character_combat_power(discord_id: str, character_name: str, co
             "WHERE discord_id=? AND character_name=?",
             (float(combat_power), discord_id, character_name),
         )
+        updated = cur.rowcount > 0
+        if updated:
+            # 전투력 추이용 일별 기록(하루 한 줄, 같은 날 다시 쓰면 덮어쓴다). 일일 4시 동기화,
+            # 수동 동기화, 캐릭터 상세 동기화가 모두 이 함수를 거치므로 여기 한 곳에서 남긴다.
+            # 아이템레벨은 같은 동기화가 직전에 갱신한 캐시 값을 함께 적는다.
+            await db.execute(
+                "INSERT INTO character_cp_history (character_name, date, combat_power, item_level) "
+                "SELECT character_name, ?, ?, item_level FROM user_characters "
+                "WHERE discord_id=? AND character_name=? "
+                "ON CONFLICT(character_name, date) DO UPDATE SET "
+                "combat_power=excluded.combat_power, "
+                "item_level=COALESCE(excluded.item_level, character_cp_history.item_level)",
+                (datetime.now(KST).date().isoformat(), float(combat_power), discord_id, character_name),
+            )
         await db.commit()
-        return cur.rowcount > 0
+        return updated
+
+
+async def get_cp_history(character_name: str, days: int = 90) -> list[dict]:
+    """캐릭터 전투력/아이템레벨 일별 기록(오래된 날짜부터)."""
+    since = (datetime.now(KST).date() - timedelta(days=max(int(days), 1) - 1)).isoformat()
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT date, combat_power, item_level FROM character_cp_history "
+            "WHERE character_name=? AND date>=? ORDER BY date",
+            (character_name, since),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_cp_baselines(character_names: list[str], days: int = 7) -> dict[str, float]:
+    """랭킹 cp_growth_7d용 — 각 캐릭터의 'days일 전 이전 마지막 기록' 전투력.
+    그만큼 오래된 기록이 없으면 빠진다(증가량 null)."""
+    names = [n for n in dict.fromkeys(character_names) if n]
+    if not names:
+        return {}
+    cutoff = (datetime.now(KST).date() - timedelta(days=days)).isoformat()
+    out: dict[str, float] = {}
+    async with _connect() as db:
+        for i in range(0, len(names), 500):
+            chunk = names[i:i + 500]
+            marks = ",".join("?" * len(chunk))
+            cur = await db.execute(
+                "SELECT h.character_name, h.combat_power FROM character_cp_history h "
+                "JOIN (SELECT character_name, MAX(date) AS d FROM character_cp_history "
+                f"      WHERE date<=? AND combat_power IS NOT NULL AND character_name IN ({marks}) "
+                "      GROUP BY character_name) last "
+                "ON last.character_name=h.character_name AND last.d=h.date",
+                (cutoff, *chunk),
+            )
+            for name, cp in await cur.fetchall():
+                out[name] = cp
+    return out
 
 
 async def get_character_armory_cache(discord_id: str, character_name: str) -> dict | None:
@@ -974,7 +1092,13 @@ async def get_expedition_ranking(metric: str, limit: int = 100, role: str | None
                 (limit,),
             )
         rows = await cur.fetchall()
-    return [dict(r) for r in rows]
+    entries = [dict(r) for r in rows]
+    # 7일 전투력 증가량 — 현재 캐시 전투력 − 7일 전(이전) 마지막 기록. 비교할 기록이 없으면 None.
+    baselines = await get_cp_baselines([e.get("character_name") for e in entries])
+    for e in entries:
+        base, cp = baselines.get(e.get("character_name")), e.get("combat_power")
+        e["cp_growth_7d"] = round(float(cp) - float(base), 2) if base is not None and cp is not None else None
+    return entries
 
 
 async def update_character_cache(
@@ -2904,7 +3028,7 @@ async def get_raids_dict() -> dict:
             "SELECT r.name, r.short_name, r.icon, r.category, "
             "r.is_active, r.available_from, r.available_until, "
             "r.sort_order AS raid_sort_order, r.is_pinned, c.is_extreme, "
-            "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates, d.sort_order "
+            "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates, d.sort_order, d.clear_gold "
             "FROM raids_data r "
             "JOIN raid_categories c ON r.category = c.name "
             "LEFT JOIN raid_difficulties d ON r.name = d.raid_name "
@@ -2928,6 +3052,8 @@ async def get_raids_dict() -> dict:
                 "sort_order":     r["raid_sort_order"],
                 "is_pinned":      bool(r["is_pinned"]),
                 "difficulties":   {},
+                # 난이도명 → 클리어 골드(미입력이면 None) — difficulties와 같은 순서
+                "difficulty_gold": {},
             }
         if r["difficulty"]:
             result[name]["difficulties"][r["difficulty"]] = {
@@ -2936,7 +3062,9 @@ async def get_raids_dict() -> dict:
                 "party_split":r["party_split"],
                 "gates":      r["gates"],
                 "sort_order": r["sort_order"],
+                "clear_gold": r["clear_gold"],
             }
+            result[name]["difficulty_gold"][r["difficulty"]] = r["clear_gold"]
     return result
 
 
@@ -3167,14 +3295,15 @@ async def get_next_difficulty_sort_order(raid_name: str) -> int:
 async def add_difficulty(
     raid_name: str, difficulty: str, min_level: int,
     total_slots: int, party_split: int | None, gates: int, sort_order: int,
+    clear_gold: int | None = None,
 ) -> bool:
     try:
         async with _connect() as db:
             await db.execute(
                 "INSERT INTO raid_difficulties "
-                "(raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order),
+                "(raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order, clear_gold) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order, clear_gold),
             )
             await db.commit()
         return True
@@ -3512,18 +3641,26 @@ async def update_raid(name: str, short_name: str, icon: str) -> bool:
         return cur.rowcount > 0
 
 
+_KEEP = object()
+
+
 async def update_difficulty(
     raid_name: str, difficulty: str, min_level: int, total_slots: int,
-    party_split: int | None, gates: int,
+    party_split: int | None, gates: int, clear_gold=_KEEP,
 ) -> bool:
     """난이도 수치 변경. parties.total_slots/min_level은 개설 시점 스냅샷이라 여기서
     건드리지 않는다 — 이미 올라간 공대는 자기 값을 유지하고, 개별 공대는
-    update_party_difficulty로 따로 바꾼다."""
+    update_party_difficulty로 따로 바꾼다. clear_gold를 안 넘기면 기존 값을 유지한다
+    (골드 칸이 없는 예전 호출부가 값을 지우지 않게)."""
+    sets = "min_level=?, total_slots=?, party_split=?, gates=?"
+    params: list = [min_level, total_slots, party_split, gates]
+    if clear_gold is not _KEEP:
+        sets += ", clear_gold=?"
+        params.append(clear_gold)
     async with _connect() as db:
         cur = await db.execute(
-            "UPDATE raid_difficulties SET min_level=?, total_slots=?, party_split=?, gates=? "
-            "WHERE raid_name=? AND difficulty=?",
-            (min_level, total_slots, party_split, gates, raid_name, difficulty),
+            f"UPDATE raid_difficulties SET {sets} WHERE raid_name=? AND difficulty=?",
+            (*params, raid_name, difficulty),
         )
         await db.commit()
         return cur.rowcount > 0
@@ -3695,3 +3832,162 @@ async def clear_extreme_completion(discord_id: str, raid_name: str, week_key: st
         )
         await db.commit()
         return cur.rowcount
+
+
+# ──────────────────────────────────────────────
+# 범용 설정 / 로스트아크 공용 데이터 캐시 / 골드 섬 알림
+# ──────────────────────────────────────────────
+
+async def get_setting(key: str) -> str | None:
+    async with _connect() as db:
+        cur = await db.execute("SELECT value FROM app_settings WHERE key=?", (key,))
+        row = await cur.fetchone()
+    return row[0] if row else None
+
+
+async def set_setting(key: str, value: str | None) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+        await db.commit()
+
+
+async def get_content_snapshot(key: str) -> dict | None:
+    """{"payload": ..., "fetched_at": ...} 또는 None. JSON이 깨져 있으면 None."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT payload_json, fetched_at FROM loa_content_cache WHERE key=?", (key,)
+        )
+        row = await cur.fetchone()
+    if not row:
+        return None
+    try:
+        return {"payload": json.loads(row[0]), "fetched_at": row[1]}
+    except (TypeError, ValueError):
+        return None
+
+
+async def set_content_snapshot(key: str, payload, fetched_at: str) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO loa_content_cache (key, payload_json, fetched_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET payload_json=excluded.payload_json, fetched_at=excluded.fetched_at",
+            (key, json.dumps(payload, ensure_ascii=False), fetched_at),
+        )
+        await db.commit()
+
+
+async def get_market_item_ids() -> dict[str, dict]:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT name, item_id, category_code, icon FROM loa_market_items")
+        rows = await cur.fetchall()
+    return {r["name"]: dict(r) for r in rows}
+
+
+async def set_market_item_id(name: str, item_id: int, category_code: int | None, icon: str | None) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO loa_market_items (name, item_id, category_code, icon, resolved_at) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET item_id=excluded.item_id, "
+            "category_code=excluded.category_code, icon=excluded.icon, resolved_at=excluded.resolved_at",
+            (name, int(item_id), category_code, icon, datetime.now(KST).isoformat()),
+        )
+        await db.commit()
+
+
+async def is_gold_island_subscribed(discord_id: str) -> bool:
+    async with _connect() as db:
+        cur = await db.execute("SELECT 1 FROM loa_gold_island_subs WHERE discord_id=?", (discord_id,))
+        return await cur.fetchone() is not None
+
+
+async def set_gold_island_subscription(discord_id: str, enabled: bool) -> None:
+    async with _connect() as db:
+        if enabled:
+            await db.execute(
+                "INSERT OR IGNORE INTO loa_gold_island_subs (discord_id, created_at) VALUES (?, ?)",
+                (discord_id, datetime.now(KST).isoformat()),
+            )
+        else:
+            await db.execute("DELETE FROM loa_gold_island_subs WHERE discord_id=?", (discord_id,))
+        await db.commit()
+
+
+async def get_gold_island_dm_targets(date: str) -> list[str]:
+    """구독 중이면서 그날(date) 아직 골드 섬 DM을 안 받은 discord_id 목록."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT s.discord_id FROM loa_gold_island_subs s "
+            "WHERE NOT EXISTS (SELECT 1 FROM loa_gold_island_dm d WHERE d.discord_id=s.discord_id AND d.date=?) "
+            "ORDER BY s.created_at",
+            (date,),
+        )
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def mark_gold_island_dm_sent(discord_id: str, date: str) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO loa_gold_island_dm (discord_id, date) VALUES (?, ?)", (discord_id, date)
+        )
+        await db.commit()
+
+
+# ──────────────────────────────────────────────
+# 관리자 활동 기록 (bot/services/admin_log.py)
+# ──────────────────────────────────────────────
+
+async def insert_admin_action(
+    at: str, actor_discord_id: str | None, actor_name: str, source: str, action: str,
+    target: str | None, summary: str, detail_json: str | None, undo_json: str | None,
+) -> int:
+    async with _connect() as db:
+        cur = await db.execute(
+            "INSERT INTO admin_actions (at, actor_discord_id, actor_name, source, action, target, "
+            "summary, detail_json, undo_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (at, actor_discord_id, actor_name, source, action, target, summary, detail_json, undo_json),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def list_admin_actions(prefixes: tuple[str, ...] | None, limit: int = 100) -> list[dict]:
+    """최신순. prefixes가 있으면 action이 그 접두어 중 하나로 시작하는 것만."""
+    where = ""
+    params: list = []
+    if prefixes:
+        where = "WHERE " + " OR ".join("substr(action, 1, ?) = ?" for _ in prefixes)
+        for p in prefixes:
+            params += [len(p), p]
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            f"SELECT * FROM admin_actions {where} ORDER BY id DESC LIMIT ?", (*params, limit)
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_admin_action(action_id: int) -> dict | None:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM admin_actions WHERE id=?", (action_id,))
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def set_admin_action_undone(action_id: int, undone_at: str | None) -> bool:
+    """undone_at을 채우거나(되돌리기 선점 — 이미 되돌린 건이면 False) 비운다(되돌리기 실패 시 복구)."""
+    async with _connect() as db:
+        if undone_at is None:
+            cur = await db.execute("UPDATE admin_actions SET undone_at=NULL WHERE id=?", (action_id,))
+        else:
+            cur = await db.execute(
+                "UPDATE admin_actions SET undone_at=? WHERE id=? AND undone_at IS NULL", (undone_at, action_id)
+            )
+        await db.commit()
+        return cur.rowcount > 0

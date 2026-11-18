@@ -16,6 +16,16 @@ from bot.services.expedition import (
 )
 
 from bot.services.permissions import require_admin as _require_admin
+from bot.services.admin_log import record_admin_action
+
+
+async def _log(discord_id: str, action: str, summary: str, **kw) -> None:
+  """웹 관리자 라우트의 관리자 활동 기록(source='web')."""
+  await record_admin_action(discord_id, "web", action, summary, **kw)
+
+
+def _gold_text(value) -> str:
+  return "미입력" if value is None else f"{value:,}"
 
 router = APIRouter(dependencies=[Depends(verify_webapp_key)])
 
@@ -272,8 +282,10 @@ async def raid_check_summary(discord_id: str):
         "icon": info.get("icon"),
         "category": info.get("category"),
         "difficulties": [],
+        "difficulty_gold": {},
       })
       entry["difficulties"].append(diff_name)
+      entry["difficulty_gold"][diff_name] = _info.get("clear_gold")
     applicable = list(by_raid.values())
 
     selected = selections.get(name)
@@ -285,6 +297,7 @@ async def raid_check_summary(discord_id: str):
     done = completions_by_char.get(name, set())
     done_raids = {key.rsplit("_", 1)[0] for key in done}
     done_count = sum(1 for r in visible if r in done_raids)
+    gold_earned, gold_total = _character_gold(by_raid, visible, done)
     out.append({
       **char,
       "is_support": char.get("character_class") in SUPPORT_CLASSES,
@@ -294,16 +307,43 @@ async def raid_check_summary(discord_id: str):
       "visible_raid_names": visible,
       "done_count": done_count,
       "total_slots": len(visible),
+      "gold_earned": gold_earned,
+      "gold_total": gold_total,
     })
 
   return {
     "week_key": week_key,
     "characters": out,
+    "gold": {"earned": sum(c["gold_earned"] for c in out), "total": sum(c["gold_total"] for c in out)},
     "raids": await db.get_raids_dict(),
     "categories": await db.get_categories(),
     "support_classes": sorted(SUPPORT_CLASSES),
     "extreme": await _extreme_status_payload(discord_id, week_key),
   }
+
+
+def _character_gold(by_raid: dict[str, dict], visible: list[str], done_keys: set[str]) -> tuple[int, int]:
+  """캐릭터의 이번 주 골드 (획득, 총합). 카드에 보이는 레이드마다 — 끝낸 레이드는 끝낸
+  난이도의 골드(같은 레이드를 여러 난이도로 체크했으면 큰 쪽), 아직이면 입장 가능한 난이도 중
+  가장 큰 골드. 골드 미입력(None)은 0. 주 3회 골드 제한은 반영하지 않는다(요청사항)."""
+  from bot.data.raids import RAIDS
+
+  done_by_raid: dict[str, list[str]] = {}
+  for key in done_keys:
+    raid_name, _, diff = key.rpartition("_")
+    done_by_raid.setdefault(raid_name, []).append(diff)
+
+  earned = total = 0
+  for raid_name in visible:
+    if raid_name in done_by_raid:
+      gold_map = (RAIDS.get(raid_name) or {}).get("difficulty_gold") or {}
+      gold = max((gold_map.get(d) or 0) for d in done_by_raid[raid_name])
+      earned += gold
+      total += gold
+    else:
+      applicable_gold = (by_raid.get(raid_name) or {}).get("difficulty_gold") or {}
+      total += max((g or 0 for g in applicable_gold.values()), default=0)
+  return earned, total
 
 
 class SetRaidSelectionBody(BaseModel):
@@ -895,6 +935,8 @@ async def admin_add_category(body: AdminCategoryBody):
     return {"success": False, "reason": err}
   added = await db.add_category(body.name, body.sort_order)
   await raids_module.reload()
+  if added:
+    await _log(body.discord_id, "category.create", f'카테고리 "{body.name}" 추가', target=body.name)
   return {"success": added}
 
 
@@ -913,6 +955,8 @@ async def admin_delete_category(body: AdminCategoryNameBody):
     return {"success": False, "reason": f"소속 레이드가 {n}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_category(body.name)
   await raids_module.reload()
+  if removed:
+    await _log(body.discord_id, "category.delete", f'카테고리 "{body.name}" 삭제', target=body.name)
   return {"success": removed}
 
 
@@ -1022,6 +1066,10 @@ async def admin_set_raid_period(body: AdminRaidPeriodBody):
     return {"success": False, "reason": err}
   updated = await db.set_raid_period(body.name, start, end)
   await raids_module.reload()
+  if updated:
+    period = f"{start or '제한 없음'} ~ {end or '제한 없음'}" if (start or end) else "기간 삭제"
+    await _log(body.discord_id, "raid.period", f'레이드 "{body.name}" 운영 기간 변경 ({period})',
+               target=body.name, detail={"available_from": start, "available_until": end})
   return {"success": updated}
 
 
@@ -1040,6 +1088,8 @@ async def admin_add_raid(body: AdminRaidBody):
     return {"success": False, "reason": err}
   added = await db.add_raid(body.name, body.short_name, body.icon, body.category)
   await raids_module.reload()
+  if added:
+    await _log(body.discord_id, "raid.create", f'레이드 "{body.name}" 추가 ({body.category})', target=body.name)
   return {"success": added}
 
 
@@ -1058,6 +1108,8 @@ async def admin_delete_raid(body: AdminRaidNameBody):
     return {"success": False, "reason": f"진행 중인 공대가 {live}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_raid(body.name)
   await raids_module.reload()
+  if removed:
+    await _log(body.discord_id, "raid.delete", f'레이드 "{body.name}" 삭제', target=body.name)
   return {"success": removed}
 
 
@@ -1072,8 +1124,15 @@ async def admin_set_raid_active(body: AdminRaidActiveBody):
   err = _require_admin(body.discord_id)
   if err:
     return {"success": False, "reason": err}
+  was_active = (raids_module.RAIDS.get(body.name) or {}).get("is_active", True)
   updated = await db.set_raid_active(body.name, body.is_active)
   await raids_module.reload()
+  if updated:
+    await _log(
+      body.discord_id, "raid.enable" if body.is_active else "raid.disable",
+      f'레이드 "{body.name}" {"활성화" if body.is_active else "비활성화"}', target=body.name,
+      undo={"type": "raid_active", "name": body.name, "is_active": bool(was_active)},
+    )
   return {"success": updated}
 
 
@@ -1101,6 +1160,13 @@ class AdminDifficultyBody(BaseModel):
   total_slots: int
   party_split: int | None = None
   gates: int = 1
+  clear_gold: int | None = None
+
+
+def _clear_gold_error(clear_gold: int | None) -> str | None:
+  if clear_gold is not None and clear_gold < 0:
+    return "클리어 골드는 0 이상이어야 합니다."
+  return None
 
 
 @router.post("/admin/difficulties/add")
@@ -1109,14 +1175,21 @@ async def admin_add_difficulty(body: AdminDifficultyBody):
   if err:
     return {"success": False, "reason": err}
   err = _difficulty_validation_error(body.min_level, body.total_slots, body.party_split, body.gates)
+  err = err or _clear_gold_error(body.clear_gold)
   if err:
     return {"success": False, "reason": err}
   next_sort = await db.get_next_difficulty_sort_order(body.raid_name)
   added = await db.add_difficulty(
     body.raid_name, body.difficulty, body.min_level,
-    body.total_slots, body.party_split, body.gates, next_sort,
+    body.total_slots, body.party_split, body.gates, next_sort, body.clear_gold,
   )
   await raids_module.reload()
+  if added:
+    await _log(
+      body.discord_id, "difficulty.add",
+      f"{body.raid_name} {body.difficulty} 난이도 추가 (입장 {body.min_level}, {body.total_slots}인, 골드 {_gold_text(body.clear_gold)})",
+      target=f"{body.raid_name}/{body.difficulty}",
+    )
   return {"success": added}
 
 
@@ -1133,6 +1206,9 @@ async def admin_delete_difficulty(body: AdminDifficultyDeleteBody):
     return {"success": False, "reason": err}
   removed = await db.remove_difficulty(body.raid_name, body.difficulty)
   await raids_module.reload()
+  if removed:
+    await _log(body.discord_id, "difficulty.delete", f"{body.raid_name} {body.difficulty} 난이도 삭제",
+               target=f"{body.raid_name}/{body.difficulty}")
   return {"success": removed}
 
 
@@ -1323,8 +1399,19 @@ async def admin_delete_user(target_discord_id: str, body: AdminDeleteUserBody):
   err = _require_admin(body.discord_id)
   if err:
     return {"success": False, "reason": err}
-  await delete_user_and_leave_parties(bot_ref.get_bot(), target_discord_id)
+  await delete_user_and_leave_parties(
+    bot_ref.get_bot(), target_discord_id, actor_discord_id=body.discord_id, source="web",
+  )
   return {"success": True}
+
+
+@router.get("/admin/users/{target_discord_id}/impact")
+async def admin_user_delete_impact(target_discord_id: str, discord_id: str):
+  """유저 삭제 확인 창 — 캐릭터/계정 수, 진행 중 공대(파티장이면 넘겨받을 사람), 이번 주 클리어 수."""
+  from bot.services.expedition import get_user_delete_impact
+
+  _admin_or_403(discord_id)
+  return await get_user_delete_impact(target_discord_id)
 
 
 # ── 관리자: 통계 / 구독·알림 / 클리어 편집 / 봇 상태 (관리자 앱에만 있던 화면) ─────
@@ -1414,7 +1501,11 @@ async def admin_notify_all(body: AdminBroadcastBody):
   bot = bot_ref.get_bot()
   if not bot:
     return {"success": False, "reason": "봇이 준비되지 않았습니다."}
-  return await start_broadcast_and_wait(bot, content)
+  result = await start_broadcast_and_wait(bot, content)
+  if result.get("success"):
+    preview = content if len(content) <= 40 else content[:40] + "…"
+    await _log(body.discord_id, "notify_all", f'전체 공지 발송: "{preview}"', detail={"content": content})
+  return result
 
 
 @router.get("/admin/notify-all/status")
@@ -1451,9 +1542,17 @@ async def admin_set_completion(body: AdminSetCompletionBody):
   if err:
     return {"success": False, "reason": err}
   if body.done:
-    await db.add_completion(body.target_discord_id, body.character_name, body.raid_name, body.difficulty, body.week_key)
+    changed = await db.add_completion(body.target_discord_id, body.character_name, body.raid_name, body.difficulty, body.week_key)
   else:
-    await db.remove_completion(body.target_discord_id, body.character_name, body.raid_name, body.difficulty, body.week_key)
+    changed = await db.remove_completion(body.target_discord_id, body.character_name, body.raid_name, body.difficulty, body.week_key)
+  if changed:
+    await _log(
+      body.discord_id, "completion.set",
+      f"{body.character_name} {body.raid_name} {body.difficulty} 클리어 {'체크' if body.done else '해제'} ({body.week_key} 주차)",
+      target=body.target_discord_id,
+      detail={"character_name": body.character_name, "raid_name": body.raid_name, "difficulty": body.difficulty,
+              "week_key": body.week_key, "done": body.done},
+    )
   return {"success": True, "done": body.done}
 
 
@@ -1667,8 +1766,13 @@ async def admin_update_raid(body: AdminRaidUpdateBody):
     return {"success": False, "reason": "약칭을 입력해주세요."}
   if not await db.raid_exists(body.name):
     return {"success": False, "reason": "레이드를 찾을 수 없습니다."}
-  await db.update_raid(body.name, short, _clean_name(body.icon) or "⚔️")
+  before = raids_module.RAIDS.get(body.name) or {}
+  icon = _clean_name(body.icon) or "⚔️"
+  await db.update_raid(body.name, short, icon)
   await raids_module.reload()
+  if before.get("short_name") != short or before.get("icon") != icon:
+    await _log(body.discord_id, "raid.update",
+               f'레이드 "{body.name}" 약칭/아이콘 변경 ({before.get("short_name")} → {short})', target=body.name)
   return {"success": True}
 
 
@@ -1692,8 +1796,15 @@ async def admin_rename_raid(body: AdminRenameBody):
     return {"success": False, "reason": "레이드를 찾을 수 없습니다."}
   if await db.raid_exists(new):
     return {"success": False, "reason": "이미 같은 이름의 레이드가 있습니다."}
+  refs = await db.count_raid_references(body.old_name)
   await db.rename_raid(body.old_name, new)
   await raids_module.reload()
+  party_count = refs.get("parties_all", 0) + refs.get("party_history", 0)
+  await _log(
+    body.discord_id, "raid.rename",
+    f'레이드 이름 "{body.old_name}" → "{new}" · 공대 {party_count}, 기록 {refs.get("raid_completions", 0)}건 함께 변경',
+    target=new, detail=refs, undo={"type": "raid_rename", "from": new, "to": body.old_name},
+  )
   return {"success": True}
 
 
@@ -1721,6 +1832,7 @@ async def admin_rename_category(body: AdminRenameBody):
     return {"success": False, "reason": "이미 같은 이름의 카테고리가 있습니다."}
   await db.rename_category(body.old_name, new)
   await raids_module.reload()
+  await _log(body.discord_id, "category.rename", f'카테고리 이름 "{body.old_name}" → "{new}"', target=new)
   return {"success": True}
 
 
@@ -1732,6 +1844,8 @@ class AdminDifficultyUpdateBody(BaseModel):
   total_slots: int
   party_split: int | None = None
   gates: int = 1
+  # 안 보내면 기존 값 유지, null을 보내면 비움
+  clear_gold: int | None = None
 
 
 @router.post("/admin/difficulties/update")
@@ -1740,14 +1854,31 @@ async def admin_update_difficulty(body: AdminDifficultyUpdateBody):
   if err:
     return {"success": False, "reason": err}
   err = _difficulty_validation_error(body.min_level, body.total_slots, body.party_split, body.gates)
+  err = err or _clear_gold_error(body.clear_gold)
   if err:
     return {"success": False, "reason": err}
+  gold_kwargs = {"clear_gold": body.clear_gold} if "clear_gold" in body.model_fields_set else {}
+  before = ((raids_module.RAIDS.get(body.raid_name) or {}).get("difficulties") or {}).get(body.difficulty) or {}
   updated = await db.update_difficulty(
     body.raid_name, body.difficulty, body.min_level, body.total_slots, body.party_split, body.gates,
+    **gold_kwargs,
   )
   if not updated:
     return {"success": False, "reason": "난이도를 찾을 수 없습니다."}
   await raids_module.reload()
+  changes = []
+  for label, key, new_value in (
+    ("입장", "min_level", body.min_level), ("인원", "total_slots", body.total_slots),
+    ("분할", "party_split", body.party_split), ("관문", "gates", body.gates),
+  ):
+    if before.get(key) != new_value:
+      changes.append(f"{label} {before.get(key)} → {new_value}")
+  if gold_kwargs and before.get("clear_gold") != body.clear_gold:
+    changes.append(f"골드 {_gold_text(before.get('clear_gold'))} → {_gold_text(body.clear_gold)}")
+  if changes:
+    await _log(body.discord_id, "difficulty.update",
+               f"{body.raid_name} {body.difficulty} 난이도 수정 · {', '.join(changes)}",
+               target=f"{body.raid_name}/{body.difficulty}")
   return {"success": True}
 
 
@@ -1775,6 +1906,8 @@ async def admin_rename_difficulty(body: AdminDifficultyRenameBody):
     return {"success": False, "reason": "이미 같은 이름의 난이도가 있습니다."}
   await db.rename_difficulty(body.raid_name, body.old_difficulty, new)
   await raids_module.reload()
+  await _log(body.discord_id, "difficulty.rename",
+             f'{body.raid_name} 난이도 이름 "{body.old_difficulty}" → "{new}"', target=f"{body.raid_name}/{new}")
   return {"success": True}
 
 
@@ -1838,3 +1971,113 @@ class ExtremeClearBody(BaseModel):
 async def clear_extreme_completion(body: ExtremeClearBody):
   removed = await db.clear_extreme_completion(body.discord_id, body.raid_name)
   return {"success": True, "removed": removed}
+
+
+# ── 로스트아크 공용 데이터(공지·이벤트·캘린더·시세) ─────────────────────
+# 서버 공용 키(config.GUEST_LOOKUP_DISCORD_ID)로 받은 캐시만 읽는다 — 요청마다 로스트아크
+# API를 부르지 않는다(갱신은 봇 루프가 bot/services/loa_content.tick으로).
+
+@router.get("/loa/overview")
+async def loa_overview(discord_id: str = ""):
+  from bot.services import loa_content
+
+  return await loa_content.overview(discord_id)
+
+
+@router.get("/loa/calendar")
+async def loa_calendar(date: str | None = None):
+  from bot.services import loa_content
+
+  return await loa_content.calendar_for(date)
+
+
+class GoldIslandSubscriptionBody(BaseModel):
+  discord_id: str
+  enabled: bool
+
+
+@router.post("/loa/gold-island-subscription")
+async def loa_gold_island_subscription(body: GoldIslandSubscriptionBody):
+  if not body.discord_id:
+    return {"success": False, "reason": "로그인 정보가 없습니다.", "enabled": False}
+  await db.set_gold_island_subscription(body.discord_id, body.enabled)
+  return {"success": True, "enabled": body.enabled}
+
+
+@router.get("/loa/prices")
+async def loa_prices():
+  from bot.services import loa_content
+
+  return await loa_content.prices()
+
+
+@router.get("/admin/loa/tracked-items")
+async def admin_loa_tracked_items(discord_id: str):
+  from bot.services import loa_content
+
+  _admin_or_403(discord_id)
+  return {"names": await loa_content.get_tracked_items()}
+
+
+class TrackedItemsBody(BaseModel):
+  discord_id: str
+  names: list[str]
+
+
+@router.post("/admin/loa/tracked-items")
+async def admin_set_loa_tracked_items(body: TrackedItemsBody):
+  from bot.services import loa_content
+
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  cleaned = loa_content.clean_tracked_names(body.names)
+  if len(cleaned) > loa_content.MAX_TRACKED_ITEMS:
+    return {"success": False, "reason": f"추적 아이템은 최대 {loa_content.MAX_TRACKED_ITEMS}개까지 지정할 수 있습니다."}
+  previous = await loa_content.get_tracked_items()
+  names, unresolved = await loa_content.set_tracked_items(cleaned)
+  if names != previous:
+    await _log(
+      body.discord_id, "loa.tracked_items",
+      f"거래소 추적 아이템 변경 ({', '.join(names) or '없음'})",
+      detail={"before": previous, "after": names}, undo={"type": "tracked_items", "names": previous},
+    )
+  return {"success": True, "names": names, "unresolved": unresolved}
+
+
+# ── 전투력 추이 ───────────────────────────────────────────────
+
+@router.get("/characters/{name}/history")
+async def character_cp_history(name: str, discord_id: str, days: int = 90):
+  """캐릭터 전투력/아이템레벨 일별 기록 — 본인뿐 아니라 등록된 길드원 누구나 볼 수 있다
+  (랭킹처럼 길드 안에서는 공개 정보)."""
+  if not await db.user_exists(discord_id):
+    raise HTTPException(status_code=403, detail="등록된 길드원만 볼 수 있습니다.")
+  days = min(max(days, 1), 365)
+  return {"items": await db.get_cp_history(name, days)}
+
+
+# ── 관리자 활동 기록 ────────────────────────────────────────────
+
+@router.get("/admin/actions")
+async def admin_actions(discord_id: str, kind: str = "all", limit: int = 100):
+  from bot.services import admin_log
+
+  _admin_or_403(discord_id)
+  if kind not in ("party", "raid", "user", "all"):
+    kind = "all"
+  return {"items": await admin_log.list_actions(kind, limit)}
+
+
+class AdminUndoBody(BaseModel):
+  discord_id: str
+
+
+@router.post("/admin/actions/{action_id}/undo")
+async def admin_undo_action(action_id: int, body: AdminUndoBody):
+  from bot.services import admin_log
+
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  return await admin_log.undo_action(action_id, body.discord_id, source="web")

@@ -127,6 +127,8 @@ class LoABot(commands.Bot):
             self.party_notification_task.start()
         if not self.account_sync_task.is_running():
             self.account_sync_task.start()
+        if not self.loa_content_task.is_running():
+            self.loa_content_task.start()
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.playing,
@@ -149,6 +151,29 @@ class LoABot(commands.Bot):
 
     @account_sync_task.before_loop
     async def before_account_sync(self) -> None:
+        await self.wait_until_ready()
+
+    @tasks.loop(seconds=60)
+    async def loa_content_task(self) -> None:
+        """로스트아크 공용 데이터(공지/이벤트/캘린더 30분·수요일 점검 시간대 5분, 시세 1시간)
+        갱신과 골드 섬 10분 전 DM. 실제 갱신 주기는 loa_content.tick이 판단한다.
+        party_notification_task와 같은 이유로 한 주기를 통째로 감싼다(예외 한 번에 루프가
+        영영 멈추지 않게)."""
+        from bot.services import loa_content
+
+        try:
+            await loa_content.tick()
+        except Exception:
+            traceback.print_exc()
+            print("[LoABot] 로아 공용 데이터 갱신 중 오류 — 다음 주기에 재시도")
+        try:
+            await loa_content.gold_island_dm_tick(self)
+        except Exception:
+            traceback.print_exc()
+            print("[LoABot] 골드 섬 알림 처리 중 오류 — 다음 주기에 재시도")
+
+    @loa_content_task.before_loop
+    async def before_loa_content(self) -> None:
         await self.wait_until_ready()
 
     @tasks.loop(seconds=30)

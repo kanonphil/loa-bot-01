@@ -12,6 +12,13 @@ from bot.ui.views import _parse_schedule, _format_schedule
 
 # ── 소유자 체크 헬퍼 ─────────────────────────────────────
 
+async def _log(interaction: discord.Interaction, action: str, summary: str, **kw) -> None:
+    """디스코드 /관리 명령의 관리자 활동 기록(source='discord')."""
+    from bot.services.admin_log import record_admin_action
+
+    await record_admin_action(str(interaction.user.id), "discord", action, summary, **kw)
+
+
 async def _check_owner(interaction: discord.Interaction) -> bool:
     if not await interaction.client.is_owner(interaction.user):
         await interaction.response.send_message(
@@ -96,6 +103,9 @@ class RaidPeriodModal(Modal, title="운영 기간 설정"):
 
         await db.set_raid_period(self.raid_name, from_dt.isoformat(), until_dt.isoformat())
         await raids_module.reload()
+        await _log(interaction, "raid.period",
+                   f'레이드 "{self.raid_name}" 운영 기간 변경 ({from_dt.isoformat()} ~ {until_dt.isoformat()})',
+                   target=self.raid_name)
 
         fmt = "%Y/%m/%d %H:%M"
         await interaction.response.send_message(
@@ -138,6 +148,7 @@ class AddRaidModal(Modal, title="레이드 추가"):
             return
 
         await raids_module.reload()
+        await _log(interaction, "raid.create", f'레이드 "{name}" 추가 ({category})', target=name)
         await interaction.response.send_message(
             f"✅ **{name}** `{icon}` ({category}) 레이드 추가 완료.\n"
             f"`/관리 난이도추가`로 난이도를 추가하세요.",
@@ -168,6 +179,7 @@ class Admin(commands.Cog):
             )
             return
         await raids_module.reload()
+        await _log(interaction, "category.create", f'카테고리 "{name}" 추가', target=name)
         await interaction.response.send_message(
             f"✅ 카테고리 **{name}** (순서 {sort_order}) 추가 완료.", ephemeral=True
         )
@@ -195,6 +207,7 @@ class Admin(commands.Cog):
             )
             return
         await raids_module.reload()
+        await _log(interaction, "category.delete", f'카테고리 "{name}" 삭제', target=name)
         await interaction.response.send_message(
             f"🗑️ 카테고리 **{name}** 삭제 완료.", ephemeral=True
         )
@@ -260,6 +273,7 @@ class Admin(commands.Cog):
             )
             return
         await raids_module.reload()
+        await _log(interaction, "raid.delete", f'레이드 "{raid_name}" 삭제', target=raid_name)
         await interaction.response.send_message(
             f"🗑️ **{raid_name}** 및 모든 난이도 삭제 완료.", ephemeral=True
         )
@@ -308,6 +322,8 @@ class Admin(commands.Cog):
             )
             return
         await raids_module.reload()
+        await _log(interaction, "difficulty.add", f"{raid_name} {diff_name} 난이도 추가",
+                   target=f"{raid_name}/{diff_name}")
         split_str = f"{party_split}인 분할" if party_split > 0 else "단일 파티"
         await interaction.response.send_message(
             f"✅ **{raid_name} {diff_name}** "
@@ -331,6 +347,8 @@ class Admin(commands.Cog):
             )
             return
         await raids_module.reload()
+        await _log(interaction, "difficulty.delete", f"{raid_name} {diff_name} 난이도 삭제",
+                   target=f"{raid_name}/{diff_name}")
         await interaction.response.send_message(
             f"🗑️ **{raid_name} {diff_name}** 난이도 삭제 완료.", ephemeral=True
         )
@@ -367,7 +385,14 @@ class Admin(commands.Cog):
     ) -> None:
         if not await _check_owner(interaction):
             return
+        was_active = (raids_module.RAIDS.get(raid_name) or {}).get("is_active", True)
         updated = await db.set_raid_active(raid_name, is_active)
+        if updated:
+            await _log(
+                interaction, "raid.enable" if is_active else "raid.disable",
+                f'레이드 "{raid_name}" {"활성화" if is_active else "비활성화"}', target=raid_name,
+                undo={"type": "raid_active", "name": raid_name, "is_active": bool(was_active)},
+            )
         if not updated:
             await interaction.response.send_message(
                 f"❌ **{raid_name}** 레이드를 찾을 수 없습니다.", ephemeral=True
@@ -405,6 +430,8 @@ class Admin(commands.Cog):
         if not await _check_owner(interaction):
             return
         updated = await db.set_raid_period(raid_name, None, None)
+        if updated:
+            await _log(interaction, "raid.period", f'레이드 "{raid_name}" 운영 기간 변경 (기간 삭제)', target=raid_name)
         if not updated:
             await interaction.response.send_message(
                 f"❌ **{raid_name}** 레이드를 찾을 수 없습니다.", ephemeral=True

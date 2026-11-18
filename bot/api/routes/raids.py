@@ -7,6 +7,13 @@ from bot.data import raids as raids_module
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
+async def _log(action: str, summary: str, **kw) -> None:
+  """관리자 API(X-API-Key, Electron 앱) 경로의 관리자 활동 기록 — 호출자 discord_id가 없다."""
+  from bot.services.admin_log import record_admin_action
+
+  await record_admin_action(None, "api", action, summary, **kw)
+
+
 # ── 요청 바디 모델 ─────────────────────────────────────────
 
 class CategoryBody(BaseModel):
@@ -25,6 +32,7 @@ class DifficultyBody(BaseModel):
   total_slots: int
   party_split: int | None = None
   gates: int = 1
+  clear_gold: int | None = None
 
 class PeriodBody(BaseModel):
   available_from: str | None = None
@@ -60,6 +68,8 @@ async def get_categories():
 async def add_category(body: CategoryBody):
   added = await db.add_category(body.name, body.sort_order)
   await raids_module.reload()
+  if added:
+    await _log("category.create", f'카테고리 "{body.name}" 추가', target=body.name)
   return {"success": added}
 
 @router.put("/categories/order")
@@ -85,6 +95,8 @@ async def delete_category(name: str):
     return {"success": False, "reason": f"소속 레이드가 {n}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_category(name)
   await raids_module.reload()
+  if removed:
+    await _log("category.delete", f'카테고리 "{name}" 삭제', target=name)
   return {"success": removed}
 
 
@@ -98,6 +110,8 @@ async def get_raids():
 async def add_raid(body: RaidBody):
   added = await db.add_raid(body.name, body.short_name, body.icon, body.category)
   await raids_module.reload()
+  if added:
+    await _log("raid.create", f'레이드 "{body.name}" 추가 ({body.category})', target=body.name)
   return {"success": added}
 
 @router.put("/order")
@@ -127,8 +141,15 @@ async def move_raid_category(raid_name: str, body: RaidCategoryBody):
 
 @router.patch("/{raid_name}/active")
 async def set_raid_active(raid_name: str, body: ActiveBody):
+  was_active = (raids_module.RAIDS.get(raid_name) or {}).get("is_active", True)
   updated = await db.set_raid_active(raid_name, body.is_active)
   await raids_module.reload()
+  if updated:
+    await _log(
+      "raid.enable" if body.is_active else "raid.disable",
+      f'레이드 "{raid_name}" {"활성화" if body.is_active else "비활성화"}', target=raid_name,
+      undo={"type": "raid_active", "name": raid_name, "is_active": bool(was_active)},
+    )
   return {"success": updated}
 
 @router.patch("/{raid_name}/period")
@@ -138,6 +159,9 @@ async def set_raid_period(raid_name: str, body: PeriodBody):
     return {"success": False, "reason": err}
   updated = await db.set_raid_period(raid_name, start, end)
   await raids_module.reload()
+  if updated:
+    period = f"{start or '제한 없음'} ~ {end or '제한 없음'}" if (start or end) else "기간 삭제"
+    await _log("raid.period", f'레이드 "{raid_name}" 운영 기간 변경 ({period})', target=raid_name)
   return {"success": updated}
 
 @router.delete("/{raid_name}")
@@ -147,6 +171,8 @@ async def delete_raid(raid_name: str):
     return {"success": False, "reason": f"진행 중인 공대가 {live}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_raid(raid_name)
   await raids_module.reload()
+  if removed:
+    await _log("raid.delete", f'레이드 "{raid_name}" 삭제', target=raid_name)
   return {"success": removed}
 
 
@@ -168,8 +194,11 @@ async def add_difficulty(raid_name: str, body: DifficultyBody):
   added = await db.add_difficulty(
     raid_name, body.difficulty, body.min_level,
     body.total_slots, body.party_split, body.gates, next_sort,
+    body.clear_gold if body.clear_gold is None or body.clear_gold >= 0 else None,
   )
   await raids_module.reload()
+  if added:
+    await _log("difficulty.add", f"{raid_name} {body.difficulty} 난이도 추가", target=f"{raid_name}/{body.difficulty}")
   return {"success": added}
 
 @router.put("/{raid_name}/difficulties/order")
@@ -182,6 +211,8 @@ async def reorder_difficulties(raid_name: str, body: OrderBody):
 async def delete_difficulty(raid_name: str, difficulty: str):
   removed = await db.remove_difficulty(raid_name, difficulty)
   await raids_module.reload()
+  if removed:
+    await _log("difficulty.delete", f"{raid_name} {difficulty} 난이도 삭제", target=f"{raid_name}/{difficulty}")
   return {"success": removed}
 
 

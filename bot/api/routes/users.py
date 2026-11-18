@@ -62,5 +62,5 @@ async def get_party_history(discord_id: str):
 async def delete_user(discord_id: str):
   from bot.services.expedition import delete_user_and_leave_parties
 
-  await delete_user_and_leave_parties(bot_ref.get_bot(), discord_id)
+  await delete_user_and_leave_parties(bot_ref.get_bot(), discord_id, source="api")
   return {"success": True}

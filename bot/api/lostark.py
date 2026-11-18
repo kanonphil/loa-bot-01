@@ -1,4 +1,5 @@
 import asyncio
+import time
 import aiohttp
 from urllib.parse import quote
 from typing import Optional
@@ -24,16 +25,66 @@ async def close_session() -> None:
         await _shared_session.close()
 
 
-async def _get(api_key: str, path: str, params: dict = None) -> Optional[dict | list]:
+class LoaMaintenanceError(RuntimeError):
+    """503 — 로스트아크 점검 중. RuntimeError의 하위 클래스라 기존 호출부(RuntimeError만
+    잡는 곳)는 그대로 동작하고, 공용 데이터 수집(bot/services/loa_content.py)만 이걸 따로
+    잡아 "점검 중"으로 표시하고 그 주기의 나머지 호출을 건너뛴다."""
+
+
+# 키별 남은 요청 수(X-RateLimit-Remaining)와 리셋 시각(X-RateLimit-Reset, epoch초).
+# 키 원문 대신 해시를 키로 써서 메모리에 키가 하나 더 남지 않게 한다.
+RATE_LIMIT_LOW_WATERMARK = 10
+RATE_LIMIT_MAX_WAIT = 60.0
+_rate_state: dict[int, tuple[int, float]] = {}
+
+
+def _note_rate_limit(api_key: str, headers) -> None:
+    try:
+        remaining = headers.get("X-RateLimit-Remaining")
+        if remaining is None:
+            return
+        reset = headers.get("X-RateLimit-Reset")
+        reset_at = float(reset) if reset not in (None, "") else time.time() + 60
+        _rate_state[hash(api_key)] = (int(remaining), reset_at)
+    except (TypeError, ValueError):
+        pass
+
+
+def rate_limit_wait_seconds(api_key: str, now: float | None = None) -> float:
+    """남은 요청 수가 RATE_LIMIT_LOW_WATERMARK 미만이면 리셋 시각까지 기다릴 초(최대
+    RATE_LIMIT_MAX_WAIT). 아니면 0."""
+    state = _rate_state.get(hash(api_key))
+    if not state:
+        return 0.0
+    remaining, reset_at = state
+    if remaining >= RATE_LIMIT_LOW_WATERMARK:
+        return 0.0
+    now = time.time() if now is None else now
+    return max(0.0, min(reset_at - now, RATE_LIMIT_MAX_WAIT))
+
+
+async def _request(
+    method: str, api_key: str, path: str, *, params: dict = None, json_body: dict = None,
+    timeout: float = 10,
+) -> Optional[dict | list]:
+    wait = rate_limit_wait_seconds(api_key)
+    if wait > 0:
+        print(f"[lostark] 남은 요청 수가 적어 {wait:.0f}초 대기")
+        await asyncio.sleep(wait)
     session = await _get_session()
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
     }
+    if json_body is not None:
+        headers["Content-Type"] = "application/json"
     url = f"{LOA_API_BASE}{path}"
     try:
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with session.get(url, headers=headers, params=params, timeout=timeout) as resp:
+        client_timeout = aiohttp.ClientTimeout(total=timeout)
+        async with session.request(
+            method, url, headers=headers, params=params, json=json_body, timeout=client_timeout,
+        ) as resp:
+            _note_rate_limit(api_key, resp.headers)
             if resp.status == 200:
                 return await resp.json()
             if resp.status == 404:
@@ -44,6 +95,8 @@ async def _get(api_key: str, path: str, params: dict = None) -> Optional[dict | 
                 raise RuntimeError("API 접근이 거부되었습니다 (403). 키 권한을 확인해주세요.")
             if resp.status == 429:
                 raise RuntimeError("API 요청 한도 초과 (429). 잠시 후 다시 시도해주세요.")
+            if resp.status == 503:
+                raise LoaMaintenanceError("로스트아크 점검 중입니다 (503).")
             # 그 외 오류: 상태코드와 응답 본문 포함
             body = await resp.text()
             raise RuntimeError(f"API 오류 {resp.status}: {body[:200]}")
@@ -52,7 +105,15 @@ async def _get(api_key: str, path: str, params: dict = None) -> Optional[dict | 
     # Python 3.10(봇 서버)에서는 asyncio.TimeoutError가 내장 TimeoutError와 별개 클래스라
     # 둘 다 잡아야 한다 — 하나만 잡으면 타임아웃이 그대로 새어나가 호출부가 500/무응답이 된다.
     except (asyncio.TimeoutError, TimeoutError) as e:
-        raise RuntimeError("API 응답 시간 초과 (10초). 잠시 후 다시 시도해주세요.") from e
+        raise RuntimeError(f"API 응답 시간 초과 ({timeout:g}초). 잠시 후 다시 시도해주세요.") from e
+
+
+async def _get(api_key: str, path: str, params: dict = None, timeout: float = 10) -> Optional[dict | list]:
+    return await _request("GET", api_key, path, params=params, timeout=timeout)
+
+
+async def _post(api_key: str, path: str, body: dict, timeout: float = 10) -> Optional[dict | list]:
+    return await _request("POST", api_key, path, json_body=body, timeout=timeout)
 
 
 def _enc(name: str) -> str:
@@ -123,3 +184,44 @@ def parse_item_level(char: dict | str | None) -> float:
         return float(str(level_str).replace(",", ""))
     except (ValueError, TypeError):
         return 0.0
+
+
+# ── 공용 데이터(공지/이벤트/캘린더/거래소) ─────────────────────
+# 응답 구조는 bot/services/loa_content.py가 방어적으로 파싱한다(필드 누락/추가에 관대).
+# 공용 데이터는 15초 타임아웃 — 캘린더 응답이 수백 KB라 10초는 빠듯할 수 있다.
+CONTENT_TIMEOUT = 15
+
+
+async def get_notices(api_key: str, notice_type: str | None = None) -> Optional[list]:
+    params = {"type": notice_type} if notice_type else None
+    return await _get(api_key, "/news/notices", params=params, timeout=CONTENT_TIMEOUT)
+
+
+async def get_events(api_key: str) -> Optional[list]:
+    return await _get(api_key, "/news/events", timeout=CONTENT_TIMEOUT)
+
+
+async def get_calendar(api_key: str) -> Optional[list]:
+    return await _get(api_key, "/gamecontents/calendar", timeout=CONTENT_TIMEOUT)
+
+
+async def get_market_options(api_key: str) -> Optional[dict]:
+    return await _get(api_key, "/markets/options", timeout=CONTENT_TIMEOUT)
+
+
+async def search_market_items(api_key: str, item_name: str, category_code: int, page_no: int = 1) -> Optional[dict]:
+    body = {
+        "Sort": "GRADE",
+        "CategoryCode": category_code,
+        "CharacterClass": None,
+        "ItemTier": None,
+        "ItemGrade": None,
+        "ItemName": item_name,
+        "PageNo": page_no,
+        "SortCondition": "ASC",
+    }
+    return await _post(api_key, "/markets/items", body, timeout=CONTENT_TIMEOUT)
+
+
+async def get_market_item(api_key: str, item_id: int) -> Optional[list]:
+    return await _get(api_key, f"/markets/items/{int(item_id)}", timeout=CONTENT_TIMEOUT)
