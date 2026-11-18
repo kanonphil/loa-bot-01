@@ -1838,3 +1838,68 @@ class ExtremeClearBody(BaseModel):
 async def clear_extreme_completion(body: ExtremeClearBody):
   removed = await db.clear_extreme_completion(body.discord_id, body.raid_name)
   return {"success": True, "removed": removed}
+
+
+# ── 로스트아크 공용 데이터(공지·이벤트·캘린더·시세) ─────────────────────
+# 서버 공용 키(config.GUEST_LOOKUP_DISCORD_ID)로 받은 캐시만 읽는다 — 요청마다 로스트아크
+# API를 부르지 않는다(갱신은 봇 루프가 bot/services/loa_content.tick으로).
+
+@router.get("/loa/overview")
+async def loa_overview(discord_id: str = ""):
+  from bot.services import loa_content
+
+  return await loa_content.overview(discord_id)
+
+
+@router.get("/loa/calendar")
+async def loa_calendar(date: str | None = None):
+  from bot.services import loa_content
+
+  return await loa_content.calendar_for(date)
+
+
+class GoldIslandSubscriptionBody(BaseModel):
+  discord_id: str
+  enabled: bool
+
+
+@router.post("/loa/gold-island-subscription")
+async def loa_gold_island_subscription(body: GoldIslandSubscriptionBody):
+  if not body.discord_id:
+    return {"success": False, "reason": "로그인 정보가 없습니다.", "enabled": False}
+  await db.set_gold_island_subscription(body.discord_id, body.enabled)
+  return {"success": True, "enabled": body.enabled}
+
+
+@router.get("/loa/prices")
+async def loa_prices():
+  from bot.services import loa_content
+
+  return await loa_content.prices()
+
+
+@router.get("/admin/loa/tracked-items")
+async def admin_loa_tracked_items(discord_id: str):
+  from bot.services import loa_content
+
+  _admin_or_403(discord_id)
+  return {"names": await loa_content.get_tracked_items()}
+
+
+class TrackedItemsBody(BaseModel):
+  discord_id: str
+  names: list[str]
+
+
+@router.post("/admin/loa/tracked-items")
+async def admin_set_loa_tracked_items(body: TrackedItemsBody):
+  from bot.services import loa_content
+
+  err = _require_admin(body.discord_id)
+  if err:
+    return {"success": False, "reason": err}
+  cleaned = loa_content.clean_tracked_names(body.names)
+  if len(cleaned) > loa_content.MAX_TRACKED_ITEMS:
+    return {"success": False, "reason": f"추적 아이템은 최대 {loa_content.MAX_TRACKED_ITEMS}개까지 지정할 수 있습니다."}
+  names, unresolved = await loa_content.set_tracked_items(cleaned)
+  return {"success": True, "names": names, "unresolved": unresolved}

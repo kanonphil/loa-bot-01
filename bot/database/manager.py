@@ -298,6 +298,67 @@ CREATE TABLE IF NOT EXISTS party_clear_completions (
     week_key        TEXT NOT NULL,
     PRIMARY KEY (message_id, discord_id, character_name)
 );
+
+-- 범용 키-값 설정(관리자가 웹에서 정하는 값 — 예: 거래소 추적 아이템 목록 JSON).
+CREATE TABLE IF NOT EXISTS app_settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT
+);
+
+-- 로스트아크 공용 데이터(공지/이벤트/캘린더/시세)의 마지막 정상 스냅샷 — 재시작해도
+-- 카드가 비지 않게 한다(bot/services/loa_content.py).
+CREATE TABLE IF NOT EXISTS loa_content_cache (
+    key          TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    fetched_at   TEXT NOT NULL
+);
+
+-- 추적 아이템 이름 → 거래소 아이템 id(POST /markets/items 검색으로 한 번 찾아 둔다).
+CREATE TABLE IF NOT EXISTS loa_market_items (
+    name          TEXT PRIMARY KEY,
+    item_id       INTEGER NOT NULL,
+    category_code INTEGER,
+    icon          TEXT,
+    resolved_at   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS loa_gold_island_subs (
+    discord_id  TEXT PRIMARY KEY,
+    created_at  TEXT
+);
+
+-- 골드 섬 DM 발송 기록 — 하루 한 번(재시작해도 중복 발송 안 되게 DB에 남긴다).
+CREATE TABLE IF NOT EXISTS loa_gold_island_dm (
+    discord_id  TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    PRIMARY KEY (discord_id, date)
+);
+
+-- 캐릭터 전투력/아이템레벨 일별 기록(하루 한 줄, 같은 날 다시 쓰면 덮어쓴다).
+CREATE TABLE IF NOT EXISTS character_cp_history (
+    character_name  TEXT NOT NULL,
+    date            TEXT NOT NULL,
+    combat_power    REAL,
+    item_level      REAL,
+    PRIMARY KEY (character_name, date)
+);
+
+-- 관리자 활동 기록(웹·디스코드·관리자 API 공통). undo_json이 있으면 되돌리기 가능.
+CREATE TABLE IF NOT EXISTS admin_actions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    at                TEXT NOT NULL,
+    actor_discord_id  TEXT,
+    actor_name        TEXT,
+    source            TEXT,
+    action            TEXT NOT NULL,
+    target            TEXT,
+    summary           TEXT,
+    detail_json       TEXT,
+    undo_json         TEXT,
+    undone_at         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_actions_at ON admin_actions(at);
 """
 
 
@@ -398,6 +459,11 @@ async def init_db() -> None:
                 await db.execute(f"ALTER TABLE parties ADD COLUMN {col} {definition}")
             except Exception:
                 pass
+        # 난이도별 클리어 골드(관리자 입력, 비어 있으면 NULL — 주간 골드 합산에서 0으로 센다)
+        try:
+            await db.execute("ALTER TABLE raid_difficulties ADD COLUMN clear_gold INTEGER")
+        except Exception:
+            pass
         # on_message가 메시지마다 channel_id로 파티를 찾는다
         await db.execute("CREATE INDEX IF NOT EXISTS idx_parties_channel ON parties(channel_id)")
         await db.commit()
@@ -3695,3 +3761,107 @@ async def clear_extreme_completion(discord_id: str, raid_name: str, week_key: st
         )
         await db.commit()
         return cur.rowcount
+
+
+# ──────────────────────────────────────────────
+# 범용 설정 / 로스트아크 공용 데이터 캐시 / 골드 섬 알림
+# ──────────────────────────────────────────────
+
+async def get_setting(key: str) -> str | None:
+    async with _connect() as db:
+        cur = await db.execute("SELECT value FROM app_settings WHERE key=?", (key,))
+        row = await cur.fetchone()
+    return row[0] if row else None
+
+
+async def set_setting(key: str, value: str | None) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+        await db.commit()
+
+
+async def get_content_snapshot(key: str) -> dict | None:
+    """{"payload": ..., "fetched_at": ...} 또는 None. JSON이 깨져 있으면 None."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT payload_json, fetched_at FROM loa_content_cache WHERE key=?", (key,)
+        )
+        row = await cur.fetchone()
+    if not row:
+        return None
+    try:
+        return {"payload": json.loads(row[0]), "fetched_at": row[1]}
+    except (TypeError, ValueError):
+        return None
+
+
+async def set_content_snapshot(key: str, payload, fetched_at: str) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO loa_content_cache (key, payload_json, fetched_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET payload_json=excluded.payload_json, fetched_at=excluded.fetched_at",
+            (key, json.dumps(payload, ensure_ascii=False), fetched_at),
+        )
+        await db.commit()
+
+
+async def get_market_item_ids() -> dict[str, dict]:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT name, item_id, category_code, icon FROM loa_market_items")
+        rows = await cur.fetchall()
+    return {r["name"]: dict(r) for r in rows}
+
+
+async def set_market_item_id(name: str, item_id: int, category_code: int | None, icon: str | None) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO loa_market_items (name, item_id, category_code, icon, resolved_at) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET item_id=excluded.item_id, "
+            "category_code=excluded.category_code, icon=excluded.icon, resolved_at=excluded.resolved_at",
+            (name, int(item_id), category_code, icon, datetime.now(KST).isoformat()),
+        )
+        await db.commit()
+
+
+async def is_gold_island_subscribed(discord_id: str) -> bool:
+    async with _connect() as db:
+        cur = await db.execute("SELECT 1 FROM loa_gold_island_subs WHERE discord_id=?", (discord_id,))
+        return await cur.fetchone() is not None
+
+
+async def set_gold_island_subscription(discord_id: str, enabled: bool) -> None:
+    async with _connect() as db:
+        if enabled:
+            await db.execute(
+                "INSERT OR IGNORE INTO loa_gold_island_subs (discord_id, created_at) VALUES (?, ?)",
+                (discord_id, datetime.now(KST).isoformat()),
+            )
+        else:
+            await db.execute("DELETE FROM loa_gold_island_subs WHERE discord_id=?", (discord_id,))
+        await db.commit()
+
+
+async def get_gold_island_dm_targets(date: str) -> list[str]:
+    """구독 중이면서 그날(date) 아직 골드 섬 DM을 안 받은 discord_id 목록."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT s.discord_id FROM loa_gold_island_subs s "
+            "WHERE NOT EXISTS (SELECT 1 FROM loa_gold_island_dm d WHERE d.discord_id=s.discord_id AND d.date=?) "
+            "ORDER BY s.created_at",
+            (date,),
+        )
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def mark_gold_island_dm_sent(discord_id: str, date: str) -> None:
+    async with _connect() as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO loa_gold_island_dm (discord_id, date) VALUES (?, ?)", (discord_id, date)
+        )
+        await db.commit()
