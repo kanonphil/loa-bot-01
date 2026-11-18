@@ -94,9 +94,9 @@ def test_panel_lists_unread_when_subscribed(client):
     resp = client.get("/notifications/panel")
     assert "카멘 하드 공격대가 모집을 시작했습니다." in resp.text
     assert "/notifications/1/open" in resp.text
-    # 드롭다운 헤더 + 종류별 아이콘 칩 + 상대 시각
-    assert "notif-panel-header" in resp.text
-    assert "notif-icon-created" in resp.text
+    # 팝오버 머리 + 종류별 아이콘 칩 + 묶음용 시각 + 상대 시각
+    assert "notif-pop-h" in resp.text
+    assert 'class="n-ic ' in resp.text and "data-created=" in resp.text
     assert "방금 전" in resp.text
 
 
@@ -126,8 +126,8 @@ def test_open_marks_read_and_redirects_to_party(client):
 
     resp = client.get("/notifications/panel")
     assert "새 알림이 없습니다" in resp.text
-    # 읽은 알림은 "읽음" 탭 pane으로 이동
-    assert 'data-notif-pane="read"' in resp.text
+    # 읽은 알림은 전체 목록에 흐리게(읽음) 남는다
+    assert 'class="n-item read"' in resp.text
     assert "읽음 처리될 알림" in resp.text
 
 
@@ -155,10 +155,11 @@ def test_panel_has_unread_and_read_tabs(client):
     asyncio.run(notification_store.add_notification("created", "msg-1", "안 읽은 알림"))
 
     resp = client.get("/notifications/panel")
+    assert 'data-notif-tab="all"' in resp.text
     assert 'data-notif-tab="unread"' in resp.text
-    assert 'data-notif-tab="read"' in resp.text
     assert "안 읽은 알림" in resp.text
-    assert "읽은 알림이 없습니다" in resp.text  # 읽음 pane은 비어있음
+    assert 'class="is-unread"' in resp.text  # 안 읽음 탭이 거르는 표시
+    assert "모두 읽음" in resp.text
 
 
 def test_open_unknown_notification_redirects_to_party_list(client):
