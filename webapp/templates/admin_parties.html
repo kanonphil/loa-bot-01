@@ -4,7 +4,7 @@
 {% macro row_menu(id, label) %}
 <span class="ad-menu-wrap">
   <button type="button" class="btn sm ghost" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="{{ id }}" aria-label="{{ label }} 더 보기">⋯</button>
-  <div class="menu" id="{{ id }}" role="menu" hidden>{{ caller() }}</div>
+  <div class="menu" id="{{ id }}" role="menu" data-float="end" hidden>{{ caller() }}</div>
 </span>
 {% endmacro %}
 {% block admin_body %}
@@ -17,7 +17,7 @@
 </div>
 {% endif %}
 
-<div class="ad-row ad-toolbar">
+<div class="toolbar">
   {% if tab == "open" %}{{ m.search("레이드 · 파티장 검색", "#open-table", item="tr[data-row]") }}{% else %}{{ m.search("레이드 · 파티장 검색", "#closed-table", item="tr[data-row]") }}{% endif %}
   <a class="chip-btn{% if tab == 'open' %} on{% endif %}" href="/admin/parties"{% if tab == 'open' %} aria-current="page"{% endif %}>진행 중 {{ open_parties | length }}</a>
   <a class="chip-btn{% if tab == 'closed' %} on{% endif %}" href="/admin/parties?tab=closed"{% if tab == 'closed' %} aria-current="page"{% endif %}>종료됨 {{ closed_parties | length }}</a>
@@ -34,8 +34,8 @@
   {% if not open_parties %}
   <div class="ad-card">{{ ui.empty("진행 중인 공대가 없습니다", "공대가 개설되면 여기에 표시됩니다.", icon="party") }}</div>
   {% else %}
-  <div class="ad-card ad-tcard">
-    <table class="ad-t" id="open-table">
+  <div class="ui-card table-card ad-tcard">
+    <table class="table is-stack ad-t" id="open-table">
       <thead><tr><th>레이드</th><th>일정</th><th>파티장</th><th>인원</th><th>상태</th><th></th></tr></thead>
       <tbody>
         {% for p in open_parties %}
@@ -75,8 +75,8 @@
   {% if not closed_parties %}
   <div class="ad-card">{{ ui.empty("종료된 공대 이력이 없습니다", "클리어하거나 종료한 공대가 여기에 남습니다.", icon="box") }}</div>
   {% else %}
-  <div class="ad-card ad-tcard">
-    <table class="ad-t" id="closed-table">
+  <div class="ui-card table-card ad-tcard">
+    <table class="table is-stack ad-t" id="closed-table">
       <thead><tr><th>레이드</th><th>일정</th><th>파티장</th><th>인원</th><th>상태</th><th></th></tr></thead>
       <tbody>
         {% for p in closed_parties %}

@@ -3,12 +3,11 @@
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
 {% block page_top %}<a class="btn sm ghost" href="/more">← 더보기</a><h1>알림 설정</h1>{% endblock %}
 {% block content %}
-{# 모든 스위치는 같은 모양: 오른쪽 끝에 "켜짐/꺼짐" 글자 + 스위치. 색만으로 구분하지 않는다. #}
+{# 스위치는 홈과 같은 공용 컴포넌트(_ui.html switch) — 줄 오른쪽 끝에 [트랙][켜짐/꺼짐]. #}
 {% macro switch(label_id, on, action, json=false, field=false) %}
 <form method="post" action="{{ action }}" class="exp-switchform"{% if json %} data-switch-json{% endif %}>
   {% if field %}<input type="hidden" name="enabled" value="{{ '0' if on else '1' }}">{% endif %}
-  <span class="exp-meta exp-switch-state" data-switch-state>{{ "켜짐" if on else "꺼짐" }}</span>
-  <button type="submit" class="exp-switch" role="switch" aria-checked="{{ 'true' if on else 'false' }}" aria-labelledby="{{ label_id }}"><i aria-hidden="true"></i></button>
+  {{ ui.switch(on, labelledby=label_id, type="submit") }}
 </form>
 {% endmacro %}
 <div class="page-content exp-page exp-settings">
@@ -44,8 +43,7 @@
     </div>
     <div class="exp-switchform">
       <button type="button" class="btn sm ghost" id="notif-sound-test">미리 듣기</button>
-      <span class="exp-meta exp-switch-state" id="notif-sound-state">켜짐</span>
-      <button type="button" class="exp-switch" role="switch" aria-checked="true" aria-labelledby="set-sound" id="notif-sound-toggle"><i aria-hidden="true"></i></button>
+      {{ ui.switch(true, labelledby="set-sound", id="notif-sound-toggle") }}
     </div>
   </div>
 </section>
@@ -70,7 +68,7 @@
   <p class="exp-state"><span class="ui-chip is-accent">전체</span> 지금은 전체 레이드의 알림을 받고 있습니다.</p>
   {% endif %}
   {% if raids %}
-  <form method="post" action="/notifications/raid-filters/add" class="exp-addrow">
+  <form method="post" action="/notifications/raid-filters/add" class="exp-addrow toolbar">
     <select name="raid_name" id="filter-raid-select" class="js-themed-select" required aria-label="레이드"
             data-diff-target="#filter-diff-select" data-diff-all-label="모든 난이도" data-diff-all-value="">
       <option value="" disabled selected>레이드 선택</option>
@@ -99,8 +97,7 @@
     {% if gold.known %}
     {{ switch("set-gold", gold.subscribed, "/settings/gold-island", json=true, field=true) }}
     {% else %}
-    <div class="exp-switchform"><span class="exp-meta exp-switch-state">불러오지 못함</span>
-      <button type="button" class="exp-switch" role="switch" aria-checked="false" aria-labelledby="set-gold" disabled data-tip="봇 서버에서 구독 상태를 가져오지 못했습니다"><i aria-hidden="true"></i></button></div>
+    <div class="exp-switchform">{{ ui.switch(false, labelledby="set-gold", disabled=true, tip="봇 서버에서 구독 상태를 가져오지 못했습니다", state_text="불러오지 못함") }}</div>
     {% endif %}
   </div>
 
@@ -112,7 +109,7 @@
     {% if pre_notify is none %}
     <span class="exp-meta">봇 서버에 연결하지 못해 표시할 수 없습니다.</span>
     {% else %}
-    <form method="post" action="/settings/pre-notify" class="exp-addrow exp-addrow-end">
+    <form method="post" action="/settings/pre-notify" class="exp-addrow exp-addrow-end toolbar">
       <select name="pre_notify_hours" class="js-themed-select" aria-label="사전 알림 시간">
         {% for h in pre_notify.choices %}
         <option value="{{ h }}" {% if h == pre_notify.pre_notify_hours %}selected{% endif %}>
@@ -149,7 +146,7 @@
   <p class="exp-state"><span class="ui-chip">없음</span> 구독 중인 레이드가 없습니다.</p>
   {% endif %}
   {% if raids %}
-  <form method="post" action="/settings/discord-subscriptions/add" class="exp-addrow">
+  <form method="post" action="/settings/discord-subscriptions/add" class="exp-addrow toolbar">
     <select name="raid_name" id="dm-raid-select" class="js-themed-select" required aria-label="레이드"
             data-diff-target="#dm-diff-select" data-diff-all-label="전체 난이도" data-diff-all-value="전체">
       <option value="" disabled selected>레이드 선택</option>

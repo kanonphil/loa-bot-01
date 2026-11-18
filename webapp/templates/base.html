@@ -101,6 +101,8 @@
     </nav>
     </div>
     <main class="main" id="main" tabindex="-1">
+      {# 머리줄보다 먼저 보여야 하는 안내(게임 점검 등) — 화면 폭에 맞춰 제목 줄 위에 #}
+      <div class="page-above"{% if not (self.above_top() | trim) %} hidden{% endif %}>{% block above_top %}{% endblock %}</div>
       {% if user %}
       {# 머리줄 — 왼쪽은 화면 제목 자리({% raw %}{% block page_top %}{% endraw %}), 오른쪽 끝에 알림 종 #}
       <div class="page-top{% if self.page_top() | trim %} has-title{% endif %}">

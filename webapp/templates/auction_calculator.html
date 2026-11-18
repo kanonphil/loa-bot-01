@@ -9,15 +9,15 @@
   <section class="ui-card exp-card" aria-labelledby="calc-in-title">
     <h2 class="exp-h" id="calc-in-title">입력</h2>
 
-    <label class="exp-label">
+    <label class="field-label">
       <span>템 가격 (골드)</span>
       <input type="number" id="calc-price" class="field" min="0" step="1" placeholder="예: 100000" inputmode="numeric">
     </label>
 
     {% if price_items %}
-    <div class="exp-label">
+    <div class="field-label is-stack">
       <span id="calc-market-label">시세에서 가져오기</span>
-      <select id="calc-market" class="js-themed-select" aria-label="시세에서 가져오기">
+      <select id="calc-market" class="js-themed-select is-block" aria-label="시세에서 가져오기">
         <option value="">아이템 선택</option>
         {% for it in price_items %}
         <option value="{{ it.current }}">{{ it.name }} · {{ "{:,}".format(it.current) }} 골드{% if it.change_pct is not none %} ({{ "%+.1f"|format(it.change_pct) }}%){% endif %}</option>
@@ -28,7 +28,7 @@
     {% endif %}
 
     <fieldset class="exp-fieldset">
-      <legend class="exp-label"><span>인원</span></legend>
+      <legend class="field-label"><span>인원</span></legend>
       <div class="exp-segrow">
         <label class="chip-btn exp-seg"><input type="radio" name="calc-party-size" value="8" checked><span>8인</span></label>
         <label class="chip-btn exp-seg"><input type="radio" name="calc-party-size" value="4"><span>4인</span></label>

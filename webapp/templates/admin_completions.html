@@ -2,9 +2,9 @@
 {% import "_ui.html" as ui %}
 {% import "_admin_macros.html" as m %}
 {% block admin_body %}
-<form method="get" action="/admin/completions" class="ad-row ad-toolbar ad-pick">
+<form method="get" action="/admin/completions" class="toolbar ad-pick">
   <label class="ad-pick-f">
-    <span class="ad-label">유저</span>
+    <span class="field-label">유저</span>
     <select name="target_discord_id" class="js-themed-select" aria-label="유저" onchange="this.form.submit()">
       <option value="">유저 선택…</option>
       {% for u in users %}<option value="{{ u.discord_id }}"{% if u.discord_id == target_discord_id %} selected{% endif %}>{{ u.representative or u.discord_nick or u.discord_id }}</option>{% endfor %}
@@ -12,14 +12,14 @@
   </label>
   {% if target_discord_id %}
   <label class="ad-pick-f">
-    <span class="ad-label">캐릭터</span>
+    <span class="field-label">캐릭터</span>
     <select name="character_name" class="js-themed-select" aria-label="캐릭터" onchange="this.form.submit()">
       <option value="">캐릭터 선택…</option>
       {% for c in characters %}<option value="{{ c.character_name }}"{% if c.character_name == character_name %} selected{% endif %}>{{ c.character_name }} ({{ c.character_class or "?" }})</option>{% endfor %}
     </select>
   </label>
   <label class="ad-pick-f">
-    <span class="ad-label">주차</span>
+    <span class="field-label">주차</span>
     <select name="week_key" class="js-themed-select" aria-label="주차" onchange="this.form.submit()">
       {% for w in weeks %}<option value="{{ w }}"{% if w == week %} selected{% endif %}>{{ w }} 주{% if loop.first %} (이번 주){% endif %}</option>{% endfor %}
     </select>

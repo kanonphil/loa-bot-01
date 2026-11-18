@@ -3,8 +3,7 @@
    화면 배치만 둔다. 값은 전부 토큰(--sp-* --r-* --fs-* --ctrl-h)만 쓴다. 클래스는 exp- 접두어. */
 
 /* ── 공통 배치 ─────────────────────────────────────────── */
-.exp-page { display: flex; flex-direction: column; gap: var(--sp-3); }
-.exp-page .subtabs { margin-bottom: var(--sp-1); }
+.exp-page { --page-gap: var(--sp-3); display: flex; flex-direction: column; gap: var(--page-gap); }
 .exp-caption { margin: 0; line-height: 1.6; }
 .exp-meta { font-size: var(--fs-meta); line-height: 1.5; color: var(--text-muted); }
 .exp-meta code, .exp-page code { font-family: var(--font-mono); font-size: var(--fs-meta); }
@@ -21,13 +20,9 @@
 }
 .exp-state { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-body); color: var(--text-muted); }
 
-.exp-label { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); }
-.exp-label .field-help { font-weight: 400; }
 .exp-page .more-profile { margin-bottom: 0; }
 .exp-form-row, .exp-addrow { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin: 0; }
 .exp-grow { flex: 1 1 160px; max-width: 360px; }
-.exp-page .ui-toolbar { margin-bottom: 0; }
-.exp-search { flex: none; width: 100%; max-width: 360px; height: var(--ctrl-h); padding-top: 0; padding-bottom: 0; }
 
 /* 삭제류 버튼 — 평소엔 조용하고 올리면 빨강(목록마다 빨간 버튼이 반복되지 않게) */
 @media (hover: hover) {
@@ -64,16 +59,9 @@
 .exp-card > .field-help, .exp-acc-form > .field-help { margin: 0; min-height: 1.5em; }
 
 /* ── 랭킹 표 ───────────────────────────────────────────── */
-.exp-tablecard { padding: 0; gap: 0; }
-.exp-tablewrap { overflow-x: auto; }
-.exp-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
-.exp-table th { height: var(--ctrl-h); padding: 0 var(--sp-3); text-align: left; font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); white-space: nowrap; border-bottom: 1px solid var(--border); }
-.exp-table td { height: 44px; padding: 0 var(--sp-3); border-top: 1px solid var(--border-soft); vertical-align: middle; }
-.exp-table tbody tr:first-child td { border-top: 0; }
-@media (hover: hover) { .exp-table tbody tr:hover { background: var(--hover); } }
+/* 표 자체는 공용 .table — 여기는 순위 칸·이름 칸만 */
 .exp-table .exp-c-rank { width: 56px; text-align: center; }
-.exp-table .exp-c-num { text-align: right; white-space: nowrap; }
-.exp-table .exp-c-class { color: var(--text-muted); white-space: nowrap; }
+.exp-table .exp-c-class { color: var(--text-muted); }
 .exp-table .exp-value { font-weight: 600; }
 .exp-table td.exp-c-rank { color: var(--text-muted); }
 .exp-table td.exp-rank-1 { color: var(--gold); font-weight: 700; }
@@ -104,13 +92,6 @@
 .exp-addrow-end .themed-select { flex: none; width: 140px; }
 
 .exp-switchform { display: flex; align-items: center; gap: var(--sp-2); flex: none; margin: 0; }
-.exp-switch-state { min-width: 3.6em; text-align: right; }
-.exp-switch { position: relative; flex: none; width: 40px; height: 22px; padding: 0; border: 1px solid var(--line-in); border-radius: var(--r-pill); background: var(--sunken); cursor: pointer; }
-.exp-switch::before { content: ""; position: absolute; inset: -8px -4px; }
-.exp-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-muted); transition: transform var(--t), background-color var(--t); }
-.exp-switch[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
-.exp-switch[aria-checked="true"] i { transform: translateX(18px); background: var(--accent); }
-@media (hover: hover) { .exp-switch:hover:not(:disabled) { border-color: var(--line-in-hover); } .exp-switch[aria-checked="true"]:hover:not(:disabled) { border-color: var(--accent); } }
 
 /* ── 경매 계산기 ───────────────────────────────────────── */
 .exp-calc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-3); align-items: start; }
@@ -165,7 +146,6 @@
   .exp-name-link { max-width: 150px; }
   .exp-table .exp-c-class { display: none; }
   .exp-class-inline { display: block; }
-  .exp-table th, .exp-table td { padding: 0 var(--sp-2); }
   .exp-table .exp-c-rank { width: 40px; }
   .exp-grow { max-width: none; }
   .guide-page .guide-step { padding: var(--sp-4); }

@@ -2,7 +2,7 @@
 {% import "_ui.html" as ui %}
 {% import "_admin_macros.html" as m %}
 {% block admin_body %}
-<div class="ad-row ad-toolbar">
+<div class="toolbar">
   {% for key, label in tabs %}
   <a class="chip-btn{% if key == tab %} on{% endif %}" href="/admin/stats?tab={{ key }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
@@ -22,23 +22,23 @@
 
 {% if tab == "clears" %}
 <div class="ad-two">
-  <div class="ad-card ad-tcard">
+  <div class="ui-card table-card ad-tcard">
     <div class="ad-row"><h2 class="ad-h4">레이드별 클리어</h2><span class="ad-meta ad-spacer">주차 시작일은 수요일 06:00 리셋 기준</span></div>
     {% if not weekly %}
     {{ ui.empty("이 주차에 클리어 기록이 없습니다", "다른 주차를 골라 보세요.", icon="chart") }}
     {% else %}
-    <table class="ad-t">
+    <table class="table is-stack ad-t">
       <thead><tr><th>레이드</th><th>난이도</th><th class="n">클리어 수</th></tr></thead>
       <tbody>{% for r in weekly %}<tr><td data-label="레이드"><b>{{ r.raid_name }}</b></td><td data-label="난이도">{{ r.difficulty }}</td><td class="num n" data-label="클리어 수">{{ r.count }}</td></tr>{% endfor %}</tbody>
     </table>
     {% endif %}
   </div>
-  <div class="ad-card ad-tcard">
+  <div class="ui-card table-card ad-tcard">
     <div class="ad-row"><h2 class="ad-h4">캐릭터별 클리어</h2></div>
     {% if not characters %}
     {{ ui.empty("이 주차에 클리어 기록이 없습니다", "다른 주차를 골라 보세요.", icon="chart") }}
     {% else %}
-    <table class="ad-t">
+    <table class="table is-stack ad-t">
       <thead><tr><th>원정대</th><th>캐릭터</th><th class="n">클리어 수</th></tr></thead>
       <tbody>
         {% for r in characters %}
@@ -61,23 +61,23 @@
   <div class="ad-stat"><b>{{ weekly_parties | sum(attribute="count") }}</b>공대 생성 (최근 12주)</div>
 </div>
 <div class="ad-two">
-  <div class="ad-card ad-tcard">
+  <div class="ui-card table-card ad-tcard">
     <div class="ad-row"><h2 class="ad-h4">주차별 공대 생성 수</h2><span class="ad-spacer"><a class="btn sm" href="/admin/stats/export?kind=weekly_parties">CSV</a></span></div>
     {% if not weekly_parties %}
     {{ ui.empty("아직 생성된 공대가 없습니다", icon="chart") }}
     {% else %}
-    <table class="ad-t">
+    <table class="table is-stack ad-t">
       <thead><tr><th>주차</th><th class="n">공대 수</th></tr></thead>
       <tbody>{% for r in weekly_parties %}<tr><td data-label="주차">{{ r.week }}</td><td class="num n" data-label="공대 수">{{ r.count }}</td></tr>{% endfor %}</tbody>
     </table>
     {% endif %}
   </div>
-  <div class="ad-card ad-tcard">
+  <div class="ui-card table-card ad-tcard">
     <div class="ad-row"><h2 class="ad-h4">인기 레이드 Top 10</h2><span class="ad-meta">전체 기간</span><span class="ad-spacer"><a class="btn sm" href="/admin/stats/export?kind=popular_raids">CSV</a></span></div>
     {% if not popular_raids %}
     {{ ui.empty("아직 생성된 공대가 없습니다", icon="chart") }}
     {% else %}
-    <table class="ad-t">
+    <table class="table is-stack ad-t">
       <thead><tr><th>#</th><th>레이드</th><th>난이도</th><th class="n">공대 수</th></tr></thead>
       <tbody>{% for r in popular_raids %}<tr><td class="num" data-label="순위">{{ loop.index }}</td><td data-label="레이드"><b>{{ r.raid_name }}</b></td><td data-label="난이도">{{ r.difficulty }}</td><td class="num n" data-label="공대 수">{{ r.count }}</td></tr>{% endfor %}</tbody>
     </table>

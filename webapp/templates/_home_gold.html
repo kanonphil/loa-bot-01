@@ -7,12 +7,12 @@
     <span class="ui-spacer"></span><span class="meta">남은 레이드 {{ gold.remaining_raids }}개</span>
   </div>
   <div class="ui-gauge is-gold" role="presentation"><i style="width: {{ [[gold.pct, 0] | max, 100] | min }}%"></i></div>
-  <div class="gold-scroll">
-    <table class="t">
-      <thead><tr><th scope="col">캐릭터</th><th scope="col" class="r">받음</th><th scope="col" class="r">남음</th></tr></thead>
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th scope="col">캐릭터</th><th scope="col" class="n">받음</th><th scope="col" class="n">남음</th></tr></thead>
       <tbody>
         {% for r in gold.rows %}
-        <tr><td>{{ r.name }}</td><td class="num r{% if r.earned %} gold-num{% endif %}">{{ '{:,}'.format(r.earned) }}</td><td class="num r">{{ '{:,}'.format(r.remaining) }}</td></tr>
+        <tr><td>{{ r.name }}</td><td class="n{% if r.earned %} gold-num{% endif %}">{{ '{:,}'.format(r.earned) }}</td><td class="n">{{ '{:,}'.format(r.remaining) }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

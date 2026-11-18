@@ -109,12 +109,12 @@ try:
         check("같은 레이드의 같은 주 다른 공대에 있는 캐릭터도 사유와 함께 비활성", any("워로드부캐" in r and "다른 공대" in r for r in rows))
         check("레벨 부족 캐릭터는 비활성", page.locator("#char-list input:disabled").count() >= 1)
         # 충돌 없는 레이드(세르카 하드)로 바꾸면 추천 캐릭터가 선택된다
-        page.evaluate("() => { [...document.querySelectorAll('.pt-seg button')].find(x => x.dataset.raid === '세르카' && x.dataset.diff === '하드').click(); }")
+        page.evaluate("() => { [...document.querySelectorAll('.pt-rcard .seg > button')].find(x => x.dataset.raid === '세르카' && x.dataset.diff === '하드').click(); }")
         page.wait_for_timeout(800)
         chosen = page.locator("#char-list input:checked").first.input_value()
         check("추천 캐릭터가 자동 선택된다(서포터 없는 새 공대는 서포터 우선)", chosen == "발키리", chosen)
         # 중복 경고: p1(4막 하드)과 같은 시간대
-        page.evaluate("""() => { const b = [...document.querySelectorAll('.pt-seg button')].find(x => x.dataset.raid === '아르모체(4막)' && x.dataset.diff === '하드'); b.click();
+        page.evaluate("""() => { const b = [...document.querySelectorAll('.pt-rcard .seg > button')].find(x => x.dataset.raid === '아르모체(4막)' && x.dataset.diff === '하드'); b.click();
             document.querySelector('#scheduled-datetime-input')._flatpickr.setDate(new Date(Date.now() + 3 * 3600e3), true); }""")
         page.wait_for_timeout(800)
         dup = page.locator("#warn-dup")

@@ -34,12 +34,11 @@
 </div>
 
 {% if characters|length > 5 %}
-<label class="raid-search exp-search">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-  <input type="search" class="js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="캐릭터 검색" autocomplete="off"
+<div class="toolbar">
+  <input type="search" class="field search-field js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="캐릭터 검색" autocomplete="off"
          data-filter-target="#expedition-groups" data-filter-item=".exp-char" data-filter-text=".exp-char-main"
          data-filter-no-result="#expedition-search-noresult">
-</label>
+</div>
 {% endif %}
 
 <div id="expedition-groups" class="exp-groups">
@@ -106,11 +105,11 @@
     <h3 class="exp-sub">부계정 추가</h3>
     <p class="exp-meta">다른 로스트아크 계정의 API 키를 등록하면 그 계정의 원정대 캐릭터가 전부 자동으로 추가됩니다.</p>
     <div class="exp-acc-grid">
-      <label class="exp-label">
+      <label class="field-label">
         <span>로스트아크 API 키</span>
         <input type="password" name="api_key" class="field" required autocomplete="off" aria-describedby="exp-acc-help" data-field="api_key">
       </label>
-      <label class="exp-label">
+      <label class="field-label">
         <span>검증용 캐릭터 이름</span>
         <input type="text" name="character_name" class="field" maxlength="12" required autocomplete="off" aria-describedby="exp-acc-help" data-field="character_name">
       </label>

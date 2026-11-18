@@ -149,7 +149,7 @@
             <button type="button" class="pt-dots" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="mm-{{ s.slot_number }}" aria-label="{{ s.character_name }} 메뉴">
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
             </button>
-            <div class="menu" id="mm-{{ s.slot_number }}" role="menu" aria-label="{{ s.character_name }} 메뉴" hidden>
+            <div class="menu" data-float="end" id="mm-{{ s.slot_number }}" role="menu" aria-label="{{ s.character_name }} 메뉴" hidden>
               <form method="post" action="/parties/{{ mid }}/transfer-leader"
                     data-confirm-title="{{ s.character_name }} 님에게 파티장을 넘길까요?" data-confirm="넘기면 이 공대의 관리 조작을 더 쓸 수 없습니다." data-confirm-ok="위임">
                 <input type="hidden" name="new_leader_discord_id" value="{{ s.discord_id }}">
@@ -182,7 +182,7 @@
         <summary>공대 설정 <span class="pt-meta">난이도 · 메모 · 게스트 초대 · 공대 취소</span></summary>
         <div class="pt-set-body">
           {% if difficulty_options %}
-          <span class="pt-set-label">난이도 / 숙련도</span>
+          <span class="field-label pt-set-label">난이도 / 숙련도</span>
           <form method="post" action="/parties/{{ mid }}/edit-difficulty" class="pt-row">
             <select name="difficulty" class="js-themed-select" aria-label="난이도">
               {% for d in difficulty_options %}<option value="{{ d }}"{% if d == party.difficulty %} selected{% endif %}>{{ d }}</option>{% endfor %}
@@ -194,7 +194,7 @@
           </form>
           {% endif %}
 
-          <span class="pt-set-label">공지 / 메모</span>
+          <span class="field-label pt-set-label">공지 / 메모</span>
           <div class="pt-stack">
             <form method="post" action="/parties/{{ mid }}/memo" class="pt-row" id="memo-form">
               <input type="text" class="field pt-grow" name="memo" maxlength="150" value="{{ party.memo or '' }}" placeholder="예: 음성 필수 (비우면 삭제)" aria-label="공지 / 메모">
@@ -203,7 +203,7 @@
             <span class="pt-meta">메모 저장은 파티원에게 DM을 보내지 않습니다. 일정은 위의 "일정 변경"에서 바꿉니다.</span>
           </div>
 
-          <span class="pt-set-label">게스트 초대</span>
+          <span class="field-label pt-set-label">게스트 초대</span>
           <div class="pt-row">
             <button type="button" class="btn sm" hx-get="/parties/{{ mid }}/guest-invite" hx-target="#guest-invite-form" hx-swap="innerHTML" hx-disabled-elt="this">게스트 초대 열기</button>
             <span class="pt-meta">API 미등록 서버 멤버용 · 디스코드 DM에서 캐릭터를 입력하면 참여됩니다</span>
@@ -212,12 +212,12 @@
 
           {% if is_admin_mode %}
           <div class="pt-set-sec">관리자</div>
-          <span class="pt-set-label">파티원 전체 DM</span>
+          <span class="field-label pt-set-label">파티원 전체 DM</span>
           <form method="post" action="/parties/{{ mid }}/admin-notify" class="pt-row" data-confirm-title="파티원 전원에게 DM을 보낼까요?" data-confirm="{content}" data-confirm-ok="보내기" data-busy-form>
             <input type="text" class="field pt-grow" name="content" maxlength="500" placeholder="보낼 내용" required aria-label="파티원 전체 DM 내용">
             <button type="submit" class="btn">DM 보내기</button>
           </form>
-          <span class="pt-set-label">스레드 · 종료</span>
+          <span class="field-label pt-set-label">스레드 · 종료</span>
           <div class="pt-row">
             <form method="post" action="/parties/{{ mid }}/admin-unlock"><button type="submit" class="btn" data-busy-text="처리 중">스레드 잠금 해제</button></form>
             <form method="post" action="/parties/{{ mid }}/admin-disband" data-confirm-title="공대를 종료할까요?" data-confirm="스레드는 남고 클리어 체크는 되지 않습니다." data-confirm-ok="종료" data-confirm-danger>
@@ -228,7 +228,7 @@
 
           {% if not viewing_as_admin %}
           <div class="pt-set-sec is-danger">위험 구역</div>
-          <span class="pt-set-label is-danger-label">공대 취소</span>
+          <span class="field-label pt-set-label is-danger-label">공대 취소</span>
           <form method="post" action="/parties/{{ mid }}/cancel" class="pt-row"
                 data-confirm-title="공대를 취소할까요?" data-confirm="디스코드 스레드가 삭제되고 파티원 전원에게 취소 안내가 갑니다. 되돌릴 수 없습니다." data-confirm-ok="공대 취소" data-confirm-danger>
             <input type="text" class="field pt-grow" name="reason" maxlength="200" placeholder="취소 사유 (선택)" aria-label="취소 사유">
@@ -244,14 +244,14 @@
         <summary>관리자</summary>
         <div class="pt-set-body">
           {% if party.cleared_at %}
-          <span class="pt-set-label">클리어</span>
+          <span class="field-label pt-set-label">클리어</span>
           <div class="pt-row"><form method="post" action="/parties/{{ mid }}/admin-revert-clear" data-confirm-title="클리어를 취소하고 공대를 되돌릴까요?" data-confirm="이 클리어가 만든 파티원들의 이번 주 완료 체크가 함께 취소됩니다." data-confirm-ok="되돌리기" data-busy-form>
             <button type="submit" class="btn">클리어 되돌리기</button></form>
             <span class="pt-meta">수요일 리셋 전까지만 가능합니다</span></div>
           {% endif %}
-          <span class="pt-set-label">스레드</span>
+          <span class="field-label pt-set-label">스레드</span>
           <div class="pt-row"><form method="post" action="/parties/{{ mid }}/admin-unlock"><button type="submit" class="btn" data-busy-text="처리 중">스레드 잠금 해제</button></form></div>
-          <span class="pt-set-label">파티원 전체 DM</span>
+          <span class="field-label pt-set-label">파티원 전체 DM</span>
           <form method="post" action="/parties/{{ mid }}/admin-notify" class="pt-row" data-confirm-title="파티원 전원에게 DM을 보낼까요?" data-confirm="{content}" data-confirm-ok="보내기" data-busy-form>
             <input type="text" class="field pt-grow" name="content" maxlength="500" placeholder="보낼 내용" required aria-label="DM 내용">
             <button type="submit" class="btn">DM 보내기</button>
@@ -273,7 +273,7 @@
         <button type="button" class="btn sm" data-adjust-minutes="60">+1시간</button>
         <button type="button" class="btn sm" data-adjust-minutes="1440">+1일</button>
       </div>
-      <label>새 일정<input type="text" class="field" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정" data-initial="{{ party.scheduled_datetime or '' }}"></label>
+      <label class="field-label">새 일정<input type="text" class="field" id="reschedule-datetime-input" name="scheduled_datetime" placeholder="날짜/시간 선택" aria-label="새 일정" data-initial="{{ party.scheduled_datetime or '' }}"></label>
       <span class="pt-meta">저장하면 파티원에게 일정 변경 DM이 갑니다.</span>
       <div class="pt-pop-actions"><button type="button" class="btn sm" data-pop-close>닫기</button><button type="submit" class="btn sm pri" data-busy-text="변경 중">변경</button></div>
     </form>
@@ -283,7 +283,7 @@
     <form method="post" action="/parties/{{ mid }}/invite">
       <span class="pt-pop-title" id="invite-title">자리 초대</span>
       <input type="hidden" name="slot_number" id="invite-slot" value="">
-      <label>초대할 유저
+      <label class="field-label">초대할 유저
         <select name="target_discord_id" class="js-themed-select" aria-label="초대할 유저">
           {% for u in invitable_users %}<option value="{{ u.discord_id }}">{{ u.representative or u.discord_id }}</option>{% endfor %}
         </select>

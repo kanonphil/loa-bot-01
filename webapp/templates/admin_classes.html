@@ -2,7 +2,7 @@
 {% import "_ui.html" as ui %}
 {% import "_admin_macros.html" as m %}
 {% block admin_body %}
-<div class="ad-row ad-toolbar">
+<div class="toolbar">
   {{ m.search("직업명 검색", "#class-table", id="class-search", item="tr[data-row]") }}
   <button type="button" class="chip-btn on" data-ad-role="" aria-pressed="true">전체 {{ job_classes | length }}</button>
   <button type="button" class="chip-btn" data-ad-role="dps" aria-pressed="false">딜러 {{ job_classes | rejectattr("is_support") | list | length }}</button>
@@ -13,8 +13,8 @@
 {% if not job_classes %}
 <div class="ad-card">{{ ui.empty("등록된 직업이 없습니다", "딜러·서포터 구분은 공대 참여와 레이드 체크에 쓰입니다.", "직업 추가", icon="user", action_id="class-add-empty") }}</div>
 {% else %}
-<div class="ad-card ad-tcard">
-  <table class="ad-t" id="class-table">
+<div class="ui-card table-card ad-tcard">
+  <table class="table is-stack ad-t" id="class-table">
     <thead><tr><th>직업</th><th>역할</th><th></th></tr></thead>
     <tbody>
       {% for jc in job_classes %}
@@ -42,7 +42,7 @@
     <label for="c-name">직업명</label>
     <input class="field" id="c-name" name="name" required maxlength="20" autocomplete="off" placeholder="예: 발키리">
   </div>
-  <label class="settings-check"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
+  <label class="checkbox"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
   <p class="ad-meta">서포터로 표시한 직업은 공대 모집에서 서포터 자리에 배정됩니다.</p>
   <div class="acts">
     <button type="button" class="btn" data-dlg-close>취소</button>

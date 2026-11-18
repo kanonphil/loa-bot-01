@@ -1,5 +1,5 @@
 // 홈(/main) 동작 — 숙제 체크·익스트림·골드섬 스위치·탭·초대 수락 보조.
-// 모든 핸들러는 document 위임이다: party-live.js가 SSE로 .page-content를 통째로 바꿔 끼워도 그대로 동작한다.
+// 메뉴(레이드 고르기·익스트림 캐릭터)는 ui.js의 [data-menu-trigger] 위임을 쓴다. 모든 핸들러는 document 위임이다: party-live.js가 SSE로 .page-content를 통째로 바꿔 끼워도 그대로 동작한다.
 (function () {
   if (window.__homeInit) return;
   window.__homeInit = true;
@@ -214,37 +214,10 @@
     });
   }
 
-  // ── 메뉴(레이드 고르기·익스트림 캐릭터 선택) ───────────
-  // ui.js의 [data-menu-trigger]는 처음 한 번만 묶여서, 페이지 일부를 새로 그리면 죽는다 — 위임으로 직접 연다.
-  function menuItems(menu) {
-    return [].filter.call(menu.querySelectorAll(".menu-item"), function (i) { return !i.disabled; });
-  }
-  function toggleMenu(trigger) {
-    var menu = document.getElementById(trigger.getAttribute("aria-controls"));
-    if (!menu || !window.uiPopup) return;
-    if (!menu.hidden) { window.uiPopup.close(true); return; }
-    function close() { menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); }
-    menu.hidden = false;
-    if (menu.classList.contains("hw-x-menu") && trigger.closest(".hw-scroll")) {
-      // 표 안(overflow 스크롤 칸)에서는 메뉴가 잘리므로 화면 기준으로 띄운다
-      var r = trigger.getBoundingClientRect();
-      menu.style.position = "fixed";
-      menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 220)) + "px";
-      menu.style.top = (r.bottom + 4) + "px";
-    }
-    trigger.setAttribute("aria-expanded", "true");
-    window.uiPopup.open({ el: menu, opener: trigger, close: close });
-    var items = menuItems(menu);
-    if (items.length) items[0].focus();
-  }
-
   // ── 클릭 위임 ─────────────────────────────────────────
   document.addEventListener("click", function (e) {
     var t = e.target;
     if (!t.closest) return;
-
-    var trigger = t.closest("[data-home-menu]");
-    if (trigger) { toggleMenu(trigger); return; }
 
     var pick = t.closest("[data-x-pick]");
     if (pick) {
@@ -306,17 +279,6 @@
     if (t.closest("#home-reload")) refreshContent();
   });
 
-  document.addEventListener("keydown", function (e) {
-    var menu = e.target.closest && e.target.closest(".menu[id^='hw-'], .hw-x-menu");
-    if (!menu) return;
-    var items = menuItems(menu), i = items.indexOf(document.activeElement);
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
-    } else if (e.key === "Home") { e.preventDefault(); items[0].focus(); }
-    else if (e.key === "End") { e.preventDefault(); items[items.length - 1].focus(); }
-  });
-
   // ── 골드섬 알림 ───────────────────────────────────────
   function toggleGoldSwitch(sw) {
     if (sw.getAttribute("aria-busy") === "true") return;
@@ -326,8 +288,7 @@
       sw.removeAttribute("aria-busy");
       if (!res.success) { toast("err", res.reason || "알림 설정을 바꾸지 못했습니다."); return; }
       var on = res.enabled !== false && next;
-      sw.classList.toggle("on", on);
-      sw.setAttribute("aria-checked", on ? "true" : "false");
+      window.uiSwitch(sw, on);
       toast(on ? "ok" : "info", on ? "골드섬이 열리기 10분 전에 디스코드로 알려드립니다." : "골드섬 알림을 껐습니다.");
     });
   }

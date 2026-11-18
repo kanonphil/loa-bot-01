@@ -4,6 +4,11 @@
 //   window.uiConfirm.guardForm(form, fn)  — 제출 직전 fn()이 옵션을 돌려주면 확인을 받고, null이면 그냥 제출
 //   window.uiPopup.open({el, opener, close}) / window.uiPopup.close()  — 한 번에 하나만 열리는 팝업 관리
 //   window.uiSetUnread(n)  — 브라우저 탭 제목 앞에 "(n) "
+//   window.uiSwitch(btn, on)  — .switch(role=switch)의 aria-checked와 "켜짐/꺼짐" 글자를 함께 바꾼다
+//   window.uiPlace(el, anchor, align)  — 떠 있는 메뉴·팝오버를 연 버튼 기준 화면 좌표(fixed)로. 아래가 모자라면 위로 뒤집는다
+// 메뉴 마크업: <button data-menu-trigger aria-controls="메뉴id"> + <div class="menu" id role="menu" hidden [data-float[="end"]]>
+//   위임으로 동작하므로 .page-content를 통째로 바꿔 끼워도(party-live.js) 다시 묶을 필요가 없다.
+//   data-float: 스크롤 칸(overflow) 안에서도 잘리지 않게 화면 기준으로 띄운다("end"면 오른쪽 끝을 버튼에 맞춘다).
 // 마크업 API: <form data-confirm="문장" data-confirm-title="질문" data-confirm-ok="삭제" data-confirm-danger>
 (function () {
   "use strict";
@@ -28,8 +33,6 @@
       syncFold(btn);
     });
   });
-
-  initMenus();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initDom); else initDom();
 
@@ -55,46 +58,90 @@
     if (e.target.closest && e.target.closest(".dlg-back")) return;
     closePopup(false);
   });
+  // 화면에 실제로 떠 있는 대화상자만 본다 — 닫힌 채 DOM에 남아 있는 .dlg-back[hidden]은 무시
+  function dialogOpen() {
+    return [].some.call(document.querySelectorAll(".dlg-back"), function (b) { return !b.hidden && b.getClientRects().length > 0; });
+  }
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && current && !document.querySelector(".dlg-back")) {
+    if (e.key === "Escape" && current && !dialogOpen()) {
       e.preventDefault();
       closePopup(true);
     }
   });
 
-  // ── 메뉴(role=menu): [data-menu-trigger] aria-controls="메뉴 id" ──
+  // ── 떠 있는 요소 위치: 연 버튼 바로 아래(공간이 모자라면 위), 화면 밖으로 안 나가게 ──
+  function place(el, anchor, align) {
+    var r = anchor.getBoundingClientRect();
+    el.style.position = "fixed";
+    el.style.right = "auto";
+    el.style.bottom = "auto";
+    el.style.margin = "0";
+    var w = el.offsetWidth, h = el.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+    var left = align === "end" ? r.right - w : r.left;
+    left = Math.max(8, Math.min(left, vw - w - 8));
+    var top = r.bottom + 4;
+    if (top + h > vh - 8 && r.top - h - 4 >= 8) top = r.top - h - 4;
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+  }
+  function unplace(el) {
+    ["position", "left", "top", "right", "bottom", "margin"].forEach(function (k) { el.style[k] = ""; });
+  }
+  window.uiPlace = place;
+  // 떠 있는 동안 스크롤·크기 변경을 따라간다
+  function follow() {
+    if (current && current.float) place(current.el, current.opener, current.float);
+  }
+  window.addEventListener("scroll", follow, true);
+  window.addEventListener("resize", follow);
+
+  // ── 메뉴(role=menu): [data-menu-trigger] aria-controls="메뉴 id" — 전부 document 위임 ──
   function menuItems(menu) {
     return [].slice.call(menu.querySelectorAll(".menu-item")).filter(function (b) { return !b.disabled && b.offsetParent !== null; });
   }
-  function initMenus() {
-  document.querySelectorAll("[data-menu-trigger]").forEach(function (trigger) {
-    var menu = document.getElementById(trigger.getAttribute("aria-controls"));
+  function menuOf(trigger) { return document.getElementById(trigger.getAttribute("aria-controls")); }
+  function openMenu(trigger, focusLast) {
+    var menu = menuOf(trigger);
     if (!menu) return;
-    function close() { menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); }
-    function open(focusLast) {
-      menu.hidden = false;
-      trigger.setAttribute("aria-expanded", "true");
-      openPopup({ el: menu, opener: trigger, close: close });
-      var items = menuItems(menu);
-      if (items.length) items[focusLast ? items.length - 1 : 0].focus();
-    }
-    trigger.addEventListener("click", function () {
-      if (menu.hidden) open(false); else closePopup(true);
+    var float = menu.hasAttribute("data-float") ? (menu.getAttribute("data-float") || "start") : "";
+    menu.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    if (float) place(menu, trigger, float);
+    openPopup({
+      el: menu, opener: trigger, float: float,
+      close: function () { menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); if (float) unplace(menu); },
     });
-    trigger.addEventListener("keydown", function (e) {
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); open(e.key === "ArrowUp"); }
-    });
-    menu.addEventListener("keydown", function (e) {
-      var items = menuItems(menu), i = items.indexOf(document.activeElement);
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
-      } else if (e.key === "Home") { e.preventDefault(); items[0].focus(); }
-      else if (e.key === "End") { e.preventDefault(); items[items.length - 1].focus(); }
-      else if (e.key === "Tab") { closePopup(false); }
-    });
-  });
+    var items = menuItems(menu);
+    if (items.length) items[focusLast ? items.length - 1 : 0].focus();
   }
+  document.addEventListener("click", function (e) {
+    var trigger = e.target.closest && e.target.closest("[data-menu-trigger]");
+    if (!trigger || trigger.disabled) return;
+    var menu = menuOf(trigger);
+    if (!menu) return;
+    if (menu.hidden) openMenu(trigger, false); else closePopup(true);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (!e.target.closest) return;
+    var trigger = e.target.closest("[data-menu-trigger]");
+    if (trigger && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      var m = menuOf(trigger);
+      if (m && m.hidden) openMenu(trigger, e.key === "ArrowUp");
+      else if (m) { var its = menuItems(m); if (its.length) its[e.key === "ArrowUp" ? its.length - 1 : 0].focus(); }
+      return;
+    }
+    var menu = e.target.closest('.menu[role="menu"]');
+    if (!menu) return;
+    var items = menuItems(menu), i = items.indexOf(document.activeElement);
+    if (!items.length) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+    } else if (e.key === "Home") { e.preventDefault(); items[0].focus(); }
+    else if (e.key === "End") { e.preventDefault(); items[items.length - 1].focus(); }
+    else if (e.key === "Tab") { closePopup(false); }
+  });
 
   // ── 탭 묶음: ← → 로 이동 ──
   document.addEventListener("keydown", function (e) {
@@ -116,6 +163,9 @@
     opts = opts || {};
     return new Promise(function (resolve) {
       var opener = document.activeElement;
+      // 메뉴 항목에서 열면 그 메뉴는 곧 닫혀 항목이 사라진다 — 닫은 뒤 포커스는 메뉴를 연 버튼으로
+      var cur = current;
+      if (cur && cur.el && opener && cur.el.contains(opener) && cur.opener) opener = cur.opener;
       var id = "dlg-" + (++dlgSeq);
       var back = document.createElement("div");
       back.className = "dlg-back";
@@ -281,6 +331,14 @@
     });
   };
   window.uiConfirm = uiConfirm;
+
+  // ── 스위치(.switch, role=switch): 상태 글자를 색과 같이 바꾼다 ──
+  window.uiSwitch = function (btn, on) {
+    if (!btn) return;
+    btn.setAttribute("aria-checked", on ? "true" : "false");
+    var st = btn.querySelector(".switch-state");
+    if (st && !btn.hasAttribute("data-fixed-state")) st.textContent = on ? "켜짐" : "꺼짐";
+  };
 
   // ── 브라우저 탭 제목: "(2) 홈 · 길드명" ──
   var baseTitle = document.title.replace(/^\(\d+\+?\)\s*/, "");

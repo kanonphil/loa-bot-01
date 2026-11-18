@@ -132,27 +132,6 @@
       btn.addEventListener("click", function () { if (window.uiPopup) window.uiPopup.close(true); });
     });
 
-    // 메뉴 항목이 확인 대화상자를 열면 메뉴가 닫혀 버려, 대화상자를 닫을 때 돌려줄 포커스 자리가 사라진다 —
-    // 그때는 메뉴를 연 ⋯ 버튼으로 포커스를 돌려준다.
-    $$(".pt-slot .menu").forEach(function (menu) {
-      menu.addEventListener("click", function () {
-        window.__ptMenuOpener = document.querySelector('[aria-controls="' + menu.id + '"]');
-      }, true);
-    });
-    if (!window.__ptDialogReturn && window.MutationObserver) {
-      window.__ptDialogReturn = true;
-      new MutationObserver(function (records) {
-        var closed = records.some(function (r) {
-          return [].some.call(r.removedNodes, function (n) { return n.classList && n.classList.contains("dlg-back"); });
-        });
-        if (!closed) return;
-        setTimeout(function () {
-          var a = document.activeElement, t = window.__ptMenuOpener;
-          if ((!a || a === document.body) && t && document.contains(t)) t.focus();
-        }, 0);
-      }).observe(document.body, { childList: true });
-    }
-
     // 일정 변경 폼 — 날짜 선택기는 팝오버 안에 붙인다(static)
     var dtInput = $("#reschedule-datetime-input");
     if (dtInput && window.flatpickr && window.initPartyDatetimePicker) {
@@ -164,7 +143,7 @@
       form.addEventListener("submit", function (e) {
         if (!dtInput.value) {
           e.preventDefault();
-          if (window.showToast) window.showToast("error", "일정을 선택해 주세요.");
+          if (window.showToast) window.showToast("err", "일정을 선택해 주세요.");
         }
       }, true);
     }
@@ -199,7 +178,7 @@
 
     // 레이드·난이도
     function pickDifficulty(btn) {
-      $$(".pt-seg button[aria-pressed='true']").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+      $$(".pt-rcard .seg > button[aria-pressed='true']").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
       $$(".pt-rcard.is-on").forEach(function (c) { c.classList.remove("is-on"); });
       btn.setAttribute("aria-pressed", "true");
       btn.closest(".pt-rcard").classList.add("is-on");
@@ -211,10 +190,10 @@
       state.short = btn.dataset.short;
       refresh();
     }
-    $$(".pt-seg button").forEach(function (b) { b.addEventListener("click", function () { if (!b.disabled) pickDifficulty(b); }); });
+    $$(".pt-rcard .seg > button").forEach(function (b) { b.addEventListener("click", function () { if (!b.disabled) pickDifficulty(b); }); });
 
     function findDiffButton(raid, diff) {
-      return $$(".pt-seg button").filter(function (b) { return b.dataset.raid === raid && b.dataset.diff === diff && !b.disabled; })[0];
+      return $$(".pt-rcard .seg > button").filter(function (b) { return b.dataset.raid === raid && b.dataset.diff === diff && !b.disabled; })[0];
     }
 
     // 일정 프리셋
@@ -416,8 +395,8 @@
 
     form.addEventListener("submit", function (e) {
       // flatpickr가 원본 입력을 숨겨 브라우저 required 말풍선이 안 뜬다 — 직접 확인
-      if (!raidIn.value) { e.preventDefault(); if (window.showToast) window.showToast("error", "레이드와 난이도를 골라 주세요."); return; }
-      if (!dtValue()) { e.preventDefault(); if (window.showToast) window.showToast("error", "일정을 선택해 주세요."); }
+      if (!raidIn.value) { e.preventDefault(); if (window.showToast) window.showToast("err", "레이드와 난이도를 골라 주세요."); return; }
+      if (!dtValue()) { e.preventDefault(); if (window.showToast) window.showToast("err", "일정을 선택해 주세요."); }
     });
 
     // 처음 상태: 실패 후 되돌아온 값 → 없으면 비어 있음

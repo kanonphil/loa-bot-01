@@ -4,12 +4,12 @@
 {% block page_top %}{% include "_party_top.html" %}{% endblock %}
 {% block content %}
 <div class="page-content page-wide pt-page" data-pt="list">
-  <div class="pt-filterbar" role="group" aria-label="공대 필터">
+  <div class="toolbar" role="group" aria-label="공대 필터">
     {% for key, label in filters %}
     <a class="chip-btn{% if key == active_filter %} on{% endif %}" href="/parties{% if key != 'eligible' %}?filter={{ key }}{% endif %}"{% if key == active_filter %} aria-current="true"{% endif %}>{{ label }}<b>{{ counts[key] }}</b></a>
     {% endfor %}
     {% if parties %}
-    <input type="search" id="party-search" class="field pt-search js-list-filter" placeholder="레이드 · 파티장 검색" aria-label="공대 검색" autocomplete="off"
+    <input type="search" id="party-search" class="field search-field toolbar-end js-list-filter" placeholder="레이드 · 파티장 검색" aria-label="공대 검색" autocomplete="off"
            data-filter-target="#party-list" data-filter-item="tr.pt-rowitem" data-filter-no-result="#party-search-noresult">
     {% endif %}
   </div>
@@ -29,9 +29,9 @@
     {{ ui.empty("조건에 맞는 공대가 없습니다", "다른 필터를 눌러 보세요.", "전체 보기", "/parties?filter=all", "party") }}
     {% endif %}
   {% else %}
-  <div class="ui-card pt-tablecard">
-    <table class="pt-table" id="party-list">
-      <thead><tr><th scope="col">레이드</th><th scope="col">일정</th><th scope="col">구성</th><th scope="col">인원</th><th scope="col">참여</th></tr></thead>
+  <div class="ui-card table-card pt-tablecard">
+    <table class="table pt-table" id="party-list">
+      <thead><tr><th scope="col">레이드</th><th scope="col">일정</th><th scope="col">구성</th><th scope="col" class="n">인원</th><th scope="col">참여</th></tr></thead>
       <tbody>
       {% for p in parties %}
       {% set j = p.join %}
@@ -51,7 +51,7 @@
           {% elif p.schedule.countdown %}{{ ui.chip(p.schedule.countdown, p.schedule.tone) }}{% endif %}
         </td>
         <td class="pt-cell-comp">딜 <span class="num">{{ p.comp.dps }}/{{ p.comp.dps_total }}</span> · <span class="{% if p.comp.lacks_support and p.status == 'recruiting' %}pt-warn{% endif %}">폿 <span class="num">{{ p.comp.sup }}/{{ p.comp.sup_total }}</span></span></td>
-        <td class="pt-cell-count">{{ p.comp.filled }}/{{ p.comp.total }}</td>
+        <td class="pt-cell-count n">{{ p.comp.filled }}/{{ p.comp.total }}</td>
         <td class="pt-cell-join">
           {% if j.state == "can" %}
           <form method="post" action="/parties/{{ p.message_id }}/join" class="pt-join" data-pt-join>
