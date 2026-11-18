@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("exp") }}
 <h1>원정대 관리</h1>
 
 <form method="post" action="/expedition/add" class="expedition-add-form">

@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("party") }}
 <div class="party-list-header">
   <h1>공대 모집</h1>
   <div class="party-list-header-actions">

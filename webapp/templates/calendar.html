@@ -16,6 +16,7 @@
 {% endmacro %}
 
 <div class="page-content calendar-page">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("party") }}
   <div class="calendar-toolbar">
     <a href="/calendar?view={{ view }}" class="calendar-today-btn">오늘</a>
     <div class="calendar-header">

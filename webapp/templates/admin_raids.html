@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
 <h1>레이드 관리</h1>
 <p class="settings-desc">
   디스코드 <code>/관리</code> 명령어와 같은 내용을 다룹니다. 여기서 바꾼 내용은 레이드체크·공대개설

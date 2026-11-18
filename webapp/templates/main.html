@@ -2,6 +2,11 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{# 홈 개편 전까지 홈에서 레이드 체크·초대로 가는 길(왼쪽 메뉴에서 빠졌다) #}
+<nav class="home-links" aria-label="홈 바로가기">
+  <a class="btn" href="/raid-check">레이드 체크<span class="nav-badge" data-badge="raid_check" hidden></span></a>
+  <a class="btn" href="/invites">내게 온 초대<span class="nav-badge" data-badge="invites" hidden></span></a>
+</nav>
 <h1>메인</h1>
 
 {% if not characters %}

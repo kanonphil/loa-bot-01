@@ -58,8 +58,9 @@ def test_admin_sees_nav_and_page(client, monkeypatch):
         _mock_reads()
         page_resp = client.get("/admin/raids")
 
-    assert "레이드 관리" in nav_resp.text
-    assert "직업 관리" in nav_resp.text
+    # 사이드바는 "관리" 하나, 세부 화면은 관리 화면 위쪽 탭으로
+    assert 'href="/admin/raids"' in nav_resp.text.split("<main")[0]
+    assert 'href="/admin/classes"' in page_resp.text
     assert page_resp.status_code == 200
     assert "아르모체(4막)" in page_resp.text  # 기본 탭(레이드)
 

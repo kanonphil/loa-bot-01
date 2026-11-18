@@ -25,6 +25,7 @@ from webapp.routes import (
     events,
     expedition,
     invites,
+    more,
     notifications,
     pages,
     party,
@@ -112,6 +113,7 @@ app.include_router(party.router)
 app.include_router(invites.router)
 app.include_router(calendar.router)
 app.include_router(tools.router)
+app.include_router(more.router)
 app.include_router(events.router)
 app.include_router(notifications.router)
 app.include_router(admin.router)

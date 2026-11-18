@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
 <h1>직업 관리</h1>
 <p class="settings-desc">
   캐릭터가 딜러인지 서포터인지 판단하는 기준입니다. 공대 참여 시 역할 선택,

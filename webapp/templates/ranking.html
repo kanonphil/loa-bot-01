@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("exp") }}
 <h1>원정대 랭킹</h1>
 <p class="rank-caption">
   {% if metric == "weekly_clears" %}전체 원정대(길드원) 기준으로, 원정대의 모든 캐릭터가 이번 주 클리어한 횟수를 합산합니다. 이름/직업은 원정대의 대표 캐릭터(최초 등록한 캐릭터) 기준입니다.

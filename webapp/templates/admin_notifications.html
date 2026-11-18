@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
 <h1>알림·구독</h1>
 <p class="settings-desc">
   디스코드 <code>/레이드구독</code>으로 등록된 구독 현황, 새 공대 알림 DM 발송 로그, 등록 유저 전원 공지 DM을 다룹니다.

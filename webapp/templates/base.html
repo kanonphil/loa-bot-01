@@ -1,117 +1,129 @@
+{%- macro icon(name) -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name == "home" %}<path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
+{%- elif name == "party" %}<path d="M14.5 2.5l7 7-9 9-7 2 2-7 7-9z"/>
+{%- elif name == "exp" %}<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>
+{%- elif name == "more" %}<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>
+{%- elif name == "admin" %}<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/>
+{%- elif name == "fold" %}<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>
+{%- elif name == "bell" %}<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+{%- elif name == "guide" %}<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+{%- elif name == "gear" %}<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>
+{%- elif name == "logout" %}<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+{%- elif name == "login" %}<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>
+{%- endif %}</svg>
+{%- endmacro -%}
+{%- set act = (active or "") | string -%}
+{%- if act in ("main", "raid_check", "invites") %}{% set grp = "home" %}
+{%- elif act in ("parties", "calendar") %}{% set grp = "party" %}
+{%- elif act in ("expedition", "ranking") %}{% set grp = "exp" %}
+{%- elif act in ("settings", "auction_calculator", "guide", "more") %}{% set grp = "more" %}
+{%- elif act.startswith("admin") %}{% set grp = "admin" %}
+{%- else %}{% set grp = "" %}{% endif -%}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}로아봇{% endblock %}</title>
+  {%- set grp_label = {"home": "홈", "party": "공대", "exp": "원정대", "more": "더보기", "admin": "관리"}.get(grp) %}
+  <title>{% block title %}{% if grp_label %}{{ grp_label }} · {% endif %}{{ get_guild_name() or "로아봇" }}{% endblock %}</title>
+  {# 접힌 메뉴 상태를 첫 그림 전에 적용(펼쳤다 접히는 깜빡임 방지). 저장소가 막혀 있으면 펼친 채로. #}
+  <script>try { if (localStorage.getItem("loa.navRail") === "1") document.documentElement.classList.add("nav-rail"); } catch (e) {}</script>
   <link rel="stylesheet" href="/static/style.css?v={{ static_version }}">
+  {# 확인 대화상자·팝업 API — 본문 인라인 스크립트가 바로 쓰므로 머리에서 먼저 읽는다 #}
+  <script src="/static/ui.js?v={{ static_version }}"></script>
   {% block head %}{% endblock %}
   <script src="/static/htmx.min.js"></script>
 </head>
 <body>
   {% block body %}
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
   <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
   {# POST → redirect 뒤 1회성 토스트 (webapp/flash.py). toast.js가 띄운 뒤 URL에서 지운다. #}
   {% if request.query_params.get("toast") %}
   <div class="flash-data" hidden data-type="{{ request.query_params.get('toast_type') or 'success' }}" data-message="{{ request.query_params.get('toast') }}" data-strip-url="1"></div>
   {% endif %}
+  {% set guild_icon = get_guild_icon_url() or '/static/logo.svg' %}
+  {# 모바일 위 줄 — 길드 + 알림 종(하단 탭 한 칸을 차지하지 않는다). 비로그인은 종 대신 로그인 링크 #}
+  <header class="m-top">
+    <img src="{{ guild_icon }}" alt="">
+    <span class="m-top-name">{{ get_guild_name() }}</span>
+    {% if user %}
+    <button type="button" class="icon-btn bell" id="notif-bell-mobile" aria-label="알림" aria-haspopup="dialog" aria-expanded="false" aria-controls="notif-panel">{{ icon("bell") }}<em class="bell-cnt" data-notif-badge hidden>0</em></button>
+    {% else %}
+    <a class="btn sm pri m-top-login" href="/login">로그인</a>
+    {% endif %}
+  </header>
   <div class="layout">
-    <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="메뉴 열기">☰</button>
-    <div class="sidebar-overlay" id="sidebar-overlay"></div>
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <img src="{{ get_guild_icon_url() or '/static/logo.svg' }}" alt="길드 로고">
-        <span>{{ get_guild_name() }}</span>
-        {% if user %}
-        <button type="button" class="notif-bell" id="notif-bell" aria-label="알림" aria-expanded="false" aria-controls="notif-panel">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
-          </svg>
-          <span class="notif-badge" id="notif-badge" data-notif-badge hidden>0</span>
-        </button>
-        {% endif %}
-      </div>
+    {# 왼쪽 메뉴 — 바깥 칸(.side-col)이 배경·테두리로 화면 끝까지 이어지고, 안쪽 메뉴는 스크롤해도 제자리(sticky) #}
+    <div class="side-col">
+    <nav class="side" id="sidebar" aria-label="주 메뉴">
+      <a class="side-brand" href="{{ '/main' if user else '/' }}">
+        <img src="{{ guild_icon }}" alt="">
+        <span class="side-lbl">{{ get_guild_name() }}</span>
+      </a>
       {% if user %}
-      <div class="sidebar-section-label">메인</div>
-      <ul class="sidebar-nav">
-        <li><a href="/main" class="{% if active == 'main' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>메인</a></li>
-        <li><a href="/expedition" class="{% if active == 'expedition' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>원정대 관리</a></li>
-        <li><a href="/raid-check" class="{% if active == 'raid_check' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>레이드 체크<span class="nav-badge" data-badge="raid_check" hidden></span></a></li>
-        <li><a href="/parties" class="{% if active == 'parties' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2.5l7 7-9 9-7 2 2-7 7-9z"/></svg>공대 모집<span class="nav-badge" data-badge="parties" hidden></span></a></li>
-        <li><a href="/invites" class="{% if active == 'invites' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>내게 온 초대<span class="nav-badge" data-badge="invites" hidden></span></a></li>
-        <li><a href="/ranking" class="{% if active == 'ranking' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a1 1 0 0 0-1 1c0 2 2 4 4 4M17 6h3a1 1 0 0 1 1 1c0 2-2 4-4 4"/></svg>원정대 랭킹</a></li>
-        <li><a href="/calendar" class="{% if active == 'calendar' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>일정 캘린더</a></li>
-      </ul>
-      <div class="sidebar-section-label">도구</div>
-      <ul class="sidebar-nav">
-        <li><a href="/guide" class="{% if active == 'guide' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>이용 가이드</a></li>
-        <li><a href="/tools/auction-calculator" class="{% if active == 'auction_calculator' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v4H4zM4 12h10v8H4zM17 12h3v8h-3z"/></svg>경매 분배금 계산기</a></li>
-      </ul>
-      <div class="sidebar-section-label">설정</div>
-      <ul class="sidebar-nav">
-        <li><a href="/settings" class="{% if active == 'settings' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>알림 설정</a></li>
-      </ul>
-      {% if user and user.is_admin %}
-      <div class="sidebar-section-label admin-mode-row">
-        <span>관리자</span>
-        <form method="post" action="/admin/toggle-mode">
-          <button
-            type="submit"
-            class="admin-mode-toggle{% if user.admin_mode %} on{% endif %}"
-            role="switch"
-            aria-checked="{{ 'true' if user.admin_mode else 'false' }}"
-            title="관리자 모드 {{ '끄기' if user.admin_mode else '켜기' }}"
-            aria-label="관리자 모드"
-          ><span class="admin-mode-toggle-thumb"></span></button>
-        </form>
-      </div>
-      <ul class="sidebar-nav">
-        <li><a href="/admin/raids" class="{% if active == 'admin' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/></svg>레이드 관리</a></li>
-        <li><a href="/admin/classes" class="{% if active == 'admin_classes' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>직업 관리</a></li>
-        <li><a href="/admin/parties" class="{% if active == 'admin_parties' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>공대 관리</a></li>
-        <li><a href="/admin/users" class="{% if active == 'admin_users' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>유저 관리</a></li>
-        <li><a href="/admin/stats" class="{% if active == 'admin_stats' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>통계</a></li>
-        <li><a href="/admin/notifications" class="{% if active == 'admin_notifications' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>알림·구독</a></li>
-        <li><a href="/admin/completions" class="{% if active == 'admin_completions' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>클리어 관리</a></li>
-      </ul>
+      <a href="/main" class="side-link{% if grp == 'home' %} on{% endif %}" data-tip="홈"{% if grp == 'home' %} aria-current="page"{% endif %}>{{ icon("home") }}<span class="side-lbl">홈</span><span class="nav-badge" data-badge="home" hidden></span></a>
+      <a href="/parties" class="side-link{% if grp == 'party' %} on{% endif %}" data-tip="공대"{% if grp == 'party' %} aria-current="page"{% endif %}>{{ icon("party") }}<span class="side-lbl">공대</span><span class="nav-badge" data-badge="parties" hidden></span></a>
+      <a href="/expedition" class="side-link{% if grp == 'exp' %} on{% endif %}" data-tip="원정대"{% if grp == 'exp' %} aria-current="page"{% endif %}>{{ icon("exp") }}<span class="side-lbl">원정대</span></a>
+      <a href="/more" class="side-link{% if grp == 'more' %} on{% endif %}" data-tip="더보기"{% if grp == 'more' %} aria-current="page"{% endif %}>{{ icon("more") }}<span class="side-lbl">더보기</span></a>
+      {% if user.is_admin %}
+      <div class="side-sep" role="separator"></div>
+      <a href="/admin/raids" class="side-link{% if grp == 'admin' %} on{% endif %}" data-tip="관리"{% if grp == 'admin' %} aria-current="page"{% endif %}>{{ icon("admin") }}<span class="side-lbl">관리</span></a>
       {% endif %}
-      <div class="sidebar-footer">
-        <a href="/logout">로그아웃</a>
+      <div class="side-grow"></div>
+      <button type="button" class="side-link side-fold" data-nav-fold aria-pressed="false" aria-label="메뉴 접기" data-tip="메뉴 접기">{{ icon("fold") }}<span class="side-lbl">메뉴 접기</span></button>
+      {% set display_name = user.global_name or user.username or "나" %}
+      <div class="side-user-wrap">
+        <button type="button" class="side-user" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu" aria-label="{{ display_name }} 프로필 메뉴">
+          <span class="side-ava">{% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="">{% else %}{{ display_name[:1] }}{% endif %}</span>
+          <span class="side-lbl"><b>{{ display_name }}</b><small>{{ "관리자" if user.is_admin else "길드원" }} · 프로필 메뉴</small></span>
+        </button>
+        <div class="menu" id="profile-menu" role="menu" aria-label="프로필 메뉴" hidden>
+          <a class="menu-item" role="menuitem" href="/settings">{{ icon("gear") }}알림 설정</a>
+          {% if user.is_admin %}
+          <form method="post" action="/admin/toggle-mode">
+            <button type="submit" class="menu-item{% if user.admin_mode %} is-on{% endif %}" role="menuitemcheckbox" aria-checked="{{ 'true' if user.admin_mode else 'false' }}">{{ icon("admin") }}관리자 모드<span class="menu-state">{{ "켜짐" if user.admin_mode else "꺼짐" }}</span></button>
+          </form>
+          {% endif %}
+          <hr>
+          <form method="post" action="/logout">
+            <button type="submit" class="menu-item d" role="menuitem">{{ icon("logout") }}로그아웃</button>
+          </form>
+        </div>
       </div>
       {% else %}
-      {# 비로그인(이용 가이드) — 내비 15개가 전부 /login으로 튕기는 대신 로그인 링크 하나만 #}
-      <ul class="sidebar-nav">
-        <li><a href="/guide" class="{% if active == 'guide' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>이용 가이드</a></li>
-      </ul>
-      <div class="sidebar-footer">
-        <a href="/login">디스코드로 로그인</a>
+      {# 비로그인(이용 가이드) — 메뉴가 전부 /login으로 튕기는 대신 가이드와 로그인 링크만 #}
+      <a href="/guide" class="side-link{% if act == 'guide' %} on{% endif %}" data-tip="이용 가이드">{{ icon("guide") }}<span class="side-lbl">이용 가이드</span></a>
+      <div class="side-grow"></div>
+      <a href="/login" class="side-link" data-tip="디스코드로 로그인">{{ icon("login") }}<span class="side-lbl">디스코드로 로그인</span></a>
+      {% endif %}
+    </nav>
+    </div>
+    <main class="main" id="main" tabindex="-1">
+      {% if user %}
+      {# 머리줄 — 왼쪽은 화면 제목 자리({% raw %}{% block page_top %}{% endraw %}), 오른쪽 끝에 알림 종 #}
+      <div class="page-top{% if self.page_top() | trim %} has-title{% endif %}">
+        <div class="page-top-title">{% block page_top %}{% endblock %}</div>
+        <div class="bell-slot">
+          <button type="button" class="icon-btn bell" id="notif-bell" aria-label="알림" aria-haspopup="dialog" aria-expanded="false" aria-controls="notif-panel">{{ icon("bell") }}<em class="bell-cnt" data-notif-badge hidden>0</em></button>
+        </div>
       </div>
       {% endif %}
-    </aside>
-    <main class="main">
       {% block content %}{% endblock %}
     </main>
-    {% if user %}
-    {# 알림 패널 — 데스크톱은 종 아래 드롭다운, 모바일은 하단 시트. 사이드바 안에 두면 220px 폭에 잘리고
-       드로어가 닫혀 있으면 아예 닿을 수 없어서 밖으로 뺐다. #}
-    <div class="notif-overlay" id="notif-overlay" hidden></div>
-    <div class="notif-panel" id="notif-panel" role="dialog" aria-label="알림" hidden></div>
-    {% endif %}
-    {% if user %}
-    {# 모바일에서 햄버거를 매번 열지 않도록, 자주 쓰는 5개는 하단 탭으로 상시 노출. 알림은 종이 드로어 안에
-       숨어 있어 모바일에서 닿을 수 없던 문제 — 탭으로 꺼낸다(랭킹·일정은 드로어에서). #}
-    <nav class="bottom-tabs" aria-label="주요 메뉴">
-      <a href="/main" class="{% if active == 'main' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>메인</a>
-      <a href="/raid-check" class="{% if active == 'raid_check' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>레이드<span class="nav-badge" data-badge="raid_check" hidden></span></a>
-      <a href="/parties" class="{% if active == 'parties' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2.5l7 7-9 9-7 2 2-7 7-9z"/></svg>공대<span class="nav-badge" data-badge="parties" hidden></span></a>
-      <a href="/invites" class="{% if active == 'invites' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>초대<span class="nav-badge" data-badge="invites" hidden></span></a>
-      <button type="button" class="bottom-tab-notif" id="notif-bell-mobile" aria-label="알림" aria-expanded="false" aria-controls="notif-panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>알림<span class="nav-badge" data-notif-badge hidden></span></button>
-    </nav>
-    {% endif %}
   </div>
+  {% if user %}
+  <div class="notif-pop" id="notif-panel" role="dialog" aria-label="알림" hidden></div>
+  {# 모바일 하단 탭 — 왼쪽 메뉴와 같은 4개. 관리는 더보기 안에서. #}
+  <nav class="tabbar" aria-label="주 메뉴(모바일)">
+    <a href="/main" class="{% if grp == 'home' %}on{% endif %}"{% if grp == 'home' %} aria-current="page"{% endif %}>{{ icon("home") }}홈<span class="nav-badge" data-badge="home" hidden></span></a>
+    <a href="/parties" class="{% if grp == 'party' %}on{% endif %}"{% if grp == 'party' %} aria-current="page"{% endif %}>{{ icon("party") }}공대<span class="nav-badge" data-badge="parties" hidden></span></a>
+    <a href="/expedition" class="{% if grp == 'exp' %}on{% endif %}"{% if grp == 'exp' %} aria-current="page"{% endif %}>{{ icon("exp") }}원정대</a>
+    <a href="/more" class="{% if grp in ('more', 'admin') %}on{% endif %}"{% if grp in ('more', 'admin') %} aria-current="page"{% endif %}>{{ icon("more") }}더보기</a>
+  </nav>
+  {% endif %}
   <script src="/static/form-busy.js?v={{ static_version }}"></script>
-  <script src="/static/mobile-nav.js?v={{ static_version }}"></script>
   <script src="/static/toast.js?v={{ static_version }}"></script>
   {% if user %}
   <script src="/static/nav-badges.js?v={{ static_version }}"></script>
