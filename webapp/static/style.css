@@ -3454,346 +3454,47 @@ select.settings-select {
 
 /* ── 관리자 (레이드/카테고리/난이도/직업 CRUD) ─────────────── */
 
-.admin-card { max-width: 760px; }
-.admin-card-wide { max-width: 900px; }
 
-.admin-class-search {
-  max-width: 320px;
-  margin-bottom: 14px;
-}
 
-.admin-chip-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 14px;
-}
 
-.admin-chip-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  padding: 6px 6px 6px 12px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  font-size: 13px;
-}
-.admin-chip-item.is-support { border-color: var(--accent-dim); }
-.admin-chip-item[hidden] { display: none; }
 
-.admin-chip-label em {
-  font-style: normal;
-  color: var(--accent);
-  font-size: 11px;
-  margin-left: 2px;
-}
 
-.admin-chip-delete {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 50%;
-  font-size: 15px;
-  line-height: 1;
-}
-@media (hover: hover) { .admin-chip-delete:hover { color: var(--danger); background: var(--danger-soft); } }
 
-.admin-error {
-  margin: 12px 0;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--danger);
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-size: 13px;
-}
 
-.admin-group-title {
-  margin: 18px 0 8px;
-  font-size: 13px;
-  font-weight: 650;
-  color: var(--text-muted);
-}
-.admin-group-title:first-of-type { margin-top: 4px; }
 
-.admin-list {
-  list-style: none;
-  margin: 0 0 14px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
-.admin-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  font-size: 13px;
-}
 
-.admin-row-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 
-.admin-row-sub {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
 
-.admin-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.admin-row-actions form { display: contents; }
 
 
 /* ── 관리자 표 / 봇 상태 / 클리어 편집 그리드 ──────────────── */
-.admin-table-wrap { overflow-x: auto; }
-.admin-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.admin-table th, .admin-table td {
-  padding: 8px 10px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-.admin-table th { color: var(--text-muted); font-weight: 600; font-size: 12px; }
-.admin-table td.num, .admin-table th.num { text-align: right; }
-.admin-table-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 10px;
-}
-.admin-table-actions .admin-inline-label { margin-right: auto; }
 
-.admin-status-card {
-  display: flex;
-  align-items: center;
-  gap: 8px 14px;
-  flex-wrap: wrap;
-  margin-bottom: var(--sp-3);
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  font-size: 13px;
-}
-.admin-status-dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--danger);
-  box-shadow: 0 0 0 3px var(--danger-soft);
-}
-.admin-status-dot.is-online { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
-.admin-status-meta { color: var(--text-muted); }
 
-.admin-sub-group { margin-bottom: 12px; }
-.admin-sub-group-title { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
-.admin-sub-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.admin-completion-grid { display: flex; flex-direction: column; gap: 8px; }
-.admin-completion-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-}
-.admin-completion-raid { font-size: 13px; font-weight: 600; min-width: 110px; }
-.admin-completion-diffs { display: flex; gap: 6px; flex-wrap: wrap; }
-.admin-completion-diffs form { display: contents; }
 
 /* ── 공대 관리 상태 카드 / 문제 공대 배너 ───────────────── */
-.admin-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-3);
-}
-.admin-problem-banner {
-  margin: 0 0 var(--sp-3);
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(239,106,99,0.4);
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-size: 13px;
-}
 
 /* ── 관리자 목록 순서 변경(드래그 + ▲▼) ─────────────────── */
-.admin-drag-handle {
-  cursor: grab;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1;
-  padding: 2px 4px;
-  user-select: none;
-}
-.admin-drag-handle:active { cursor: grabbing; }
-.admin-row.is-dragging { opacity: 0.45; }
-.admin-move-btn {
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 5px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-@media (hover: hover) { .admin-move-btn:hover { color: var(--text); border-color: var(--accent-dim); } }
-.admin-reorder-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 14px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px dashed rgba(53,214,196,0.4);
-  background: var(--accent-soft);
-  font-size: 13px;
-}
-.admin-reorder-bar[hidden] { display: none; }
-.admin-reorder-bar .admin-reorder-hint { color: var(--text-muted); margin-right: auto; }
 
 /* 레이드 행 아래 접히는 두 번째 줄 — 카테고리 이동 / 운영 기간 */
-.admin-row-extra {
-  flex-basis: 100%;
-  padding-top: 4px;
-  border-top: 1px dashed var(--border);
-}
-.admin-row-extra > summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-muted);
-  list-style: none;
-}
-.admin-row-extra > summary::before { content: "▸ "; }
-.admin-row-extra[open] > summary::before { content: "▾ "; }
-.admin-inline-forms {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-top: 8px;
-}
-.admin-inline-form {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.admin-inline-form .settings-select { width: auto; min-width: 120px; }
-.admin-inline-form input[type="datetime-local"].settings-select { min-width: 170px; }
-.admin-inline-label { font-size: 12px; color: var(--text-muted); }
 
-.admin-user-details:empty { display: none; }
 
-.admin-user-details-inner {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  margin: -4px 0 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-}
 
-.admin-user-details-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 
-.admin-user-char-list,
-.admin-user-history-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
 
-.admin-user-history-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 
 /* 폼 한 줄에 placeholder만 믿고 우겨넣던 방식(카테고리/레이드/난이도 추가 폼) —
    필드가 많아지면 폭이 모자라 placeholder가 잘리고, 입력을 시작하면 힌트가
    사라지는 문제가 있었다. 라벨을 항상 보이게 하고, 화면 폭에 맞게 자동으로
    줄바꿈되는 그리드로 바꾼다. */
-.admin-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
 
-.admin-form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--sp-3);
-}
 
-.admin-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-}
 
-.admin-field-label {
-  font-size: var(--fs-label);
-  color: var(--text-muted);
-  letter-spacing: 0.02em;
-}
 
-.admin-field .settings-select { width: 100%; }
 
-.admin-field-narrow { max-width: 90px; }
 
-.admin-form-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
 
-.admin-raid-picker { max-width: 320px; margin-bottom: var(--sp-4); }
 
 /* ── 공용 프리미티브 (_ui.html 매크로 대응) ────────────────
    페이지 전용 카드/빈 상태/배지를 대체한다. 값은 전부 토큰만 쓴다 —
@@ -3969,8 +3670,6 @@ select.settings-select {
 
 
 
-#only-enterable-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer; }
-#only-enterable-wrap input { accent-color: var(--accent); margin: 0; }
 
 
 
@@ -4121,8 +3820,6 @@ select.settings-select {
 .extreme-diff-name { font-size: var(--fs-body); font-weight: 500; min-width: 88px; }
 
 /* ── 관리자 인라인 수정 폼 ─────────────────────────────── */
-.admin-input-narrow { max-width: 96px; }
-.admin-refs { flex-basis: 100%; }
 
 /* ── 메인: 익스트림 줄 ───────────────────────────────── */
 .dash-extreme-row { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px dashed var(--border); }
@@ -4168,8 +3865,6 @@ select.settings-select {
 .expedition-sync-form button,
 .expedition-account-form button,
 .leader-btn-sm,
-.admin-toggle-link,
-.admin-danger-link,
 .settings-filter-remove {
   display: inline-flex;
   align-items: center;
@@ -4199,8 +3894,6 @@ select.settings-select {
 .armory-sync-btn,
 .calendar-today-btn,
 .leader-btn-sm,
-.admin-toggle-link,
-.admin-danger-link,
 .settings-filter-remove {
   background: transparent;
   color: var(--text-muted);
@@ -4235,7 +3928,9 @@ select.settings-select {
 
 
 /* 크기 */
-.ui-btn.is-sm, .leader-btn-sm, .admin-toggle-link, .admin-danger-link, .settings-filter-remove,
+.ui-btn.is-sm,
+.leader-btn-sm,
+.settings-filter-remove,
 .expedition-remove-form .party-leave-btn {
   height: 26px;
   padding: 0 10px;
@@ -4256,17 +3951,6 @@ select.settings-select {
 .ui-btn.is-block, .armory-sync-btn { width: 100%; }
 .calendar-today-btn { position: absolute; left: 0; height: 32px; padding: 0 14px; } /* 옆 ←→ 버튼(32px)과 같은 키 */
 /* 관리자: 입력창(36px) 옆의 인라인 버튼은 같은 키로, 행 액션 링크와 ▲▼는 28px로 맞춘다 */
-.admin-inline-form .admin-toggle-link, .admin-inline-form .admin-danger-link {
-  height: var(--ctrl-h);
-  padding: 0 12px;
-  font-size: var(--fs-body);
-  border-radius: var(--r-md);
-}
-.admin-row-actions .admin-toggle-link, .admin-row-actions .admin-danger-link, .admin-move-btn {
-  height: 28px;
-  box-sizing: border-box;
-}
-.admin-move-btn { padding: 0 6px; }
 /* 버튼 옆에 놓이는 입력창도 같은 키(36px) — 이전엔 34/40/42px가 섞여 있었다 */
 .expedition-add-form input,
 .expedition-account-form input,
@@ -4388,8 +4072,6 @@ textarea {
 .armory-sync-btn,
 .calendar-today-btn,
 .leader-btn-sm,
-.admin-toggle-link,
-.admin-danger-link,
 .settings-filter-remove,
 .ui-btn.is-neutral { --spin: var(--text); }
 .ui-btn.is-danger { --spin: var(--danger); }
@@ -4416,8 +4098,7 @@ textarea {
 .expedition-sync-form button:hover:not(:disabled),
 .armory-sync-btn:hover:not(:disabled),
 .calendar-today-btn:hover,
-.leader-btn-sm:hover:not(:disabled),
-.admin-toggle-link:hover:not(:disabled) {
+.leader-btn-sm:hover:not(:disabled) {
     background: var(--hover); border-color: var(--line-in); color: var(--text);
   }
   /* 보통(neutral) */
@@ -4433,7 +4114,8 @@ textarea {
     background: rgba(94, 214, 122, 0.24); border-color: var(--ok);
   }
   /* 약하게 + 위험(삭제·구독 취소) — 평소엔 조용하고 올리면 빨강 */
-  .ui-btn.is-ghost.is-danger:hover:not(:disabled), .admin-danger-link:hover:not(:disabled), .settings-filter-remove:hover:not(:disabled) {
+  .ui-btn.is-ghost.is-danger:hover:not(:disabled),
+.settings-filter-remove:hover:not(:disabled) {
     color: var(--danger); border-color: var(--danger); background: var(--danger-soft);
   }
 }
@@ -4449,15 +4131,11 @@ textarea {
 .expedition-sync-form button:active:not(:disabled),
 .expedition-account-form button:active:not(:disabled),
 .leader-btn-sm:active:not(:disabled),
-.admin-toggle-link:active:not(:disabled),
-.admin-danger-link:active:not(:disabled),
 .settings-filter-remove:active:not(:disabled),
-.admin-move-btn:active:not(:disabled),
 .calendar-nav-btn:active,
 .calendar-view-btn:active,
 .fp-step-btn:active,
 .rank-role-btn:active,
-.admin-chip-delete:active,
 .icon-btn:active:not(:disabled) {
   transform: translateY(1px);
   filter: brightness(0.88);
@@ -4554,8 +4232,7 @@ button:disabled, .btn.is-disabled, a[aria-disabled="true"], input:disabled, sele
     border-color: var(--line-in); color: var(--text);
   }
   .armory-tab:not(.is-active):hover, .rank-tab:not(.is-active):hover { color: var(--text); }
-  .admin-move-btn:hover:not(:disabled) { color: var(--text); border-color: var(--line-in); background: var(--hover); }
-}
+  }
 .chip-btn:active, .account-tab:active, .pager-num:active { background: var(--press); }
 
 /* ── 입력칸 ────────────────────────────────────────────────
