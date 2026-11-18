@@ -206,7 +206,7 @@ def test_poll_once_detects_cleared_party(monkeypatch):
         return [PARTY_A] if calls["n"] == 1 else []
 
     async def fake_get_party(message_id):
-        return {**PARTY_A, "status": "disbanded"}
+        return {**PARTY_A, "status": "disbanded", "cleared_at": "2026-11-19T22:00:00+09:00"}
 
     monkeypatch.setattr(party_events.bot_client, "list_parties", fake_list_parties)
     monkeypatch.setattr(party_events.bot_client, "get_party", fake_get_party)
@@ -215,7 +215,7 @@ def test_poll_once_detects_cleared_party(monkeypatch):
     asyncio.run(party_events._poll_once())  # 기준점 수립
     assert notif_queue.empty()
 
-    asyncio.run(party_events._poll_once())  # 파티 소멸 + 상태 disbanded -> 클리어로 판정
+    asyncio.run(party_events._poll_once())  # 파티 소멸 + disbanded + cleared_at -> 클리어로 판정
     assert not notif_queue.empty()
     event = notif_queue.get_nowait()
     assert event["type"] == "cleared"
@@ -305,3 +305,65 @@ def test_web_notification_feed_failure_does_not_break_party_polling(monkeypatch)
     monkeypatch.setattr(party_events.bot_client, "get_web_notifications", feed)
     asyncio.run(party_events._poll_once())
     assert party_events._last_fingerprint is not None
+
+
+# ── 클리어/종료/만료/되살림 판정 (감사 결함 4) ─────────────────
+
+def _vanish_and_collect(monkeypatch, vanished_party):
+    calls = {"n": 0}
+
+    async def fake_list_parties(guild_id):
+        calls["n"] += 1
+        return [PARTY_A] if calls["n"] == 1 else []
+
+    async def fake_get_party(message_id):
+        return vanished_party
+
+    monkeypatch.setattr(party_events.bot_client, "list_parties", fake_list_parties)
+    monkeypatch.setattr(party_events.bot_client, "get_party", fake_get_party)
+    notif_queue = party_events.subscribe_notifications()
+    sse_queue = party_events.subscribe()
+    asyncio.run(party_events._poll_once())
+    asyncio.run(party_events._poll_once())
+    events = []
+    while not sse_queue.empty():
+        events.append(sse_queue.get_nowait())
+    return notif_queue, events
+
+
+def test_admin_disband_without_cleared_at_is_not_announced_as_clear(monkeypatch):
+    notif, sse = _vanish_and_collect(monkeypatch, {**PARTY_A, "status": "disbanded", "cleared_at": None})
+    assert notif.empty()
+    assert [e["type"] for e in sse] == ["removed"]
+
+
+def test_expired_party_is_not_announced_as_clear(monkeypatch):
+    notif, sse = _vanish_and_collect(
+        monkeypatch, {**PARTY_A, "status": "expired", "ended_at": "2026-11-19T06:00:00+09:00"}
+    )
+    assert notif.empty()
+    assert [e["type"] for e in sse] == ["removed"]
+
+
+def test_cleared_at_party_is_announced_and_sse_cleared(monkeypatch):
+    notif, sse = _vanish_and_collect(
+        monkeypatch, {**PARTY_A, "status": "disbanded", "cleared_at": "2026-11-19T22:00:00+09:00"}
+    )
+    assert notif.get_nowait()["type"] == "cleared"
+    assert [e["type"] for e in sse] == ["cleared"]
+
+
+def test_reopened_old_party_does_not_announce_recruiting_start():
+    """되살아난(클리어 되돌리기·재개) 공대는 웹이 재시작돼 _seen_ids가 비어도 '모집 시작' 알림이 나가지 않는다."""
+    old = {**PARTY_A, "message_id": "9", "created_at": "2026-11-10T12:00:00+00:00"}
+    assert party_events._detect_notification_events({}, {"9": old}) == []
+    revived = {**PARTY_A, "message_id": "8", "ended_at": "2026-11-18T10:00:00+09:00"}
+    assert party_events._detect_notification_events({}, {"8": revived}) == []
+
+
+def test_fresh_party_still_announces_recruiting_start():
+    from datetime import datetime, timezone
+
+    fresh = {**PARTY_A, "message_id": "7", "created_at": datetime.now(timezone.utc).isoformat()}
+    events = party_events._detect_notification_events({}, {"7": fresh})
+    assert [e["type"] for e in events] == ["created"]
