@@ -148,12 +148,14 @@ try:
         check("취소하면 제출 안 됨", page.url.endswith("/parties/p1"))
 
         # 6) 이름에 따옴표·꺾쇠가 있어도 확인 문구가 글자 그대로(스크립트 주입 없음)
-        page.goto(BASE + "/admin/raids?tab=raids", wait_until="networkidle")
-        page.evaluate("document.querySelector('details.admin-row-extra').open = true")
-        form = page.locator("form[action='/admin/raids/rename']").first
-        form.locator("input[name=new_name]").fill("A'B\"<img src=x onerror=alert(1)>")
-        form.locator("button[type=submit]").click(); page.wait_for_timeout(150)
-        txt = page.evaluate("document.querySelector('.dlg') && document.querySelector('.dlg').innerText")
+        # 관리 > 레이드 편집 화면(2단계 개편 후): 기본 정보 폼의 이름 칸을 바꾸고 저장하면 확인창이 뜬다
+        page.goto(BASE + "/admin/raids", wait_until="networkidle")
+        form = page.locator("form[action='/admin/raids/save']").first
+        form.locator("input[name=name]").fill("A'B\"<img src=x onerror=alert(1)>")
+        form.locator("button[type=submit]").click(); page.wait_for_timeout(400)
+        txt = page.evaluate("(function(){var d=[...document.querySelectorAll('.dlg')].find(e=>e.offsetParent);return d&&d.innerText})()")
+        if not txt:
+            print("DEBUG url", page.url, "dlgs", page.evaluate("[...document.querySelectorAll('.dlg,.dlg-back,[role=dialog]')].map(e=>e.className+':'+(e.offsetParent?'vis':'hid')).join(' | ')"))
         check("이름 변경 확인에 새 이름이 글자 그대로", bool(txt) and "<img src=x onerror=alert(1)>" in txt and page.locator(".dlg img").count() == 0, (txt or "")[:80])
         page.screenshot(path=str(OUT / "confirm-rename.jpg"), type="jpeg", quality=80)
         page.keyboard.press("Escape")
@@ -169,7 +171,7 @@ try:
         check("올리고 있으면 5초 지나도 남음", page.locator(".toast").count() >= 1)
         page.locator(".toast .btn").first.click(); page.wait_for_timeout(50)
         check("되돌리기 버튼 → onAction", page.evaluate("window.__undo") == 1)
-        btn = page.locator(".leader-btn").first
+        btn = page.locator(".page-content button.btn").first
         w_before = btn.evaluate("e => e.getBoundingClientRect().width")
         btn.evaluate("e => e.setAttribute('aria-busy', 'true')")
         w_after = btn.evaluate("e => e.getBoundingClientRect().width")
