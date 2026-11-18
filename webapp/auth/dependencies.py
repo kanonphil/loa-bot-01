@@ -1,4 +1,13 @@
+import logging
+import time
+
+import httpx
 from fastapi import Depends, HTTPException, Request, status
+
+from webapp import config
+from webapp.clients import bot_client
+
+logger = logging.getLogger("webapp.auth")
 
 
 class NotAuthenticated(HTTPException):
@@ -15,10 +24,51 @@ class NotAdmin(HTTPException):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail="관리자만 접근할 수 있습니다.")
 
 
-def get_current_user(request: Request) -> dict:
+# 세션 쿠키는 서명만 된 채 30일 유지되고 서버가 무효화할 수 없다 — 그래서 로그인 시점의 "등록됨"·
+# "관리자" 판정이 그대로 남아, 유저가 삭제되거나 관리자에서 빠져도 계속 접근할 수 있었다.
+# 요청마다 (1) 관리자 여부는 설정에서 다시 계산하고 (2) 등록 여부는 봇에 물어보되 유저별로
+# 짧게 캐시해 봇 호출을 분당 1회 이하로 줄인다.
+REGISTRATION_TTL_SECONDS = 60
+_registration_cache: dict[str, tuple[float, bool]] = {}
+
+
+def remember_registered(discord_id: str, registered: bool = True) -> None:
+    """로그인 직후처럼 방금 확인한 결과를 캐시에 넣는다(바로 뒤 요청에서 또 묻지 않도록)."""
+    _registration_cache[discord_id] = (time.monotonic(), registered)
+
+
+def clear_registration_cache() -> None:
+    _registration_cache.clear()
+
+
+async def _still_registered(discord_id: str) -> bool:
+    cached = _registration_cache.get(discord_id)
+    if cached is not None and time.monotonic() - cached[0] < REGISTRATION_TTL_SECONDS:
+        return cached[1]
+    try:
+        registered = await bot_client.is_registered(discord_id)
+    except httpx.HTTPError:
+        # 봇 서버가 죽었다고 모든 유저를 로그아웃시키지는 않는다 — 기존 세션을 유지하고 캐시하지 않는다.
+        logger.warning("등록 여부 재확인 실패 — 기존 세션을 유지합니다: %s", discord_id, exc_info=True)
+        return True
+    remember_registered(discord_id, registered)
+    return registered
+
+
+async def get_current_user(request: Request) -> dict:
     user = request.session.get("user")
     if not user:
         raise NotAuthenticated()
+    discord_id = user.get("discord_id")
+    if not discord_id or not await _still_registered(discord_id):
+        request.session.clear()
+        raise NotAuthenticated()
+    is_admin = discord_id in config.ADMIN_DISCORD_IDS
+    if user.get("is_admin") != is_admin:
+        user["is_admin"] = is_admin
+        if not is_admin:
+            user["admin_mode"] = False
+        request.session["user"] = user
     return user
 
 

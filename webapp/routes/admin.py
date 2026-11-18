@@ -25,8 +25,20 @@ from webapp.flash import redirect_result, redirect_with_toast
 from webapp.format import is_overdue_party, party_view
 from webapp.routes.party import _history_view
 from webapp.templating import templates
+from webapp.utils import safe_local_path
 
 router = APIRouter()
+
+
+def _parse_split(raw: str) -> tuple[int | None, str | None]:
+    """파티 분할 인원 입력 — 비우면 분할 없음. 숫자가 아니면 (None, 오류문구). int()를 바로 부르면
+    "abc" 한 번에 500이 났다."""
+    raw = raw.strip()
+    if not raw:
+        return None, None
+    if not (raw.isascii() and raw.isdigit()):
+        return None, "파티 분할 인원은 숫자로 입력해주세요."
+    return int(raw), None
 
 TABS = [
     ("categories", "카테고리"),
@@ -80,7 +92,7 @@ async def toggle_admin_mode(request: Request, user: dict = Depends(require_admin
     path = referer.path or "/main"
     if referer.query:
         path = f"{path}?{referer.query}"
-    return RedirectResponse(path, status_code=303)
+    return RedirectResponse(safe_local_path(path, "/main"), status_code=303)
 
 
 # ── 레이드 관리 화면 (카테고리/레이드/난이도 탭) ─────────────
@@ -198,7 +210,9 @@ async def add_difficulty(
     party_split: str = Form(""), gates: int = Form(1),
     user: dict = Depends(require_admin),
 ):
-    split = int(party_split) if party_split.strip() else None
+    split, split_error = _parse_split(party_split)
+    if split_error:
+        return redirect_with_toast(f"/admin/raids?tab=difficulties&raid={quote(raid_name)}", split_error, "error")
     result = await bot_client.admin_add_difficulty(
         user["discord_id"], raid_name, difficulty.strip(), min_level, total_slots, split, gates,
     )
@@ -257,7 +271,9 @@ async def update_difficulty(
     party_split: str = Form(""), gates: int = Form(1),
     user: dict = Depends(require_admin),
 ):
-    split = int(party_split) if party_split.strip() else None
+    split, split_error = _parse_split(party_split)
+    if split_error:
+        return redirect_with_toast(f"/admin/raids?tab=difficulties&raid={quote(raid_name)}", split_error, "error")
     result = await bot_client.admin_update_difficulty(
         user["discord_id"], raid_name, difficulty, min_level, total_slots, split, gates,
     )

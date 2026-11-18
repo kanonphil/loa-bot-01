@@ -308,9 +308,9 @@ async def mark_all_read(discord_id: str) -> int:
 _KST = timezone(timedelta(hours=9))
 
 
-def _current_week_reset() -> datetime:
+def _current_week_reset(now: datetime | None = None) -> datetime:
     """현재 주의 시작(가장 최근 수요일 06:00 KST)을 KST datetime으로 반환."""
-    now = datetime.now(_KST)
+    now = now or datetime.now(_KST)
     days_since_wed = (now.weekday() - 2) % 7
     week_start = (now - timedelta(days=days_since_wed)).replace(
         hour=6, minute=0, second=0, microsecond=0

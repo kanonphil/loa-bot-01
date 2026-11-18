@@ -96,6 +96,8 @@ async def calendar_view(
             ref = datetime.fromisoformat(week_start).replace(tzinfo=KST) if week_start else now
         except ValueError:
             ref = now
+        if not 2000 <= ref.year <= 2100:
+            ref = now
         w_start = _week_start_of(ref)
         w_end = w_start + timedelta(days=7)
 
@@ -155,7 +157,9 @@ async def calendar_view(
     # ── 월간 보기(기본) ──────────────────────────────────
     y = year or now.year
     m = month or now.month
-    if m < 1 or m > 12:
+    # datetime의 연도 범위(1~9999)를 벗어나거나 12월+1이 9999를 넘는 값(/calendar?year=9999&month=12,
+    # year=0)은 500이 났다 — 합리적인 범위를 벗어나면 이번 달로.
+    if m < 1 or m > 12 or y < 2000 or y > 2100:
         y, m = now.year, now.month
 
     first, next_first = _month_bounds(y, m)

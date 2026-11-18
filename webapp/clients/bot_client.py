@@ -1,9 +1,16 @@
 """봇 서버(다른 머신)의 /api/internal 호출용 얇은 클라이언트."""
 import time
+from urllib.parse import quote
 
 import httpx
 
 from webapp import config
+
+
+def _q(value: str) -> str:
+    """URL 경로에 끼워 넣는 값은 항상 이스케이프한다 — `..`·`%2E%2E`·`/`가 섞여도 다른
+    내부 API 경로로 새지 않게(예: /parties/%2E%2E/leave → /api/internal/leave)."""
+    return quote(str(value), safe="")
 
 
 def _headers() -> dict:
@@ -155,12 +162,17 @@ async def get_completions(discord_id: str, character_name: str) -> dict:
     return resp.json()
 
 
-async def get_armory_detail(discord_id: str, character_name: str) -> dict:
+async def get_armory_detail(discord_id: str, character_name: str, cache_only: bool = False) -> dict:
     """캐시된 캐릭터 상세를 그대로 받아온다 — 로스트아크 API를 호출하지 않는다.
-    최신 정보가 필요하면 sync_armory_detail(동기화 버튼)을 따로 호출해야 한다."""
+    최신 정보가 필요하면 sync_armory_detail(동기화 버튼)을 따로 호출해야 한다.
+    cache_only: 캐시에 없어도 봇이 그 캐릭터 주인의 API 키로 라이브 조회하지 않게 한다
+    (남의 캐릭터를 볼 때 — 다른 사람의 호출 한도를 쓰지 않도록)."""
+    params = {"discord_id": discord_id, "character_name": character_name}
+    if cache_only:
+        params["cache_only"] = "true"
     resp = await _get_client().get(
         f"{config.BOT_API_BASE_URL}/api/internal/armory-detail",
-        params={"discord_id": discord_id, "character_name": character_name},
+        params=params,
         headers=_headers(),
         timeout=20,
     )
@@ -327,7 +339,7 @@ async def get_calendar_parties(guild_id: str, start: str, end: str) -> list[dict
 
 async def get_party(message_id: str) -> dict | None:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}",
         headers=_headers(),
         timeout=10,
     )
@@ -337,7 +349,7 @@ async def get_party(message_id: str) -> dict | None:
 
 async def get_party_eligibility(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/eligibility",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/eligibility",
         params={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -357,7 +369,7 @@ async def join_party(
     if party_group is not None:
         payload["party_group"] = party_group
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/join",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/join",
         json=payload,
         headers=_headers(),
         timeout=10,
@@ -368,7 +380,7 @@ async def join_party(
 
 async def leave_party(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/leave",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/leave",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -379,7 +391,7 @@ async def leave_party(message_id: str, discord_id: str) -> dict:
 
 async def get_waitlist_status(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/waitlist-status",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/waitlist-status",
         params={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -390,7 +402,7 @@ async def get_waitlist_status(message_id: str, discord_id: str) -> dict:
 
 async def toggle_waitlist(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/waitlist",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/waitlist",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -401,7 +413,7 @@ async def toggle_waitlist(message_id: str, discord_id: str) -> dict:
 
 async def get_invitable_users(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/invitable-users",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/invitable-users",
         params={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -412,7 +424,7 @@ async def get_invitable_users(message_id: str, discord_id: str) -> dict:
 
 async def create_invite(message_id: str, discord_id: str, target_discord_id: str, slot_number: int) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/invite",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/invite",
         json={"discord_id": discord_id, "target_discord_id": target_discord_id, "slot_number": slot_number},
         headers=_headers(),
         timeout=10,
@@ -434,7 +446,7 @@ async def get_my_invites(discord_id: str) -> list[dict]:
 
 async def accept_invite(message_id: str, discord_id: str, character_name: str, role: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/invites/{message_id}/accept",
+        f"{config.BOT_API_BASE_URL}/api/internal/invites/{_q(message_id)}/accept",
         json={"discord_id": discord_id, "character_name": character_name, "role": role},
         headers=_headers(),
         timeout=10,
@@ -445,7 +457,7 @@ async def accept_invite(message_id: str, discord_id: str, character_name: str, r
 
 async def decline_invite(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/invites/{message_id}/decline",
+        f"{config.BOT_API_BASE_URL}/api/internal/invites/{_q(message_id)}/decline",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -456,7 +468,7 @@ async def decline_invite(message_id: str, discord_id: str) -> dict:
 
 async def get_party_comments(message_id: str) -> list[dict]:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/comments",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/comments",
         headers=_headers(),
         timeout=10,
     )
@@ -466,7 +478,7 @@ async def get_party_comments(message_id: str) -> list[dict]:
 
 async def post_party_comment(message_id: str, discord_id: str, display_name: str, avatar_url: str, content: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/comments",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/comments",
         json={"discord_id": discord_id, "display_name": display_name, "avatar_url": avatar_url, "content": content},
         headers=_headers(),
         timeout=10,
@@ -477,7 +489,7 @@ async def post_party_comment(message_id: str, discord_id: str, display_name: str
 
 async def delete_party_comment(message_id: str, comment_id: int, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/comments/{comment_id}/delete",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/comments/{comment_id}/delete",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -488,7 +500,7 @@ async def delete_party_comment(message_id: str, comment_id: int, discord_id: str
 
 async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-eligibility",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/switch-eligibility",
         params={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -499,7 +511,7 @@ async def get_switch_eligibility(message_id: str, discord_id: str) -> dict:
 
 async def switch_character(message_id: str, discord_id: str, character_name: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-character",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/switch-character",
         json={"discord_id": discord_id, "character_name": character_name},
         headers=_headers(),
         timeout=10,
@@ -510,7 +522,7 @@ async def switch_character(message_id: str, discord_id: str, character_name: str
 
 async def switch_role(message_id: str, discord_id: str, new_role: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/switch-role",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/switch-role",
         json={"discord_id": discord_id, "new_role": new_role},
         headers=_headers(),
         timeout=10,
@@ -556,7 +568,7 @@ async def create_party(
 
 async def close_party(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/close",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/close",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -567,7 +579,7 @@ async def close_party(message_id: str, discord_id: str) -> dict:
 
 async def reopen_party(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reopen",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/reopen",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -578,7 +590,7 @@ async def reopen_party(message_id: str, discord_id: str) -> dict:
 
 async def clear_party(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/clear",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/clear",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=15,
@@ -589,7 +601,7 @@ async def clear_party(message_id: str, discord_id: str) -> dict:
 
 async def cancel_party(message_id: str, discord_id: str, reason: str | None) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/cancel",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/cancel",
         json={"discord_id": discord_id, "reason": reason},
         headers=_headers(),
         timeout=15,
@@ -600,7 +612,7 @@ async def cancel_party(message_id: str, discord_id: str, reason: str | None) -> 
 
 async def kick_member(message_id: str, discord_id: str, target_discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/kick",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/kick",
         json={"discord_id": discord_id, "target_discord_id": target_discord_id},
         headers=_headers(),
         timeout=10,
@@ -613,7 +625,7 @@ async def reschedule_party(
     message_id: str, discord_id: str, scheduled_datetime: str, memo: str | None
 ) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/reschedule",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/reschedule",
         json={"discord_id": discord_id, "scheduled_datetime": scheduled_datetime, "memo": memo},
         headers=_headers(),
         timeout=10,
@@ -624,7 +636,7 @@ async def reschedule_party(
 
 async def transfer_leader(message_id: str, discord_id: str, new_leader_discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/transfer-leader",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/transfer-leader",
         json={"discord_id": discord_id, "new_leader_discord_id": new_leader_discord_id},
         headers=_headers(),
         timeout=10,
@@ -635,7 +647,7 @@ async def transfer_leader(message_id: str, discord_id: str, new_leader_discord_i
 
 async def edit_party_difficulty(message_id: str, discord_id: str, difficulty: str, proficiency: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/edit-difficulty",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/edit-difficulty",
         json={"discord_id": discord_id, "difficulty": difficulty, "proficiency": proficiency},
         headers=_headers(),
         timeout=10,
@@ -769,7 +781,7 @@ async def admin_list_parties(guild_id: str, discord_id: str) -> dict:
 
 async def admin_revert_clear(message_id: str, discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/admin/parties/{message_id}/revert-clear",
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/parties/{_q(message_id)}/revert-clear",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=15,
@@ -780,7 +792,7 @@ async def admin_revert_clear(message_id: str, discord_id: str) -> dict:
 
 async def _admin_party_post(message_id: str, action: str, discord_id: str, **extra) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/admin/parties/{message_id}/{action}",
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/parties/{_q(message_id)}/{action}",
         json={"discord_id": discord_id, **extra},
         headers=_headers(),
         timeout=20,
@@ -816,7 +828,7 @@ async def admin_list_users(discord_id: str, guild_id: str | None = None, q: str 
 
 async def admin_get_user_characters(discord_id: str, target_discord_id: str) -> list[dict]:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{target_discord_id}/characters",
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{_q(target_discord_id)}/characters",
         params={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -827,7 +839,7 @@ async def admin_get_user_characters(discord_id: str, target_discord_id: str) -> 
 
 async def admin_get_user_history(discord_id: str, target_discord_id: str) -> dict:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{target_discord_id}/history",
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{_q(target_discord_id)}/history",
         params={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -838,7 +850,7 @@ async def admin_get_user_history(discord_id: str, target_discord_id: str) -> dic
 
 async def admin_delete_user(discord_id: str, target_discord_id: str) -> dict:
     resp = await _get_client().post(
-        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{target_discord_id}/delete",
+        f"{config.BOT_API_BASE_URL}/api/internal/admin/users/{_q(target_discord_id)}/delete",
         json={"discord_id": discord_id},
         headers=_headers(),
         timeout=10,
@@ -997,7 +1009,7 @@ async def set_pre_notify_hours(discord_id: str, hours: float) -> dict:
 
 async def get_guest_candidates(message_id: str, discord_id: str, guild_id: str) -> dict:
     resp = await _get_client().get(
-        f"{config.BOT_API_BASE_URL}/api/internal/parties/{message_id}/guest-candidates",
+        f"{config.BOT_API_BASE_URL}/api/internal/parties/{_q(message_id)}/guest-candidates",
         params={"discord_id": discord_id, "guild_id": guild_id},
         headers=_headers(),
         timeout=10,
