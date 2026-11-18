@@ -102,11 +102,28 @@ def test_accept_rejects_character_already_in_other_party_same_raid(tmp_path, mon
     assert slots == []
 
 
-def test_accept_rejects_when_party_already_closed(tmp_path, monkeypatch):
-    """회귀 테스트: 기존 코드는 파티 status가 disbanded인지만 확인해서, 모집 마감(closed)
-    이나 만석(full) 상태에서도 초대 수락으로 참여할 수 있는 구멍이 있었다."""
+def test_accept_allowed_when_party_closed_but_invite_is_valid(tmp_path, monkeypatch):
+    """파티장은 모집 마감 후에도 초대를 보낼 수 있다 — 유효한 초대(예약 슬롯)를 가진 사람은
+    마감 상태여도 수락으로 들어올 수 있어야 한다(예전엔 초대는 보내지는데 수락이 막혔다).
+    초대 없이 누르는 일반 참여는 여전히 마감으로 거부된다(test_audit_fixes_db 참고)."""
     _setup_party(tmp_path, monkeypatch)
     asyncio.run(db.close_party(MESSAGE_ID))
+    party = asyncio.run(db.get_party(MESSAGE_ID))
+
+    interaction = _make_interaction()
+    interaction.client.fetch_user = AsyncMock(return_value=MagicMock(send=AsyncMock()))
+    _run_accept(interaction, party)
+
+    content = interaction.response.edit_message.call_args.kwargs["content"]
+    assert "참여했습니다" in content
+    slots = asyncio.run(db.get_party_slots(MESSAGE_ID))
+    assert [s["slot_number"] for s in slots] == [1]
+
+
+def test_accept_rejected_after_invite_expired_on_closed_party(tmp_path, monkeypatch):
+    _setup_party(tmp_path, monkeypatch)
+    asyncio.run(db.close_party(MESSAGE_ID))
+    asyncio.run(db.delete_invite(MESSAGE_ID, INVITEE_ID))
     party = asyncio.run(db.get_party(MESSAGE_ID))
 
     interaction = _make_interaction()
@@ -114,8 +131,7 @@ def test_accept_rejects_when_party_already_closed(tmp_path, monkeypatch):
 
     content = interaction.response.edit_message.call_args.kwargs["content"]
     assert "마감" in content
-    slots = asyncio.run(db.get_party_slots(MESSAGE_ID))
-    assert slots == []
+    assert asyncio.run(db.get_party_slots(MESSAGE_ID)) == []
 
 
 def test_accept_succeeds_for_qualifying_character(tmp_path, monkeypatch):
