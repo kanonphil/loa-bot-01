@@ -70,6 +70,17 @@ main() {
   fi
   echo "$changed" | sed "s/^/[$role]   변경: /" | head -30
 
+  # 봇은 재시작 때 DB 마이그레이션이 돌 수 있어서 재시작 직전에 DB를 백업한다
+  # (scripts/ops/setup-bot-server.sh가 ~/bin/loa-backup.sh를 설치해 둔 경우).
+  local backup=""
+  if [[ "$role" == bot && -x "$HOME/bin/loa-backup.sh" ]]; then
+    if backup=$("$HOME/bin/loa-backup.sh" pre-deploy); then
+      echo "[$role] 배포 전 DB 백업: $backup"
+    else
+      echo "[$role] 경고: 배포 전 DB 백업 실패 — 배포는 계속합니다" >&2
+    fi
+  fi
+
   local deps_changed=0
   if grep -qx "$reqfile" <<<"$changed"; then
     deps_changed=1
@@ -89,7 +100,7 @@ main() {
     "$venv/bin/pip" install -q --disable-pip-version-check -r "$reqfile" || true
   fi
   if restart_and_check; then
-    echo "[$role] 이전 버전으로 복구했습니다. (DB 마이그레이션이 이미 적용됐다면 그건 되돌려지지 않습니다)" >&2
+    echo "[$role] 이전 버전으로 복구했습니다. (DB 마이그레이션이 이미 적용됐다면 그건 되돌려지지 않습니다${backup:+ — 배포 직전 DB: $backup})" >&2
   else
     echo "[$role] 복구 후에도 서비스가 올라오지 않습니다. 직접 확인이 필요합니다." >&2
   fi
