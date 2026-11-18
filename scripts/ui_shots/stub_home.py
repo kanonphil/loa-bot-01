@@ -36,7 +36,8 @@ def register(app, RAIDS, CHARS):
         for r in app_raids:
             if r["raid_name"] not in done_raids:
                 total += max(r["difficulty_gold"].values())
-        return {**c, "is_support": False, "completions": sorted(mine), "selection": {"customized": False, "selected_raids": []},
+        # 서포터 직업은 공대 화면 점검(interact_party.py)이 역할 추론을 확인하므로 실제 직업대로
+        return {**c, "is_support": c["character_class"] in ("홀리나이트", "바드", "도화가"), "completions": sorted(mine), "selection": {"customized": False, "selected_raids": []},
                 "applicable_raids": app_raids, "visible_raid_names": [r["raid_name"] for r in app_raids],
                 "done_count": len(done_raids), "total_slots": len(app_raids), "gold_earned": earned, "gold_total": total}
 
@@ -113,7 +114,9 @@ def register(app, RAIDS, CHARS):
         return JSONResponse({"available": True, "fetched_at": now.isoformat(), "items": [
             {"id": 1, "name": "재련 재료 A", "icon": "", "current": 105, "yday_avg": 92, "change_pct": 13.6, "history": hist([95, 92, 94, 99, 108, 104, 112])},
             {"id": 2, "name": "재련 재료 B", "icon": "", "current": 90, "yday_avg": 99, "change_pct": -9.5, "history": hist([110, 104, 118, 100, 94, 90, 90])},
-            {"id": 3, "name": "보석 (경매장 최저)", "icon": "", "current": 1500, "yday_avg": 1420, "change_pct": 5.5, "history": hist([1380, 1400, 1450, 1430, 1460, 1480, 1500])}]})
+            {"id": 3, "name": "보석 (경매장 최저)", "icon": "", "current": 1500, "yday_avg": 1420, "change_pct": 5.5, "history": hist([1380, 1400, 1450, 1430, 1460, 1480, 1500])},
+            # 원정대 점검(exp_check.py)의 계산기 시세 채우기가 고르는 항목 — 홈 스텁이 먼저 등록돼 stub_exp 값을 덮으므로 여기에도 둔다
+            {"id": 4, "name": "유물 각인서 · 원한", "icon": "", "current": 143000, "yday_avg": 139000, "change_pct": 2.9, "history": hist([139000, 140000, 141000, 139500, 142000, 142500, 143000])}]})
 
     @app.post("/api/internal/loa/gold-island-subscription")
     async def gold_sub(request: Request):
