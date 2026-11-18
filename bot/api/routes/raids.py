@@ -26,18 +26,12 @@ class DifficultyBody(BaseModel):
   party_split: int | None = None
   gates: int = 1
 
-class DifficultySortBody(BaseModel):
-  sort_order: int
-
 class PeriodBody(BaseModel):
   available_from: str | None = None
   available_until: str | None = None
 
 class ActiveBody(BaseModel):
   is_active: bool
-
-class CategorySortBody(BaseModel):
-  sort_order: int
 
 class CategoryExtremeBody(BaseModel):
   is_extreme: bool
@@ -76,13 +70,6 @@ async def reorder_categories(body: OrderBody):
   await raids_module.reload()
   return {"success": count > 0, "count": count}
 
-@router.patch("/categories/{name}/sort")
-async def sort_category(name: str, body: CategorySortBody):
-  """단건 순서 변경 — 배열 저장(PUT /categories/order) 이전부터 쓰던 하위호환 경로."""
-  updated = await db.update_category_sort(name, body.sort_order)
-  await raids_module.reload()
-  return {"success": updated}
-
 @router.patch("/categories/{name}/extreme")
 async def set_category_extreme(name: str, body: CategoryExtremeBody):
   updated = await db.update_category_extreme(name, body.is_extreme)
@@ -91,6 +78,11 @@ async def set_category_extreme(name: str, body: CategoryExtremeBody):
 
 @router.delete("/categories/{name}")
 async def delete_category(name: str):
+  # 소속 레이드가 있는 카테고리를 지우면 그 레이드들이 get_raids_dict(카테고리 JOIN)에서
+  # 통째로 사라진다 — 웹 관리자/디스코드 /관리와 같은 가드
+  n = await db.count_raids_in_category(name)
+  if n:
+    return {"success": False, "reason": f"소속 레이드가 {n}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_category(name)
   await raids_module.reload()
   return {"success": removed}
@@ -141,12 +133,18 @@ async def set_raid_active(raid_name: str, body: ActiveBody):
 
 @router.patch("/{raid_name}/period")
 async def set_raid_period(raid_name: str, body: PeriodBody):
-  updated = await db.set_raid_period(raid_name, body.available_from, body.available_until)
+  start, end, err = raids_module.normalize_period(body.available_from, body.available_until)
+  if err:
+    return {"success": False, "reason": err}
+  updated = await db.set_raid_period(raid_name, start, end)
   await raids_module.reload()
   return {"success": updated}
 
 @router.delete("/{raid_name}")
 async def delete_raid(raid_name: str):
+  live = await db.count_live_parties_for_raid(raid_name)
+  if live:
+    return {"success": False, "reason": f"진행 중인 공대가 {live}개 있어 삭제할 수 없습니다."}
   removed = await db.remove_raid(raid_name)
   await raids_module.reload()
   return {"success": removed}
@@ -179,12 +177,6 @@ async def reorder_difficulties(raid_name: str, body: OrderBody):
   count = await db.reorder_difficulties(raid_name, body.order)
   await raids_module.reload()
   return {"success": count > 0, "count": count}
-
-@router.patch("/{raid_name}/difficulties/{difficulty}/sort")
-async def sort_difficulty(raid_name: str, difficulty: str, body: DifficultySortBody):
-  updated = await db.update_difficulty_sort(raid_name, difficulty, body.sort_order)
-  await raids_module.reload()
-  return {"success": updated}
 
 @router.delete("/{raid_name}/difficulties/{difficulty}")
 async def delete_difficulty(raid_name: str, difficulty: str):

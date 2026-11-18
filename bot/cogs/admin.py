@@ -246,6 +246,13 @@ class Admin(commands.Cog):
     async def del_raid(self, interaction: discord.Interaction, raid_name: str) -> None:
         if not await _check_owner(interaction):
             return
+        live = await db.count_live_parties_for_raid(raid_name)
+        if live:
+            await interaction.response.send_message(
+                f"❌ **{raid_name}** 레이드로 진행 중인 공대가 {live}개 있어 삭제할 수 없습니다.",
+                ephemeral=True,
+            )
+            return
         removed = await db.remove_raid(raid_name)
         if not removed:
             await interaction.response.send_message(

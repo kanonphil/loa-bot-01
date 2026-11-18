@@ -9,7 +9,7 @@ import bot.api.lostark as loa
 from bot.services.expedition import sync_all_accounts_daily
 from bot.ui.views import (
     PartyView, _refresh_party_embed_with_reserved, _send_dm, _notify_members_web, _party_url,
-    _finalize_invite_dm, INVITE_EXPIRED_DM_TEXT,
+    _finalize_invite_dm, INVITE_EXPIRED_DM_TEXT, restore_invite_views,
 )
 from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
@@ -38,7 +38,6 @@ COGS = [
     "bot.cogs.party",
     "bot.cogs.admin",
     "bot.cogs.subscription",
-    "bot.cogs.invite",
     "bot.cogs.guide",
 ]
 
@@ -56,6 +55,8 @@ class LoABot(commands.Bot):
         self._api_server_task: asyncio.Task | None = None
 
     async def setup_hook(self) -> None:
+        import config
+        config.validate_required_settings()
         await db.init_db()
         await raids_module.reload()
         # PartyView 버튼(party:join/leave/waitlist/manage/switch)을 custom_id 기준으로
@@ -66,6 +67,10 @@ class LoABot(commands.Bot):
         # 다시 조회) 모든 파티 메시지의 버튼 클릭을 항상 받아낼 수 있게 하는 이중
         # 안전장치 — _restore_party_views의 embed 최신화 자체는 계속 그대로 수행한다.
         self.add_view(PartyView(total_slots=8))
+        # 대기 중인 초대 DM의 수락/거절 버튼도 재시작 뒤 살아 있도록 다시 붙인다
+        restored = await restore_invite_views(self)
+        if restored:
+            print(f"[LoABot] 초대 DM 버튼 {restored}개 복구")
         for cog in COGS:
             await self.load_extension(cog)
         await self.tree.sync()
@@ -104,8 +109,11 @@ class LoABot(commands.Bot):
             await self.process_commands(message)
             return
 
-        party = await db.get_party_by_channel(str(message.channel.id))
-        if party and party["status"] != "disbanded":
+        # 공대 댓글은 포럼 스레드에서만 생긴다 — 일반 채널/DM 메시지마다 DB를 조회하지 않는다
+        party = None
+        if not isinstance(message.channel, (discord.DMChannel, discord.TextChannel, discord.VoiceChannel)):
+            party = await db.get_party_by_channel(str(message.channel.id))
+        if party and not db.is_ended(party):
             await db.add_party_comment(
                 party["message_id"], str(message.author.id), message.author.display_name,
                 message.content, source="discord", discord_message_id=str(message.id),
@@ -211,7 +219,7 @@ class LoABot(commands.Bot):
                 await db.delete_invite(invite["message_id"], invite["discord_id"])
                 await _finalize_invite_dm(self, invite, INVITE_EXPIRED_DM_TEXT)
                 party = await db.get_party(invite["message_id"])
-                if party and party["status"] != "disbanded":
+                if party and not db.is_ended(party):
                     await _refresh_party_embed_with_reserved(self, party)
             except Exception as e:
                 print(f"[초대 만료] 정리 실패 (message_id={invite.get('message_id')}): {type(e).__name__}: {e}")
@@ -237,14 +245,32 @@ class LoABot(commands.Bot):
             except discord.HTTPException:
                 pass
 
+        # 시작 +6시간이 지났는데 클리어/취소가 안 된 공대 — 파티장에게 정리 요청 DM 1회
+        for party in await db.get_overdue_parties(now):
+            try:
+                raid_title = f"{party['raid_name']} {party['difficulty']}"
+                await _send_dm(
+                    self, party["leader_id"],
+                    f"**{raid_title}** 공대 시작 시각({party['scheduled_time']})에서 "
+                    f"{db.OVERDUE_NOTIFY_HOURS}시간이 지났습니다.\n"
+                    f"레이드를 마쳤다면 관리에서 클리어 처리를, 진행하지 않았다면 공대 취소를 해주세요.\n"
+                    f"{_party_url(party)}",
+                    kind="party_overdue", message_id=party["message_id"],
+                )
+            except Exception as e:
+                print(f"[정리 요청] 발송 실패 (message_id={party.get('message_id')}): {type(e).__name__}: {e}")
+            finally:
+                await db.mark_overdue_notified(party["message_id"])
+
         week_start = db.get_week_start_iso()
 
-        # 이전 주차 파티 자동 종료 (recruiting/full/closed → disbanded + archive)
+        # 이전 주차 파티 자동 종료 (recruiting/full/closed → expired + archive).
+        # 클리어 없이 기한이 지난 것이라 'disbanded'(클리어 등)와 구분해 'expired'로 남긴다.
+        # 스레드 삭제/purge는 ended_at 기준이라 다음 주간 리셋 때 이뤄진다.
         expired = await db.get_prev_week_active_parties(week_start)
-        just_disbanded: set[str] = set()
         for party in expired:
-            await db.disband_party(party["message_id"])
-            just_disbanded.add(party["message_id"])
+            if not await db.expire_party(party["message_id"]):
+                continue
             thread = self.get_channel(int(party["channel_id"]))
             if thread is None:
                 try:
@@ -255,14 +281,14 @@ class LoABot(commands.Bot):
                 continue
             try:
                 msg   = await thread.fetch_message(int(party["message_id"]))
-                party["status"] = "disbanded"
+                party["status"] = "expired"
                 slots = await db.get_party_slots(party["message_id"])
                 await msg.edit(embed=party_embed(party, slots), view=None)
-            except (discord.NotFound, discord.Forbidden):
+            except discord.HTTPException:
                 pass
             raid_title = f"{party['raid_name']} {party['difficulty']}"
             try:
-                await thread.send(f"🔒 **{raid_title}** 공대 모집이 자동 종료되었습니다.")
+                await thread.send(f"🔒 **{raid_title}** 공대가 클리어 처리 없이 기한이 지나 자동 종료되었습니다.")
             except discord.HTTPException:
                 pass
             try:
@@ -270,12 +296,10 @@ class LoABot(commands.Bot):
             except discord.HTTPException:
                 pass
 
-        # 이전 주차 disbanded 파티 스레드 삭제 + DB 레코드 정리
-        # (이번 사이클에 방금 disband된 파티는 제외 — 다음 주간 리셋에서 삭제)
+        # 이번 주가 시작되기 전에 끝난(disbanded/expired) 파티 스레드 삭제 + DB 레코드 정리.
+        # 끝난 시각(ended_at) 기준이라 방금 자동 종료된 파티는 다음 주간 리셋까지 남는다.
         old_disbanded = await db.get_prev_week_disbanded_parties(week_start)
         for party in old_disbanded:
-            if party["message_id"] in just_disbanded:
-                continue
             raid_title = f"{party['raid_name']} {party['difficulty']}"
             print(f"[스레드 정리] {raid_title} / channel_id={party['channel_id']}")
             # 아카이브된 스레드는 캐시에 없으므로 fetch_channel fallback 사용

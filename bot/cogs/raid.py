@@ -6,7 +6,8 @@ from discord.ui import View, Select
 import bot.api.lostark as loa
 import bot.database.manager as db
 from bot.ui.embeds import raid_checklist_embed
-from bot.ui.views import RaidChecklistView
+from bot.services.expedition import resolve_api_key_for_character as _resolve_api_key_for_character
+from bot.ui.views import PagedSelect, RaidChecklistView
 
 
 async def _extreme_status(discord_id: str) -> list[dict]:
@@ -14,17 +15,6 @@ async def _extreme_status(discord_id: str) -> list[dict]:
     from bot.api.routes.internal import _extreme_status_payload
 
     return await _extreme_status_payload(discord_id, db.get_week_key())
-
-
-async def _resolve_api_key_for_character(discord_id: str, char_name: str, fallback_key: str) -> str:
-    """캐릭터가 연결된 계정(api_key_id)의 키를 우선 사용 — 부계정 캐릭터도 올바른 키로 조회.
-    api_key_id가 없는(레거시) 캐릭터는 fallback_key(레거시 단일 키)를 그대로 사용."""
-    key_id = await db.get_character_api_key_id(discord_id, char_name)
-    if key_id is not None:
-        resolved = await db.get_user_api_key_by_id(key_id)
-        if resolved:
-            return resolved
-    return fallback_key
 
 
 async def _show_checklist(
@@ -36,7 +26,7 @@ async def _show_checklist(
     followup: bool = False,
 ) -> None:
     """캐릭터 이름으로 체크리스트를 렌더링. 캐시 우선, 없으면 API 호출."""
-    cached = {c["character_name"]: c for c in await db.get_cached_characters(discord_id)}
+    cached = {c["character_name"]: c for c in await db.get_cached_characters(discord_id, max_age_hours=99999)}
     cache  = cached.get(name)
 
     if cache and cache["item_level"] is not None:
@@ -103,7 +93,7 @@ class Raid(commands.Cog):
             return
 
         # 캐시 기반 Select 옵션 구성
-        cached  = {c["character_name"]: c for c in await db.get_cached_characters(discord_id)}
+        cached  = {c["character_name"]: c for c in await db.get_cached_characters(discord_id, max_age_hours=99999)}
         options = []
         for name in chars:
             c    = cached.get(name, {})
@@ -115,9 +105,7 @@ class Raid(commands.Cog):
         class CharSelect(View):
             def __init__(self) -> None:
                 super().__init__(timeout=60)
-                sel = Select(placeholder="체크할 캐릭터를 선택하세요", options=options)
-                sel.callback = self._on_select
-                self.add_item(sel)
+                self.add_item(PagedSelect(options, self._on_select, placeholder="체크할 캐릭터를 선택하세요"))
 
             async def _on_select(self, inter: discord.Interaction) -> None:
                 selected = inter.data["values"][0]
@@ -151,7 +139,7 @@ class Raid(commands.Cog):
         # 캐릭터가 많은 유저는 명령어 하나에 API 호출이 N번씩 발생했다. /레이드체크
         # (_show_checklist)와 동일하게, 캐시된 아이템레벨이 있으면 그대로 쓰고
         # 캐시가 없는 캐릭터만 실시간으로 보충 조회한다.
-        cached = {c["character_name"]: c for c in await db.get_cached_characters(discord_id)}
+        cached = {c["character_name"]: c for c in await db.get_cached_characters(discord_id, max_age_hours=99999)}
         extreme = await _extreme_status(discord_id)
 
         embeds: list[discord.Embed] = []

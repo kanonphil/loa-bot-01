@@ -63,12 +63,12 @@ def test_auto_join_dps_refreshes_embed_via_party_channel_id(tmp_path, monkeypatc
     _setup_db(tmp_path, monkeypatch)
 
     correct_msg = MagicMock()
+    correct_msg.edit = AsyncMock()
     correct_channel = MagicMock()
     correct_channel.fetch_message = AsyncMock(return_value=correct_msg)
     interaction, wrong_channel = _make_interaction(correct_channel)
 
     party_view = MagicMock()
-    party_view._refresh_party = AsyncMock()
 
     asyncio.run(
         views._auto_join_dps(
@@ -77,7 +77,8 @@ def test_auto_join_dps_refreshes_embed_via_party_channel_id(tmp_path, monkeypatc
         )
     )
 
-    party_view._refresh_party.assert_awaited_once_with(correct_msg)
+    # 웹 참여와 같은 공용 후처리(_after_join_core)가 party의 channel_id로 임베드를 갱신한다
+    correct_msg.edit.assert_awaited_once()
     wrong_channel.fetch_message.assert_not_called()
     correct_channel.fetch_message.assert_awaited_once_with(int(MESSAGE_ID))
 
@@ -86,12 +87,12 @@ def test_role_select_callback_refreshes_embed_via_party_channel_id(tmp_path, mon
     _setup_db(tmp_path, monkeypatch)
 
     correct_msg = MagicMock()
+    correct_msg.edit = AsyncMock()
     correct_channel = MagicMock()
     correct_channel.fetch_message = AsyncMock(return_value=correct_msg)
     interaction, wrong_channel = _make_interaction(correct_channel)
 
     party_view = MagicMock()
-    party_view._refresh_party = AsyncMock()
 
     view = views.RoleSelectView(
         LEADER_ID, {"name": "홀나부캐", "class": "홀리나이트"}, MESSAGE_ID, 8, party_view,
@@ -99,6 +100,6 @@ def test_role_select_callback_refreshes_embed_via_party_channel_id(tmp_path, mon
     support_cb = view._make_role_cb("support")
     asyncio.run(support_cb(interaction))
 
-    party_view._refresh_party.assert_awaited_once_with(correct_msg)
+    correct_msg.edit.assert_awaited_once()
     wrong_channel.fetch_message.assert_not_called()
     correct_channel.fetch_message.assert_awaited_once_with(int(MESSAGE_ID))

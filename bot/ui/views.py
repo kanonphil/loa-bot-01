@@ -22,6 +22,48 @@ from bot.services.guest import lookup_guest_character
 KST = timezone(timedelta(hours=9))
 
 
+class PagedSelect(Select):
+    """옵션이 25개(디스코드 Select 한도)를 넘으면 24개씩 끊고 마지막 칸을 "더 보기"로
+    쓰는 Select. 한도를 넘는 옵션을 그대로 넣으면 디스코드가 400을 돌려 명령 자체가
+    실패했다(캐릭터·초대 대상·구독이 많은 유저). on_select(interaction)는 기존 콜백과
+    같은 시그니처 — 고른 값은 interaction.data["values"][0]로 그대로 읽으면 된다."""
+
+    LIMIT = 25
+    MORE_VALUE = "__more__"
+
+    def __init__(self, options: list, on_select, *, placeholder: str | None = None, row: int | None = None, **kwargs) -> None:
+        self._all_options = list(options)
+        self._page = 0
+        self._on_select_cb = on_select
+        super().__init__(placeholder=placeholder, options=self._page_options(), row=row, **kwargs)
+
+    def _pages(self) -> list:
+        opts = self._all_options
+        if len(opts) <= self.LIMIT:
+            return [opts]
+        size = self.LIMIT - 1
+        return [opts[i:i + size] for i in range(0, len(opts), size)]
+
+    def _page_options(self) -> list:
+        pages = self._pages()
+        page = list(pages[self._page % len(pages)])
+        if len(pages) > 1:
+            nxt = (self._page + 1) % len(pages)
+            page.append(discord.SelectOption(
+                label=f"▼ 더 보기 ({nxt + 1}/{len(pages)} 페이지)", value=self.MORE_VALUE,
+            ))
+        return page
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        values = (interaction.data or {}).get("values") or []
+        if values and values[0] == self.MORE_VALUE:
+            self._page = (self._page + 1) % len(self._pages())
+            self.options = self._page_options()
+            await interaction.response.edit_message(view=self.view)
+            return
+        await self._on_select_cb(interaction)
+
+
 # ─────────────────────────────────────────────────────
 # 파티 초대 — 응답 뷰 (ManageView에서 사용)
 # ─────────────────────────────────────────────────────
@@ -34,7 +76,7 @@ async def _leave_party_core(bot: discord.Client, message_id: str, discord_id: st
     나가면 embed만 갱신되고 이 부수 효과들은 전혀 발생하지 않았다.
     반환: (success, 실패 사유 — 성공이면 None)."""
     party = await db.get_party(message_id)
-    if not party or party["status"] == "disbanded":
+    if db.is_ended(party):
         return False, "파티를 찾을 수 없습니다."
 
     is_leader = party["leader_id"] == discord_id
@@ -93,6 +135,67 @@ async def _leave_party_core(bot: discord.Client, message_id: str, discord_id: st
     return True, None
 
 
+async def _after_join_core(
+    bot: discord.Client, message_id: str, discord_id: str,
+    character_name: str, character_class: str, role: str,
+) -> None:
+    """참여 직후 공통 후처리 — 대기열에서 제거, 임베드 갱신(예약 슬롯 포함), 만석이면 채널
+    공지 + 파티원 웹 알림, 파티장에게 참여 DM(+웹 알림). 웹 참여 API, 디스코드 딜러 자동
+    참여(_auto_join_dps), 역할 선택(RoleSelectView)이 모두 이 함수를 쓴다 — 예전엔 세 군데에
+    각자 구현돼 있었다."""
+    await db.remove_waitlist(message_id, discord_id)
+    party = await db.get_party(message_id)
+    if not bot or not party:
+        return
+    # 임베드 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록. interaction.channel이
+    # 아니라 party의 실제 channel_id로 찾는다(공대 생성 직후 스레드 밖에서 참여하는 경우 대응).
+    await _refresh_party_embed_with_reserved(bot, party)
+    if party["status"] == "full":
+        try:
+            slots = await db.get_party_slots(message_id)
+            channel = bot.get_channel(int(party["channel_id"])) or await bot.fetch_channel(int(party["channel_id"]))
+            mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
+            await channel.send(
+                f"🎉 **{party['raid_name']} {party['difficulty']}** 파티가 완성되었습니다!\n{mentions}"
+            )
+        except Exception:
+            pass
+        await _notify_members_web(
+            message_id, "party_full", f"{party['raid_name']} {party['difficulty']} 파티가 완성되었습니다.",
+        )
+    if party["leader_id"] != discord_id:
+        raid_title = f"{party['raid_name']} {party['difficulty']}"
+        role_icon = "🛡️" if role == "support" else "⚔️"
+        await _send_dm(
+            bot, party["leader_id"],
+            f"{role_icon} **{raid_title}** 공대에 **{character_name}**({character_class})이(가) 참여했습니다!\n{_party_url(party)}",
+            kind="member_joined", message_id=message_id,
+        )
+
+
+async def _after_invite_accept_core(
+    bot: discord.Client, message_id: str, character_name: str, character_class: str,
+    role: str, *, guest: bool = False, invite_row: dict | None = None, finalize_text: str | None = None,
+) -> None:
+    """초대 수락 직후 공통 후처리 — 웹 수락(_accept_invite_core)과 디스코드 수락 버튼 경로
+    4곳(역할 선택/캐릭터 선택/캐릭터 1개 자동/게스트)이 공유. 파티장 알림을 _send_dm으로
+    보내 웹 알림함에도 남긴다(예전 디스코드 경로는 DM만 보내 웹 알림이 빠졌다)."""
+    party = await db.get_party(message_id)
+    if not bot or not party:
+        return
+    if finalize_text and invite_row:
+        await _finalize_invite_dm(bot, invite_row, finalize_text)
+    await _refresh_party_embed_with_reserved(bot, party)
+    role_text = "서포터" if role == "support" else "딜러"
+    who = f"{character_class}, 게스트" if guest else f"{character_class}/{role_text}"
+    await _send_dm(
+        bot, party["leader_id"],
+        f"✅ **{character_name}**({who})님이 **{party['raid_name']} {party['difficulty']}** 공대에 "
+        f"참여했습니다!\n{_party_url(party)}",
+        kind="member_joined", message_id=message_id,
+    )
+
+
 async def _refresh_party_embed_and_announce(
     client: discord.Client, party: dict, *, was_full: bool = False,
 ) -> None:
@@ -128,7 +231,7 @@ async def _switch_character_core(
     반환: {"success": bool, "reason": str|None, "left_other_party": message_id|None}
     """
     party = await db.get_party(message_id)
-    if not party or party["status"] == "disbanded":
+    if db.is_ended(party):
         return {"success": False, "reason": "유효하지 않은 파티입니다.", "left_other_party": None}
 
     slots = await db.get_party_slots(message_id)
@@ -200,7 +303,7 @@ async def _create_invite_core(
     err = _require_leader_or_admin(party, leader_discord_id)
     if err:
         return {"success": False, "reason": err}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 파티입니다."}
 
     # 웹 폼이 난이도 변경 전 상태로 남아 있거나 직접 POST하면 정원 밖 번호가 올 수 있다 —
@@ -273,10 +376,10 @@ async def _accept_invite_core(
     캐릭터+역할을 폼 하나로 한 번에 받는다. 참여 규칙 검증(db.get_party_join_eligibility)과
     슬롯 배정(db.assign_invite_slot)은 디스코드 경로와 동일한 함수를 그대로 쓴다."""
     party = await db.get_party(message_id)
-    if not party or party["status"] == "disbanded":
+    if db.is_ended(party):
         return {"success": False, "reason": "이미 종료된 공대입니다."}
 
-    eligibility = await db.get_party_join_eligibility(message_id, discord_id)
+    eligibility = await db.get_party_join_eligibility(message_id, discord_id, via_invite=True)
     if not eligibility["can_join"]:
         return {"success": False, "reason": eligibility["reason"]}
 
@@ -284,6 +387,8 @@ async def _accept_invite_core(
     if not match:
         return {"success": False, "reason": "참여 가능한 캐릭터 목록에 없습니다."}
 
+    if role not in ("dps", "support"):
+        role = "dps"
     if role == "support" and match["class"] not in SUPPORT_CLASSES:
         return {"success": False, "reason": f"{match['class']}은(는) 서포터 역할을 맡을 수 없습니다."}
 
@@ -292,24 +397,14 @@ async def _accept_invite_core(
     if not ok:
         return {"success": False, "reason": msg}
 
-    updated_party = await db.get_party(message_id)
-    if bot and updated_party:
-        await _finalize_invite_dm(
-            bot, invite_row,
+    await _after_invite_accept_core(
+        bot, message_id, match["name"], match["class"], role,
+        invite_row=invite_row,
+        finalize_text=(
             f"✅ (웹에서) **{match['name']}**({match['class']})로 "
-            f"**{updated_party['raid_name']} {updated_party['difficulty']}** 공대에 참여했습니다.",
-        )
-        await _refresh_party_embed_with_reserved(bot, updated_party)
-        try:
-            leader = await bot.fetch_user(int(updated_party["leader_id"]))
-            await leader.send(
-                f"✅ **{match['name']}**({match['class']})님이 "
-                f"**{updated_party['raid_name']} {updated_party['difficulty']}** 공대에 참여했습니다!\n"
-                f"{_party_url(updated_party)}"
-            )
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            pass
-
+            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다."
+        ),
+    )
     return {"success": True, "reason": None}
 
 
@@ -332,14 +427,12 @@ async def _decline_invite_core(
         if finalize_dm:
             await _finalize_invite_dm(bot, invite_row, "❌ (웹에서) 초대를 거절했습니다.")
         await _refresh_party_embed_with_reserved(bot, party)
-        try:
-            leader = await bot.fetch_user(int(party["leader_id"]))
-            await leader.send(
-                f"❌ <@{discord_id}>님이 **{party['raid_name']} {party['difficulty']}** 초대를 거절했습니다.\n"
-                f"{_party_url(party)}"
-            )
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            pass
+        await _send_dm(
+            bot, party["leader_id"],
+            f"❌ <@{discord_id}>님이 **{party['raid_name']} {party['difficulty']}** 초대를 거절했습니다.\n"
+            f"{_party_url(party)}",
+            kind="invite_declined", message_id=message_id,
+        )
 
     return {"success": True, "reason": None}
 
@@ -355,7 +448,7 @@ async def _post_comment_core(
     party = await db.get_party(message_id)
     if not party:
         return {"success": False, "reason": "파티를 찾을 수 없습니다."}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 공대라 댓글을 남길 수 없습니다."}
 
     # 웹훅 릴레이에는 세션의 전역 계정명/아바타 대신, 조회되면 서버 별명/서버 프사를 쓴다.
@@ -397,49 +490,52 @@ async def _delete_comment_core(bot: discord.Client, message_id: str, comment_id:
     return {"success": True}
 
 
-def _require_leader(party: dict | None, discord_id: str) -> str | None:
+def _require_leader(party: dict | None, discord_id: str, *, as_admin: bool = False) -> str | None:
     """파티가 없거나 리더가 아니면 에러 사유 문자열, 문제없으면 None.
-    디스코드 ⚙️관리 패널(_handle_manage)과 웹 API가 공유."""
+    디스코드 ⚙️관리 패널(_handle_manage)과 웹 API가 공유.
+    as_admin: X-API-Key 관리자 API(Electron 앱)처럼 호출 주체가 이미 관리자로 인증된
+    경로에서만 True — 요청 바디의 discord_id로는 절대 켜지지 않는다."""
     if not party:
         return "파티를 찾을 수 없습니다."
+    if as_admin:
+        return None
     if party["leader_id"] != discord_id:
         return "파티장만 사용할 수 있습니다."
     return None
 
 
-def _require_admin(discord_id: str) -> str | None:
-    """discord_id가 ADMIN_DISCORD_IDS에 없으면 에러 사유 문자열, 문제없으면 None.
-    bot/api/routes/internal.py의 동명 함수와 같은 검증 — 관리자 전용 액션(클리어
-    되돌리기)에 쓴다."""
-    import config
-    if discord_id not in config.ADMIN_DISCORD_IDS:
-        return "관리자 권한이 없습니다."
-    return None
+def _require_admin(discord_id: str, *, as_admin: bool = False) -> str | None:
+    """관리자 전용 액션(클리어 되돌리기 등) 검증 — bot.services.permissions.require_admin과 동일."""
+    if as_admin:
+        return None
+    from bot.services.permissions import require_admin
+    return require_admin(discord_id)
 
 
-def _require_leader_or_admin(party: dict | None, discord_id: str) -> str | None:
+def _require_leader_or_admin(party: dict | None, discord_id: str, *, as_admin: bool = False) -> str | None:
     """파티장이거나 관리자(ADMIN_DISCORD_IDS)면 통과 — 관리자가 파티장 없이도
     강제 마감/재개/강퇴/위임/일정변경을 대신할 수 있어야 해서 _require_leader를
     느슨하게 확장한 버전. 클리어/취소/클리어되돌리기처럼 더 신중해야 하는
     액션에는 안 쓴다(각각 리더 전용 또는 관리자 전용으로 따로 둔다)."""
     if not party:
         return "파티를 찾을 수 없습니다."
-    if party["leader_id"] == discord_id:
+    if as_admin or party["leader_id"] == discord_id:
         return None
-    import config
-    if discord_id in config.ADMIN_DISCORD_IDS:
+    if _require_admin(discord_id) is None:
         return None
     return "파티장만 사용할 수 있습니다."
 
 
-async def _close_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+async def _close_party_core(
+    bot: discord.Client, message_id: str, discord_id: str, *, as_admin: bool = False,
+) -> dict:
     """모집 마감 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도
     가능(파티장 없이 개입해야 하는 경우 대응)."""
     party = await db.get_party(message_id)
-    err = _require_leader_or_admin(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id, as_admin=as_admin)
     if err:
         return {"success": False, "reason": err}
-    if party["status"] in ("closed", "disbanded"):
+    if party["status"] == "closed" or party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "처리할 수 없는 상태입니다."}
 
     await db.close_party(message_id)
@@ -449,10 +545,12 @@ async def _close_party_core(bot: discord.Client, message_id: str, discord_id: st
     return {"success": True, "reason": None}
 
 
-async def _reopen_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+async def _reopen_party_core(
+    bot: discord.Client, message_id: str, discord_id: str, *, as_admin: bool = False,
+) -> dict:
     """모집 재개 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
-    err = _require_leader_or_admin(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id, as_admin=as_admin)
     if err:
         return {"success": False, "reason": err}
     if party["status"] != "closed":
@@ -466,15 +564,17 @@ async def _reopen_party_core(bot: discord.Client, message_id: str, discord_id: s
     return {"success": True, "reason": None}
 
 
-async def _clear_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
-    """클리어 처리(레이드 체크 자동완료 + 파티 종료) — 디스코드 관리 패널과 웹 API가 공유.
-    관리자는 파티장이 아니어도 가능(파티장이 자리를 비웠거나 놓친 경우 대응).
+async def _clear_party_core(
+    bot: discord.Client, message_id: str, discord_id: str, *, as_admin: bool = False,
+) -> dict:
+    """클리어 처리(레이드 체크 자동완료 + 파티 종료) — 디스코드 관리 패널, 웹 API, 관리자
+    API(as_admin=True)가 공유. 관리자는 파티장이 아니어도 가능.
     반환: {"success", "reason", "cleared_count"}"""
     party = await db.get_party(message_id)
-    err = _require_leader_or_admin(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id, as_admin=as_admin)
     if err:
         return {"success": False, "reason": err}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 파티입니다."}
 
     slots = await db.get_party_slots(message_id)
@@ -482,7 +582,7 @@ async def _clear_party_core(bot: discord.Client, message_id: str, discord_id: st
         return {"success": False, "reason": "파티원이 없어 클리어 처리할 수 없습니다."}
 
     count = await db.complete_raid_for_party(message_id)
-    await db.disband_party(message_id)
+    await db.disband_party(message_id, cleared=True)
     disbanded_party = {**party, "status": "disbanded"}
 
     if bot:
@@ -531,16 +631,18 @@ async def _unlock_party_thread_core(bot: discord.Client, message_id: str, discor
     return {"success": ok, "reason": reason}
 
 
-async def _admin_disband_party_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+async def _admin_disband_party_core(
+    bot: discord.Client, message_id: str, discord_id: str, *, as_admin: bool = False,
+) -> dict:
     """파티 종료(스레드 유지) — 관리자 전용(관리자 앱의 ⚫ 파티 종료). 취소(purge,
     스레드 삭제)와 달리 상태만 '종료됨'으로 바꾸고 기록과 스레드는 남긴다."""
-    err = _require_admin(discord_id)
+    err = _require_admin(discord_id, as_admin=as_admin)
     if err:
         return {"success": False, "reason": err}
     party = await db.get_party(message_id)
     if not party:
         return {"success": False, "reason": "파티를 찾을 수 없습니다."}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 파티입니다."}
 
     await db.disband_party(message_id)
@@ -588,7 +690,12 @@ async def _admin_revert_clear_core(bot: discord.Client, message_id: str, discord
     되돌리게 하면 남용 소지가 있다는 요청에 따른 것.
 
     주간 리셋으로 이미 party_history로 purge된 파티는(원본 채널 정보까지 없어져)
-    되돌릴 수 없다 — get_party가 None을 반환하므로 여기서 걸러진다."""
+    되돌릴 수 없다 — get_party가 None을 반환하므로 여기서 걸러진다.
+
+    클리어로 끝난 공대(cleared_at 기록)만 받는다 — 파티원이 모두 나가 끝났거나 관리자가
+    종료한 'disbanded', 기한 만료 'expired'는 클리어가 아니라 되돌릴 대상이 아니다.
+    완료 기록은 그 클리어가 새로 만든 행(party_clear_completions)만 지운다 — 예전엔
+    (레이드, 난이도, 주차)로 지워서 다른 공대·수동 체크로 얻은 기록까지 같이 지워졌다."""
     err = _require_admin(discord_id)
     if err:
         return {"success": False, "reason": err}
@@ -596,22 +703,13 @@ async def _admin_revert_clear_core(bot: discord.Client, message_id: str, discord
     party = await db.get_party(message_id)
     if not party:
         return {"success": False, "reason": "이미 정리된 파티라 되돌릴 수 없습니다."}
-    if party["status"] != "disbanded":
+    if party["status"] != "disbanded" or not party.get("cleared_at"):
         return {"success": False, "reason": "클리어 상태가 아닙니다."}
 
-    slots = await db.get_party_slots(message_id)
     new_status = await db.revert_disbanded_party(message_id)
     if not new_status:
         return {"success": False, "reason": "되돌리지 못했습니다."}
-
-    week = (
-        db.get_week_key_for_dt(party["scheduled_datetime"])
-        if party.get("scheduled_datetime") else db.get_week_key()
-    )
-    for s in slots:
-        await db.remove_completion(
-            s["discord_id"], s["character_name"], party["raid_name"], party["difficulty"], week
-        )
+    await db.revert_party_clear_completions(message_id)
 
     updated = await db.get_party(message_id)
     if bot and updated:
@@ -627,14 +725,16 @@ async def _admin_revert_clear_core(bot: discord.Client, message_id: str, discord
 
 
 async def _cancel_party_core(
-    bot: discord.Client, message_id: str, discord_id: str, reason: str | None
+    bot: discord.Client, message_id: str, discord_id: str, reason: str | None,
+    *, as_admin: bool = False,
 ) -> dict:
-    """파티 취소(이력만 보관하고 완전 삭제) — 디스코드 관리 패널과 웹 API가 공유."""
+    """파티 취소(이력만 보관하고 완전 삭제) — 디스코드 관리 패널과 웹 API, 관리자
+    API(as_admin=True)가 공유. DB만 지우고 스레드를 남기는 일이 없도록 스레드 삭제까지 한다."""
     party = await db.get_party(message_id)
-    err = _require_leader(party, discord_id)
+    err = _require_leader(party, discord_id, as_admin=as_admin)
     if err:
         return {"success": False, "reason": err}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 파티입니다."}
 
     slots = await db.get_party_slots(message_id)
@@ -665,7 +765,8 @@ async def _cancel_party_core(
 
 
 async def _kick_member_core(
-    bot: discord.Client, message_id: str, discord_id: str, target_discord_id: str
+    bot: discord.Client, message_id: str, discord_id: str, target_discord_id: str,
+    *, as_admin: bool = False,
 ) -> dict:
     """강제 퇴장 — 디스코드 관리 패널과 웹 API가 공유.
 
@@ -676,13 +777,28 @@ async def _kick_member_core(
     이미 종료된 파티에서 강제 퇴장을 막는 것도 디스코드에만 있던 체크라 같이 맞췄다.
     관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
-    err = _require_leader_or_admin(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id, as_admin=as_admin)
     if err:
         return {"success": False, "reason": err}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 파티입니다."}
     if target_discord_id == discord_id:
         return {"success": False, "reason": "본인은 강제 퇴장시킬 수 없습니다."}
+
+    raid_title = f"{party['raid_name']} {party['difficulty']}"
+    if target_discord_id == party["leader_id"]:
+        # 관리자가 파티장을 내보내는 경우 — 나가기와 같은 경로로 다음 파티원에게 위임
+        # (아무도 없으면 종료)해서 leader_id가 파티에 없는 사람을 가리키지 않게 한다.
+        ok, reason = await _leave_party_core(bot, message_id, target_discord_id)
+        if not ok:
+            return {"success": False, "reason": "파티원을 찾을 수 없습니다."}
+        if bot:
+            await _send_dm(
+                bot, target_discord_id,
+                f"⚠️ **{raid_title}** 공대에서 관리자에 의해 퇴장되었습니다.",
+                kind="kicked", message_id=message_id,
+            )
+        return {"success": True, "reason": None}
 
     was_full = party["status"] == "full"
     removed = await db.leave_slot(message_id, target_discord_id)
@@ -690,7 +806,6 @@ async def _kick_member_core(
         return {"success": False, "reason": "파티원을 찾을 수 없습니다."}
 
     if bot:
-        raid_title = f"{party['raid_name']} {party['difficulty']}"
         await _send_dm(
             bot, target_discord_id,
             f"⚠️ **{raid_title}** 공대에서 파티장에 의해 퇴장되었습니다.",
@@ -717,7 +832,7 @@ async def _reschedule_party_core(
     err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 파티입니다."}
     if dt_kst < datetime.now(KST):
         return {"success": False, "reason": "과거 날짜로는 변경할 수 없습니다."}
@@ -731,10 +846,6 @@ async def _reschedule_party_core(
         await _refresh_party_embed_with_reserved(bot, updated)
         try:
             channel = bot.get_channel(int(updated["channel_id"])) or await bot.fetch_channel(int(updated["channel_id"]))
-            raid_info = RAIDS.get(updated["raid_name"], {})
-            short_name = raid_info.get("short_name", updated["raid_name"])
-            new_name = f"{short_name} {updated['difficulty']} {updated['proficiency']} — {scheduled_time}"
-            await channel.edit(name=new_name)
             await channel.send(f"📅 일정이 **{scheduled_time}**으로 변경되었습니다.")
         except Exception:
             pass
@@ -752,6 +863,7 @@ async def _reschedule_party_core(
                     f"새 일정: **{scheduled_time}**{reason_text}\n{link}",
                     kind="rescheduled", message_id=message_id,
                 )
+        _rename_party_thread_later(bot, updated)
 
     return {"success": True, "reason": None, "scheduled_time": scheduled_time}
 
@@ -768,7 +880,7 @@ async def _edit_party_difficulty_core(
     err = _require_leader_or_admin(party, discord_id)
     if err:
         return {"success": False, "reason": err}
-    if party["status"] == "disbanded":
+    if party["status"] in db.ENDED_STATUSES:
         return {"success": False, "reason": "이미 종료된 파티입니다."}
 
     diff_info = get_difficulty_info(party["raid_name"], difficulty)
@@ -813,10 +925,6 @@ async def _edit_party_difficulty_core(
         await _refresh_party_embed_with_reserved(bot, updated)
         try:
             channel = bot.get_channel(int(updated["channel_id"])) or await bot.fetch_channel(int(updated["channel_id"]))
-            raid_info = RAIDS.get(updated["raid_name"], {})
-            short_name = raid_info.get("short_name", updated["raid_name"])
-            new_name = f"{short_name} {updated['difficulty']} {updated['proficiency']} — {updated['scheduled_time']}"
-            await channel.edit(name=new_name)
             await channel.send(f"🛠️ 난이도/숙련도가 **{updated['difficulty']} {updated['proficiency']}**로 변경되었습니다.")
         except Exception:
             pass
@@ -831,16 +939,58 @@ async def _edit_party_difficulty_core(
                     f"🛠️ **{raid_title}** 공대의 난이도/숙련도가 변경되었습니다.\n{link}",
                     kind="difficulty_changed", message_id=message_id,
                 )
+        _rename_party_thread_later(bot, updated)
 
     return {"success": True}
 
 
+# 백그라운드 태스크 참조 보관 — asyncio는 태스크를 약한 참조로만 들고 있어서 참조를 안
+# 잡아두면 실행 중에 가비지 컬렉션될 수 있다.
+_BACKGROUND_TASKS: set = set()
+
+
+def _spawn_background(coro, label: str):
+    """응답을 기다리게 할 필요 없는 디스코드 작업(스레드 이름 변경, 구독 DM 등)을 뒤로 돌린다.
+    실패해도 호출자에게 영향 없이 로그만 남긴다."""
+    import asyncio
+
+    async def runner():
+        try:
+            await coro
+        except Exception as e:
+            print(f"[백그라운드:{label}] 실패: {type(e).__name__}: {e}")
+
+    task = asyncio.get_running_loop().create_task(runner())
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    return task
+
+
+def _party_thread_name(party: dict) -> str:
+    raid_info = RAIDS.get(party["raid_name"], {})
+    short_name = raid_info.get("short_name", party["raid_name"])
+    return f"{short_name} {party['difficulty']} {party['proficiency']} — {party['scheduled_time']}"
+
+
+async def _rename_party_thread(bot: discord.Client, party: dict) -> None:
+    channel = bot.get_channel(int(party["channel_id"])) or await bot.fetch_channel(int(party["channel_id"]))
+    await channel.edit(name=_party_thread_name(party))
+
+
+def _rename_party_thread_later(bot: discord.Client, party: dict):
+    """스레드 이름 변경은 디스코드 한도(10분에 2회 정도)에 걸리면 수 분씩 대기한다 — 일정/난이도
+    변경 응답이 그걸 기다리다 웹 타임아웃(10초)으로 실패처럼 보이던 문제(DB는 이미 바뀐 상태).
+    DB·DM 처리를 끝낸 뒤 백그라운드로 돌린다."""
+    return _spawn_background(_rename_party_thread(bot, party), "스레드 이름 변경")
+
+
 async def _transfer_leader_core(
-    bot: discord.Client, message_id: str, discord_id: str, new_leader_discord_id: str
+    bot: discord.Client, message_id: str, discord_id: str, new_leader_discord_id: str,
+    *, as_admin: bool = False,
 ) -> dict:
     """파티장 위임 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
-    err = _require_leader_or_admin(party, discord_id)
+    err = _require_leader_or_admin(party, discord_id, as_admin=as_admin)
     if err:
         return {"success": False, "reason": err}
 
@@ -877,23 +1027,23 @@ async def _refresh_party_embed_with_reserved(client: discord.Client, party: dict
         slots    = await db.get_party_slots(party["message_id"])
         reserved = await db.get_reserved_slots(party["message_id"])
         closed   = party["status"] == "closed"
-        await msg.edit(
-            embed=_party_embed(party, slots, reserved),
-            view=PartyView(total_slots=party["total_slots"], closed=closed),
-        )
+        # 끝난 공대(disbanded/expired)에는 참여/관리 버튼을 다시 붙이지 않는다
+        view = None if db.is_ended(party) else PartyView(total_slots=party["total_slots"], closed=closed)
+        await msg.edit(embed=_party_embed(party, slots, reserved), view=view)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
 
 class InviteRoleSelectView(View):
     def __init__(self, message_id: str, party: dict, invitee_id: str,
-                 char_name: str, char_class: str) -> None:
+                 char_name: str, char_class: str, *, guest: bool = False) -> None:
         super().__init__(timeout=300)
         self.message_id = message_id
         self.party      = party
         self.invitee_id = invitee_id
         self.char_name  = char_name
         self.char_class = char_class
+        self.guest      = guest
 
         is_support = char_class in SUPPORT_CLASSES
         dps_btn = Button(label="딜러", emoji="⚔️", style=discord.ButtonStyle.secondary)
@@ -919,17 +1069,10 @@ class InviteRoleSelectView(View):
                 await interaction.response.edit_message(
                     content=f"✅ **{self.char_name}** ({role_text})로 공대에 참여했습니다!", view=None
                 )
-                party = await db.get_party(self.message_id)
-                if party:
-                    await _refresh_party_embed_with_reserved(interaction.client, party)
-                    try:
-                        leader = await interaction.client.fetch_user(int(party["leader_id"]))
-                        await leader.send(
-                            f"✅ **{self.char_name}**({self.char_class}/{role_text})님이 "
-                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}"
-                        )
-                    except discord.HTTPException:
-                        pass
+                await _after_invite_accept_core(
+                    interaction.client, self.message_id, self.char_name, self.char_class, role,
+                    guest=self.guest,
+                )
             else:
                 await interaction.response.edit_message(content=f"❌ {msg}", view=None)
             self.stop()
@@ -949,9 +1092,7 @@ class InviteCharSelectView(View):
             discord.SelectOption(label=q["name"], description=f"{q['class']} | {q['level']:.0f}", value=q["name"])
             for q in qualifying
         ]
-        sel = Select(placeholder="참여할 캐릭터를 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
+        self.add_item(PagedSelect(options, self._on_select, placeholder="참여할 캐릭터를 선택하세요"))
 
     async def _on_select(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.invitee_id:
@@ -968,48 +1109,35 @@ class InviteCharSelectView(View):
             ok, msg = await db.assign_invite_slot(self.message_id, self.invitee_id, char_name, char_info["class"], "dps")
             if ok:
                 await interaction.response.edit_message(content=f"✅ **{char_name}**으로 공대에 참여했습니다!", view=None)
-                party = await db.get_party(self.message_id)
-                if party:
-                    await _refresh_party_embed_with_reserved(interaction.client, party)
-                    try:
-                        leader = await interaction.client.fetch_user(int(party["leader_id"]))
-                        await leader.send(
-                            f"✅ **{char_name}**({char_info['class']})님이 "
-                            f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}"
-                        )
-                    except discord.HTTPException:
-                        pass
+                await _after_invite_accept_core(interaction.client, self.message_id, char_name, char_info["class"], "dps")
             else:
                 await interaction.response.edit_message(content=f"❌ {msg}", view=None)
         self.stop()
 
 
 class InviteResponseView(View):
-    def __init__(self, message_id: str, party: dict, invitee_id: str,
+    """초대 DM의 수락/거절 버튼. 영속 뷰(timeout=None + 공대별 custom_id)라 봇이 재시작돼도
+    restore_invite_views가 대기 중인 초대 DM에 다시 붙여 버튼이 살아 있다 — 예전엔 메모리
+    뷰라 재시작 뒤 버튼을 누르면 "상호작용 실패"만 떴다. 1시간 만료는 DB invited_at 기준으로
+    party_notification_task가 처리한다(뷰 timeout에 의존하지 않음)."""
+
+    def __init__(self, message_id: str, party: dict | None = None, invitee_id: str | None = None,
                  client: discord.Client | None = None) -> None:
-        super().__init__(timeout=3600)
+        super().__init__(timeout=None)
         self.message_id = message_id
         self.party      = party
         self.invitee_id = invitee_id
         self._client    = client
-
-    async def on_timeout(self) -> None:
-        invite_row = await db.get_invite(self.message_id, self.invitee_id)
-        await db.delete_invite(self.message_id, self.invitee_id)
-        # 초대 만료 시 파티 embed의 예약 슬롯 표시 제거 + DM의 수락/거절 버튼 정리
-        if self._client:
-            await _finalize_invite_dm(self._client, invite_row, INVITE_EXPIRED_DM_TEXT)
-            party = await db.get_party(self.message_id)
-            if party:
-                await _refresh_party_embed_with_reserved(self._client, party)
+        self.accept.custom_id  = f"invite:accept:{message_id}"
+        self.decline.custom_id = f"invite:decline:{message_id}"
 
     @discord.ui.button(label="수락", style=discord.ButtonStyle.success, emoji="✅")
     async def accept(self, interaction: discord.Interaction, button: Button) -> None:
-        if str(interaction.user.id) != self.invitee_id:
+        if self.invitee_id is not None and str(interaction.user.id) != self.invitee_id:
             await interaction.response.send_message("본인만 응답할 수 있습니다.", ephemeral=True)
             return
         party = await db.get_party(self.message_id)
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="❌ 이미 종료된 공대입니다.", view=None)
             self.stop()
             return
@@ -1027,7 +1155,7 @@ class InviteResponseView(View):
         # 일반 "참여하기" 버튼과 동일한 단일 로직(db.get_party_join_eligibility)으로
         # 검증한다 — 이전에는 여기서 최소 레벨만 확인해서, 초대를 통하면 이 규칙들을
         # 전부 우회해 참여할 수 있는 구멍이 있었다.
-        result = await db.get_party_join_eligibility(self.message_id, discord_id)
+        result = await db.get_party_join_eligibility(self.message_id, discord_id, via_invite=True)
         if not result["can_join"]:
             await interaction.response.edit_message(content=f"❌ {result['reason']}", view=None)
             self.stop()
@@ -1063,12 +1191,7 @@ class InviteResponseView(View):
                 ok, msg = await db.assign_invite_slot(self.message_id, discord_id, q["name"], q["class"], "dps")
                 if ok:
                     await interaction.response.edit_message(content=f"✅ **{q['name']}**으로 공대에 참여했습니다!", view=None)
-                    await _refresh_party_embed_with_reserved(interaction.client, party)
-                    try:
-                        leader = await interaction.client.fetch_user(int(party["leader_id"]))
-                        await leader.send(f"✅ **{q['name']}**({q['class']})님이 **{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}")
-                    except discord.HTTPException:
-                        pass
+                    await _after_invite_accept_core(interaction.client, self.message_id, q["name"], q["class"], "dps")
                 else:
                     await interaction.response.edit_message(content=f"❌ {msg}", view=None)
         else:
@@ -1078,12 +1201,27 @@ class InviteResponseView(View):
 
     @discord.ui.button(label="거절", style=discord.ButtonStyle.danger, emoji="❌")
     async def decline(self, interaction: discord.Interaction, button: Button) -> None:
-        if str(interaction.user.id) != self.invitee_id:
+        if self.invitee_id is not None and str(interaction.user.id) != self.invitee_id:
             await interaction.response.send_message("본인만 응답할 수 있습니다.", ephemeral=True)
             return
-        await _decline_invite_core(interaction.client, self.message_id, self.invitee_id, finalize_dm=False)
+        await _decline_invite_core(interaction.client, self.message_id, str(interaction.user.id), finalize_dm=False)
         await interaction.response.edit_message(content="❌ 초대를 거절했습니다.", view=None)
         self.stop()
+
+
+async def restore_invite_views(bot) -> int:
+    """대기 중인 초대 DM마다 InviteResponseView를 다시 등록(봇 재시작 대비). 반환: 등록 수."""
+    count = 0
+    for inv in await db.get_pending_invites_with_dm():
+        try:
+            bot.add_view(
+                InviteResponseView(inv["message_id"], None, inv["discord_id"], client=bot),
+                message_id=int(inv["dm_message_id"]),
+            )
+            count += 1
+        except (ValueError, TypeError):
+            continue
+    return count
 
 
 class InviteSlotSelectView(View):
@@ -1159,11 +1297,10 @@ class InviteUserSelectView(View):
                 description=u["discord_id"],
                 value=u["discord_id"],
             )
-            for u in users[:25]
+            for u in users
         ]
-        sel = Select(placeholder="초대할 유저를 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
+        # 예전엔 users[:25]로 잘라 26번째 이후 유저는 초대할 방법이 없었다
+        self.add_item(PagedSelect(options, self._on_select, placeholder="초대할 유저를 선택하세요"))
 
     async def _on_select(self, interaction: discord.Interaction) -> None:
         target_id   = interaction.data["values"][0]
@@ -1234,6 +1371,16 @@ class GuestCharacterNameModal(Modal, title="게스트 캐릭터 확인"):
             await interaction.followup.send(f"❌ {info['error']}")
             return
 
+        # 익스트림 원정대 주 1회 규칙은 게스트에게도 똑같이(예전엔 게스트 경로만 확인이 없었다)
+        party_now = await db.get_party(self.message_id)
+        if db.is_ended(party_now):
+            await interaction.followup.send("❌ 이미 종료된 공대입니다.")
+            return
+        block = await db.get_extreme_join_block_reason(self.invitee_id, party_now)
+        if block:
+            await interaction.followup.send(f"❌ {block}")
+            return
+
         min_level = self.party.get("min_level") or 0
         if min_level and info["item_level"] < min_level:
             await interaction.followup.send(
@@ -1251,7 +1398,7 @@ class GuestCharacterNameModal(Modal, title="게스트 캐릭터 확인"):
         if info["character_class"] in SUPPORT_CLASSES:
             view = InviteRoleSelectView(
                 self.message_id, self.party, self.invitee_id,
-                info["character_name"], info["character_class"],
+                info["character_name"], info["character_class"], guest=True,
             )
             await interaction.followup.send(header + "역할을 선택하세요:", view=view)
             return
@@ -1265,17 +1412,10 @@ class GuestCharacterNameModal(Modal, title="게스트 캐릭터 확인"):
             return
 
         await interaction.followup.send(header + "게스트로 공대에 참여했습니다!")
-        party = await db.get_party(self.message_id)
-        if party:
-            await _refresh_party_embed_with_reserved(interaction.client, party)
-            try:
-                leader = await interaction.client.fetch_user(int(party["leader_id"]))
-                await leader.send(
-                    f"✅ **{info['character_name']}**({info['character_class']}, 게스트)님이 "
-                    f"**{party['raid_name']} {party['difficulty']}** 공대에 참여했습니다!\n{_party_url(party)}"
-                )
-            except discord.HTTPException:
-                pass
+        await _after_invite_accept_core(
+            interaction.client, self.message_id, info["character_name"], info["character_class"], "dps",
+            guest=True,
+        )
 
 
 # ─────────────────────────────────────────────────────
@@ -1298,6 +1438,21 @@ def _web_text(content: str) -> str:
     return " ".join(lines)
 
 
+async def _get_user(client: discord.Client, discord_id: str):
+    """캐시(get_user)에 있으면 API 호출 없이, 없을 때만 fetch_user — DM마다 fetch_user로
+    디스코드 API를 한 번씩 더 부르던 낭비를 줄인다."""
+    getter = getattr(client, "get_user", None)
+    user = None
+    if callable(getter):
+        try:
+            user = getter(int(discord_id))
+        except Exception:
+            user = None
+    if not isinstance(user, (discord.User, discord.Member)):
+        user = await client.fetch_user(int(discord_id))
+    return user
+
+
 async def _send_dm(
     client: discord.Client, discord_id: str, content: str,
     *, kind: str = "dm", message_id: str | None = None,
@@ -1305,7 +1460,7 @@ async def _send_dm(
     """디스코드 DM + 같은 내용을 웹 알림함에도 남긴다(DM이 막혀 있어도 웹에는 남도록
     DM 성공 여부와 무관하게 기록)."""
     try:
-        user = await client.fetch_user(int(discord_id))
+        user = await _get_user(client, discord_id)
         await user.send(content)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
@@ -1407,25 +1562,19 @@ def validate_party_schedule(dt: datetime, raid_info: dict) -> str | None:
         return "❌ 과거 날짜로는 설정할 수 없습니다."
 
     if raid_info.get("is_extreme"):
-        avail_from  = raid_info.get("available_from")
-        avail_until = raid_info.get("available_until")
-        if avail_from:
-            try:
-                from_dt = datetime.fromisoformat(avail_from)
-                if dt < from_dt:
-                    return (
-                        f"❌ 이 익스트림 레이드는 **{from_dt.month}/{from_dt.day}**부터 진행 가능합니다.\n"
-                        f"공대 모집은 가능하지만 일정은 그 이후로 잡아주세요."
-                    )
-            except ValueError:
-                pass
-        if avail_until:
-            try:
-                until_dt = datetime.fromisoformat(avail_until)
-                if dt > until_dt:
-                    return f"❌ 이 익스트림 레이드는 **{until_dt.month}/{until_dt.day}**까지 진행 가능합니다."
-            except ValueError:
-                pass
+        from bot.data.raids import _parse_aware
+
+        # naive로 저장된 기간 값은 KST로 간주 — aware인 dt와 비교하다 TypeError(잡지 않던
+        # 예외)로 모달/웹 개설이 통째로 실패하던 문제
+        from_dt = _parse_aware(raid_info.get("available_from"))
+        until_dt = _parse_aware(raid_info.get("available_until"))
+        if from_dt and dt < from_dt:
+            return (
+                f"❌ 이 익스트림 레이드는 **{from_dt.month}/{from_dt.day}**부터 진행 가능합니다.\n"
+                f"공대 모집은 가능하지만 일정은 그 이후로 잡아주세요."
+            )
+        if until_dt and dt > until_dt:
+            return f"❌ 이 익스트림 레이드는 **{until_dt.month}/{until_dt.day}**까지 진행 가능합니다."
 
     return None
 
@@ -1489,27 +1638,21 @@ class RaidChecklistView(View):
         self.clear_items()
         applicable = get_applicable_raids(self.item_level)
 
-        # 카테고리별 그룹 → 각 카테고리를 하나의 버튼 행으로
-        by_cat: dict[str, list] = {}
-        for raid_name, diff_name, _ in applicable:
-            cat = RAIDS[raid_name]["category"]
-            by_cat.setdefault(cat, []).append((raid_name, diff_name))
-
-        for row_idx, (_, raids) in enumerate(by_cat.items()):
-            if row_idx > 4:
-                break
-            for raid_name, diff_name in raids:
-                key  = f"{raid_name}_{diff_name}"
-                done = key in self.completions
-                short = RAIDS[raid_name].get("short_name", raid_name)
-                btn = Button(
-                    label=f"{short} {diff_name}",
-                    emoji="✅" if done else "⬜",
-                    style=discord.ButtonStyle.success if done else discord.ButtonStyle.secondary,
-                    row=row_idx,
-                )
-                btn.callback = self._make_toggle(raid_name, diff_name, key)
-                self.add_item(btn)
+        # 카테고리 순서(RAIDS 순서)대로 한 줄에 5개씩, 최대 25개(디스코드 한도: 5행×5개).
+        # 예전엔 카테고리 하나를 한 행에 몰아 넣어서, 한 카테고리에 (레이드×난이도)가 5개를
+        # 넘으면 ValueError로 뷰 생성 자체가 실패했고 6번째 카테고리부터는 조용히 빠졌다.
+        for idx, (raid_name, diff_name, _) in enumerate(applicable[:25]):
+            key  = f"{raid_name}_{diff_name}"
+            done = key in self.completions
+            short = RAIDS[raid_name].get("short_name", raid_name)
+            btn = Button(
+                label=f"{short} {diff_name}",
+                emoji="✅" if done else "⬜",
+                style=discord.ButtonStyle.success if done else discord.ButtonStyle.secondary,
+                row=idx // 5,
+            )
+            btn.callback = self._make_toggle(raid_name, diff_name, key)
+            self.add_item(btn)
 
     def _make_toggle(self, raid_name: str, diff_name: str, key: str):
         async def cb(interaction: discord.Interaction) -> None:
@@ -1644,12 +1787,10 @@ class RemoveCharacterView(View):
         super().__init__(timeout=60)
         self.discord_id = discord_id
         self.expedition_message = expedition_message
-        sel = Select(
-            placeholder="삭제할 캐릭터 선택",
-            options=[discord.SelectOption(label=c, value=c) for c in characters],
-        )
-        sel.callback = self._on_select
-        self.add_item(sel)
+        self.add_item(PagedSelect(
+            [discord.SelectOption(label=c, value=c) for c in characters],
+            self._on_select, placeholder="삭제할 캐릭터 선택",
+        ))
 
     async def _on_select(self, interaction: discord.Interaction) -> None:
         name    = interaction.data["values"][0]
@@ -2046,7 +2187,29 @@ async def _create_party_core(
     memo: str | None = None,
 ) -> dict:
     """공대 생성 핵심 로직 — 디스코드 명령어(/공대모집)와 웹 API가 공유.
-    interaction 없이 bot 인스턴스만으로 동작해서 웹에서 트리거해도 그대로 쓸 수 있다."""
+    interaction 없이 bot 인스턴스만으로 동작해서 웹에서 트리거해도 그대로 쓸 수 있다.
+
+    같은 파티장의 생성 요청은 파티장별 락으로 한 번에 하나씩 처리한다 — 중복 확인이 스레드
+    생성 전이고 DB 저장은 스레드 생성 뒤라, 두 요청이 동시에 오면 둘 다 중복 없음으로 보고
+    스레드를 두 개 만들었다. DB 저장이 실패하면 방금 만든 스레드를 지워 고아 스레드를 남기지
+    않고, 구독자 DM은 응답을 붙잡지 않도록 백그라운드로 보낸다(웹 20초 타임아웃)."""
+    import asyncio
+
+    lock = _create_party_locks.setdefault(leader_id, asyncio.Lock())
+    async with lock:
+        return await _create_party_locked(
+            bot, guild_id, leader_id, forum_channel_id, raid_name, difficulty, proficiency,
+            scheduled_time, scheduled_datetime, memo,
+        )
+
+
+_create_party_locks: dict = {}
+
+
+async def _create_party_locked(
+    bot, guild_id: str, leader_id: str, forum_channel_id: str, raid_name: str, difficulty: str,
+    proficiency: str, scheduled_time: str, scheduled_datetime: str | None, memo: str | None,
+) -> dict:
     # 응답이 느릴 때 폼 재제출/더블클릭으로 같은 조건의 파티가 짧은 시간 안에 다시
     # 요청되면, 스레드를 또 만들지 않고 방금 만든 파티를 그대로 반환한다
     # (정상 스레드 + 빈 스레드가 함께 생기던 증상의 원인).
@@ -2079,25 +2242,49 @@ async def _create_party_core(
     thread_name = f"{short_name} {difficulty} {proficiency} — {scheduled_time}"
     thread, starter_msg = await forum.create_thread(name=thread_name, embed=embed, view=view)
 
-    await db.create_party(
-        message_id=str(starter_msg.id), channel_id=str(thread.id),
-        guild_id=guild_id, leader_id=leader_id,
-        raid_name=raid_name, difficulty=difficulty, proficiency=proficiency,
-        scheduled_time=scheduled_time, scheduled_datetime=scheduled_datetime,
-        total_slots=total_slots, min_level=min_level, memo=memo,
-    )
+    try:
+        await db.create_party(
+            message_id=str(starter_msg.id), channel_id=str(thread.id),
+            guild_id=guild_id, leader_id=leader_id,
+            raid_name=raid_name, difficulty=difficulty, proficiency=proficiency,
+            scheduled_time=scheduled_time, scheduled_datetime=scheduled_datetime,
+            total_slots=total_slots, min_level=min_level, memo=memo,
+        )
+    except Exception:
+        # DB에 못 남긴 스레드는 버튼이 전부 "유효하지 않은 파티"가 되는 고아 — 지운다
+        try:
+            await thread.delete()
+        except Exception:
+            pass
+        raise
 
     # 실제 message_id 기반 embed 갱신
     party = await db.get_party(str(starter_msg.id))
-    await starter_msg.edit(embed=party_embed(party, []), view=view)
+    try:
+        await starter_msg.edit(embed=party_embed(party, []), view=view)
+    except discord.HTTPException:
+        pass
 
-    # 구독자 DM 발송 (생성자·이미 해당 레이드 참여 중인 유저 제외)
+    _spawn_background(
+        _notify_new_party_subscribers(
+            bot, guild_id, leader_id, raid_name, difficulty, proficiency,
+            scheduled_time, scheduled_datetime, str(thread.id), str(starter_msg.id),
+        ),
+        "구독자 DM",
+    )
+    return party
+
+
+async def _notify_new_party_subscribers(
+    bot, guild_id: str, leader_id: str, raid_name: str, difficulty: str, proficiency: str,
+    scheduled_time: str, scheduled_datetime: str | None, thread_id: str, new_msg_id: str,
+) -> None:
+    """새 공대 구독자 DM 발송 (생성자·이미 해당 레이드 참여 중인 유저 제외)."""
     subscribers = await db.get_raid_subscribers(raid_name, difficulty)
     if subscribers:
         # 이번 주 해당 레이드에 이미 참여 중인 유저 집합
         party_week_key = db.get_week_key_for_dt(scheduled_datetime) if scheduled_datetime else db.get_week_key()
         already_in: set[str] = set()
-        new_msg_id = str(starter_msg.id)
         for sub_id in subscribers:
             slots = await db.get_user_active_slots_in_raid(sub_id, raid_name, new_msg_id, party_week_key)
             if slots:
@@ -2105,20 +2292,18 @@ async def _create_party_core(
 
         dm_embed = discord.Embed(
             title=f"🔔 {raid_name} {difficulty} 새 공대가 모집을 시작했습니다!",
-            url=f"https://discord.com/channels/{guild_id}/{thread.id}/{starter_msg.id}",
+            url=f"https://discord.com/channels/{guild_id}/{thread_id}/{new_msg_id}",
             description=f"숙련도: **{proficiency}** | 일정: **{scheduled_time}**",
             color=0x3498DB,
         )
         for sub_id in subscribers:
             if sub_id != leader_id and sub_id not in already_in:
                 try:
-                    user = await bot.fetch_user(int(sub_id))
+                    user = await _get_user(bot, sub_id)
                     await user.send(embed=dm_embed)
                 except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                     pass
                 await db.log_notification(sub_id, raid_name, difficulty, new_msg_id)
-
-    return party
 
 
 async def _post_party(
@@ -2205,34 +2390,12 @@ async def _auto_join_dps(
         await interaction.response.send_message(result, ephemeral=True)
 
     if ok:
-        await db.remove_waitlist(message_id, discord_id)
-        party_info = await db.get_party(message_id)
-        # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록.
-        # interaction.channel이 아니라 party의 실제 channel_id로 채널을 가져와야 한다 —
-        # 공대 생성 직후 리더가 바로 참여할 때처럼 interaction이 스레드 밖(명령어를
-        # 실행한 채널)에서 온 경우 interaction.channel은 그 스레드가 아니라서
-        # fetch_message가 조용히 실패해 embed가 안 갱신되는 버그가 있었다(리더는
-        # DB엔 정상 참여됐지만 화면엔 안 보이다가, 다른 사람이 스레드 안에서 참여
-        # 버튼을 눌러야 그제서야 함께 나타남).
-        # party_info가 None일 수 있다(참여 직후 파티가 곧바로 purge된 극히 드문
-        # 경쟁 상황) — 그 경우 embed 갱신과 리더 DM 모두 건너뛴다.
-        if party_info:
-            try:
-                channel = interaction.client.get_channel(int(party_info["channel_id"]))
-                if channel is None:
-                    channel = await interaction.client.fetch_channel(int(party_info["channel_id"]))
-                msg = await channel.fetch_message(int(message_id))
-                await party_view._refresh_party(msg)
-            except discord.HTTPException:
-                pass
-        if party_info and party_info["leader_id"] != discord_id:
-            raid_title = f"{party_info['raid_name']} {party_info['difficulty']}"
-            link = _party_url(party_info)
-            await _send_dm(
-                interaction.client, party_info["leader_id"],
-                f"⚔️ **{raid_title}** 공대에 **{char_info['name']}**({char_info['class']})이(가) 참여했습니다!\n{link}",
-                kind="member_joined", message_id=party_info["message_id"],
-            )
+        # 웹 참여 API와 같은 후처리(대기열 제거·임베드·만석 공지·파티장 DM).
+        # 임베드는 interaction.channel이 아니라 party의 실제 channel_id로 찾는다 — 공대 생성
+        # 직후 리더가 스레드 밖에서 바로 참여하면 interaction.channel은 그 스레드가 아니다.
+        await _after_join_core(
+            interaction.client, message_id, discord_id, char_info["name"], char_info["class"], "dps",
+        )
 
 
 # ─────────────────────────────────────────────────────
@@ -2386,66 +2549,34 @@ class PartyView(View):
 
     async def _handle_leave(self, interaction: discord.Interaction) -> None:
         party = await db.get_party_by_channel(str(interaction.channel.id))
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
 
-        message_id    = party["message_id"]
-        discord_id    = str(interaction.user.id)
-        is_leader     = party["leader_id"] == discord_id
-        was_full      = party["status"] == "full"
+        message_id = party["message_id"]
+        discord_id = str(interaction.user.id)
 
-        removed = await db.leave_slot(message_id, discord_id)
-        if not removed:
-            await interaction.response.send_message("파티에 참여하지 않았습니다.", ephemeral=True)
+        # 웹 API와 같은 _leave_party_core — 파티장 위임/전원 이탈 종료/빈자리 공지·대기열 알림까지
+        # 한 곳에서 처리한다(예전엔 여기 따로 구현돼 있어 결과가 어긋날 수 있었다).
+        # 임베드 편집·채널 공지 등 디스코드 호출이 여러 번이라 먼저 defer로 응답을 확보한다.
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        ok, reason = await _leave_party_core(interaction.client, message_id, discord_id)
+        if not ok:
+            await interaction.followup.send(reason or "파티에 참여하지 않았습니다.", ephemeral=True)
             return
-
-        # 파티장이 나가면 다음 참여자에게 리더십 양도
-        if is_leader:
-            remaining = await db.get_party_slots(message_id)
-            if remaining:
-                new_leader = remaining[0]["discord_id"]
-                await db.transfer_leader(message_id, new_leader)
-                await interaction.response.send_message(
-                    f"파티에서 나갔습니다. <@{new_leader}>님이 새 파티장이 되었습니다.", ephemeral=True
-                )
-                await interaction.channel.send(
-                    f"👑 **파티장 변경** — <@{new_leader}>님이 새 파티장이 되었습니다."
-                )
-                # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록
-                await self._refresh_party(interaction.message, was_full=was_full, client=interaction.client)
-                await _send_dm(
-                    interaction.client, new_leader,
-                    f"👑 **{party['raid_name']} {party['difficulty']}** 공대의 파티장이 되었습니다!\n{_party_url(party)}",
-                    kind="leader_transferred", message_id=party["message_id"],
-                )
-                return
-            else:
-                # 마지막 멤버였으면 파티 자동 종료
-                await db.disband_party(message_id)
-                party["status"] = "disbanded"
-                slots = await db.get_party_slots(message_id)
-                from bot.ui.embeds import party_embed
-                await interaction.response.edit_message(embed=party_embed(party, slots), view=None)
-                raid_title = f"{party['raid_name']} {party['difficulty']}"
-                await interaction.channel.send(
-                    f"🔒 **{raid_title}** 파티원이 모두 나가 공대가 종료되었습니다."
-                )
-                try:
-                    await interaction.channel.edit(archived=True, locked=True)
-                except discord.HTTPException:
-                    pass
-                return
+        updated = await db.get_party(message_id)
+        if updated and updated["leader_id"] != party["leader_id"] and party["leader_id"] == discord_id:
+            await interaction.followup.send(
+                f"파티에서 나갔습니다. <@{updated['leader_id']}>님이 새 파티장이 되었습니다.", ephemeral=True
+            )
         else:
-            await interaction.response.send_message("파티에서 나갔습니다.", ephemeral=True)
-
-        await self._refresh_party(interaction.message, was_full=was_full, client=interaction.client)
+            await interaction.followup.send("파티에서 나갔습니다.", ephemeral=True)
 
     # ── 관리 패널 오픈 ───────────────────────────────
 
     async def _handle_manage(self, interaction: discord.Interaction) -> None:
         party = await db.get_party_by_channel(str(interaction.channel.id))
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
         # 패널 안의 모든 액션이 _require_leader_or_admin이라 진입도 같은 기준으로 —
@@ -2464,7 +2595,7 @@ class PartyView(View):
 
     async def _handle_switch_character(self, interaction: discord.Interaction) -> None:
         party = await db.get_party_by_channel(str(interaction.channel.id))
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
 
@@ -2497,7 +2628,7 @@ class PartyView(View):
 
     async def _handle_switch_role(self, interaction: discord.Interaction) -> None:
         party = await db.get_party_by_channel(str(interaction.channel.id))
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
 
@@ -2520,7 +2651,7 @@ class PartyView(View):
 
     async def _handle_waitlist(self, interaction: discord.Interaction) -> None:
         party = await db.get_party_by_channel(str(interaction.channel.id))
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.send_message("유효하지 않은 파티입니다.", ephemeral=True)
             return
         discord_id = str(interaction.user.id)
@@ -2546,42 +2677,6 @@ class PartyView(View):
                 "🔔 빈자리가 생기면 DM으로 알려드립니다.", ephemeral=True
             )
 
-    # ── 공통 갱신 ───────────────────────────────────
-
-    async def _refresh_party(
-        self, message: discord.Message, *, was_full: bool = False,
-        client: discord.Client | None = None,
-    ) -> None:
-        party = await db.get_party_by_channel(str(message.channel.id))
-        if not party:
-            return
-        slots = await db.get_party_slots(party["message_id"])
-
-        from bot.ui.embeds import party_embed
-        reserved = await db.get_reserved_slots(party["message_id"])
-        embed = party_embed(party, slots, reserved)
-        if party["status"] == "disbanded":
-            await message.edit(embed=embed, view=None)
-            return
-        view  = PartyView(total_slots=self.total_slots, closed=(party["status"] == "closed"))
-        await message.edit(embed=embed, view=view)
-
-        if party["status"] == "full":
-            mentions = " ".join(f"<@{s['discord_id']}>" for s in slots)
-            await message.channel.send(
-                f"🎉 **{party['raid_name']} {party['difficulty']}** 파티가 완성되었습니다!\n{mentions}"
-            )
-            await _notify_members_web(
-                party["message_id"], "party_full", f"{party['raid_name']} {party['difficulty']} 파티가 완성되었습니다.",
-            )
-        elif was_full and party["status"] == "recruiting":
-            raid_title = f"{party['raid_name']} {party['difficulty']} {party['proficiency']}"
-            await message.channel.send(
-                f"📢 **{raid_title}** 파티에 빈 자리가 생겼습니다! "
-                f"`{len(slots)}/{party['total_slots']}`"
-            )
-            if client:
-                await _notify_waitlist(client, party)
 
 
 # ─────────────────────────────────────────────────────
@@ -2638,7 +2733,7 @@ class PartyGroupSelectView(View):
                 await interaction.response.send_message("본인만 선택할 수 있습니다.", ephemeral=True)
                 return
             party = await db.get_party(self.message_id)
-            if not party or party["status"] == "disbanded":
+            if db.is_ended(party):
                 await interaction.response.edit_message(content="❌ 파티가 이미 종료되었습니다.", view=None)
                 return
             if party["status"] == "closed":
@@ -2696,9 +2791,7 @@ class CharSelectView(View):
             )
             for q in qualifying
         ]
-        sel = Select(placeholder="참여할 캐릭터를 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
+        self.add_item(PagedSelect(options, self._on_select, placeholder="참여할 캐릭터를 선택하세요"))
 
     async def on_timeout(self) -> None:
         if self.message:
@@ -2715,7 +2808,7 @@ class CharSelectView(View):
         char_info = self.char_map[char_name]
 
         party = await db.get_party(self.message_id)
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="❌ 파티가 이미 종료되었습니다.", view=None)
             return
         if party["status"] == "closed":
@@ -2783,9 +2876,7 @@ class CharacterSwitchSelectView(View):
             )
             for c in candidates
         ]
-        sel = Select(placeholder="변경할 캐릭터를 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
+        self.add_item(PagedSelect(options, self._on_select, placeholder="변경할 캐릭터를 선택하세요"))
 
     async def on_timeout(self) -> None:
         if self.message:
@@ -2916,7 +3007,7 @@ class RoleSelectView(View):
 
             # 역할 선택 시점에 party 상태 재확인
             party = await db.get_party(self.message_id)
-            if not party or party["status"] == "disbanded":
+            if db.is_ended(party):
                 await interaction.response.edit_message(content="❌ 파티가 이미 종료되었습니다.", view=None)
                 return
             if party["status"] == "closed":
@@ -2942,26 +3033,9 @@ class RoleSelectView(View):
                 ),
                 view=None,
             )
-            await db.remove_waitlist(self.message_id, self.discord_id)
-            # embed 갱신을 리더 DM보다 먼저 — Discord 클라이언트가 즉시 반영하도록.
-            # interaction.channel이 아니라 party의 실제 channel_id를 써야 한다
-            # (공대 생성 직후 리더 참여처럼 interaction이 스레드 밖에서 온 경우 대응).
-            try:
-                channel = interaction.client.get_channel(int(party["channel_id"]))
-                if channel is None:
-                    channel = await interaction.client.fetch_channel(int(party["channel_id"]))
-                msg = await channel.fetch_message(int(self.message_id))
-                await self.party_view._refresh_party(msg)
-            except discord.HTTPException:
-                pass
-            if party and party["leader_id"] != self.discord_id:
-                raid_title = f"{party['raid_name']} {party['difficulty']}"
-                role_icon = "🛡️" if role == "support" else "⚔️"
-                await _send_dm(
-                    interaction.client, party["leader_id"],
-                    f"{role_icon} **{raid_title}** 공대에 **{char['name']}**({char['class']})이(가) 참여했습니다!\n{_party_url(party)}",
-                    kind="member_joined", message_id=party["message_id"],
-                )
+            await _after_join_core(
+                interaction.client, self.message_id, self.discord_id, char["name"], char["class"], role,
+            )
         return cb
 
 
@@ -3024,7 +3098,7 @@ class DifficultyEditView(View):
         label = f"{self.selected_difficulty} {self.selected_proficiency}"
         if self.original_message:
             post_party = await db.get_party(self.party["message_id"])
-            if post_party and post_party["status"] != "disbanded":
+            if post_party and not db.is_ended(post_party):
                 manage_view = ManageView(post_party, self.original_message, post_party["total_slots"])
                 await interaction.edit_original_response(
                     content=f"✅ 난이도/숙련도가 **{label}**로 변경되었습니다.", view=manage_view,
@@ -3076,7 +3150,7 @@ class KickSelectView(View):
         # 관리 패널로 복귀
         if self.original_message:
             post_party = await db.get_party(self.message_id)
-            if post_party and post_party["status"] != "disbanded":
+            if post_party and not db.is_ended(post_party):
                 manage_view = ManageView(post_party, self.original_message, post_party["total_slots"])
                 await interaction.edit_original_response(
                     content=f"✅ **{char_name}**을(를) 강제 퇴장시켰습니다.",
@@ -3221,7 +3295,7 @@ class ManageView(View):
 
     async def _handle_cancel(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
         await interaction.response.send_modal(CancelModal(party))
@@ -3230,7 +3304,7 @@ class ManageView(View):
 
     async def _handle_kick(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
         slots    = await db.get_party_slots(party["message_id"])
@@ -3245,7 +3319,7 @@ class ManageView(View):
 
     async def _handle_reschedule(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
         await interaction.response.send_modal(ScheduleChangeModal(party))
@@ -3254,7 +3328,7 @@ class ManageView(View):
 
     async def _handle_invite(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
 
@@ -3280,7 +3354,7 @@ class ManageView(View):
 
     async def _handle_guest_invite(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
 
@@ -3300,7 +3374,7 @@ class ManageView(View):
 
     async def _handle_delegate(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
         slots     = await db.get_party_slots(party["message_id"])
@@ -3315,7 +3389,7 @@ class ManageView(View):
 
     async def _handle_edit_difficulty(self, interaction: discord.Interaction) -> None:
         party = await db.get_party(self.party["message_id"])
-        if not party or party["status"] == "disbanded":
+        if db.is_ended(party):
             await interaction.response.edit_message(content="이미 종료된 파티입니다.", view=None)
             return
         view = DifficultyEditView(party, self.original_message, self.total_slots)

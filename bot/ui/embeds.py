@@ -303,6 +303,9 @@ def party_embed(party: dict, slots: list[dict], reserved: dict[int, str] | None 
     elif status == "closed":
         color      = 0xE67E22
         status_text = "🔴 모집 마감"
+    elif status == "expired":
+        color      = 0x95A5A6
+        status_text = "⚫ 기한 만료"
     else:
         color      = 0x95A5A6
         status_text = "⚫ 모집 종료"

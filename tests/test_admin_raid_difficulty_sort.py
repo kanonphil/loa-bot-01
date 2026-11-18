@@ -49,32 +49,17 @@ def test_difficulties_keep_insertion_order_not_alphabetical(client):
     assert list(resp.json().keys()) == ["노말", "하드", "나이트메어"]
 
 
-def test_sort_difficulty_updates_order(client):
-    for diff, level in [("노말", 1600), ("하드", 1620), ("나이트메어", 1640)]:
-        client.post(
-            f"/api/raids/{RAID_NAME}/difficulties",
-            json={"difficulty": diff, "min_level": level, "total_slots": 8, "gates": 1},
-            headers=HEADERS,
-        )
-
-    # "나이트메어"를 맨 앞으로 끌어올림 (sort_order 0)
-    resp = client.patch(
-        f"/api/raids/{RAID_NAME}/difficulties/나이트메어/sort",
-        json={"sort_order": 0},
-        headers=HEADERS,
-    )
-    assert resp.json() == {"success": True}
-
-    resp = client.get(f"/api/raids/{RAID_NAME}/difficulties", headers=HEADERS)
-    assert list(resp.json().keys())[0] == "나이트메어"
-
-
-def test_sort_difficulty_requires_admin_key(client):
-    resp = client.patch(
-        f"/api/raids/{RAID_NAME}/difficulties/노말/sort",
-        json={"sort_order": 0},
-    )
+def test_reorder_difficulties_requires_admin_key(client):
+    """단건 정렬 PATCH(/difficulties/{d}/sort)는 호출부가 없어 제거됐다 — 배열 저장(PUT)만 남는다."""
+    resp = client.put(f"/api/raids/{RAID_NAME}/difficulties/order", json={"order": ["노말"]})
     assert resp.status_code == 401
+
+
+def test_removed_single_difficulty_sort_route(client):
+    resp = client.patch(
+        f"/api/raids/{RAID_NAME}/difficulties/노말/sort", json={"sort_order": 0}, headers=HEADERS,
+    )
+    assert resp.status_code in (404, 405)
 
 
 def test_get_next_difficulty_sort_order_starts_at_zero(client):

@@ -1,6 +1,7 @@
 import json
 import os
 import aiosqlite
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from config import encrypt_api_key, decrypt_api_key, is_plaintext_key
@@ -8,6 +9,61 @@ from config import encrypt_api_key, decrypt_api_key, is_plaintext_key
 # LOA_DB_PATH로 덮어쓸 수 있음 — 로컬 테스트 시 운영 DB(loa_bot.db)와 분리하는 용도.
 DB_PATH = os.environ.get("LOA_DB_PATH", "loa_bot.db")
 KST = timezone(timedelta(hours=9))
+
+# 진행 중(아직 끝나지 않은) 공대 상태 / 끝난 공대 상태.
+# 'disbanded' = 클리어·파티원 전원 이탈·관리자 종료(기존 의미 그대로),
+# 'expired'   = 주간 리셋 때 클리어 없이 자동 종료된 공대 — 어디서도 클리어로 세지 않는다.
+ACTIVE_STATUSES = ("recruiting", "full", "closed")
+ENDED_STATUSES = ("disbanded", "expired")
+
+# 시작 시각이 이만큼 지났는데도 진행 중 상태면 파티장에게 한 번 정리 요청 DM.
+OVERDUE_NOTIFY_HOURS = 6
+
+
+def is_ended(party: dict | None) -> bool:
+    """파티가 없거나 이미 끝난 상태(disbanded/expired)면 True."""
+    return not party or party.get("status") in ENDED_STATUSES
+
+
+@asynccontextmanager
+async def _connect():
+    """모든 DB 접근의 단일 진입점. 호출마다 새 커넥션을 여는 구조는 유지하되,
+    웹 API·디스코드 버튼·30초 루프가 동시에 쓸 때 곧바로 'database is locked'가
+    나지 않도록 busy_timeout을 건다(WAL 모드는 init_db에서 파일 단위로 한 번 켠다)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("PRAGMA busy_timeout=5000")
+        yield conn
+
+
+def _week_start_for(dt: datetime) -> datetime:
+    """dt가 속한 주의 시작(수요일 06:00 KST). naive면 KST로 간주."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=KST)
+    dt = dt.astimezone(KST)
+    days_since_wed = (dt.weekday() - 2) % 7
+    week_start = (dt - timedelta(days=days_since_wed)).replace(
+        hour=6, minute=0, second=0, microsecond=0
+    )
+    if week_start > dt:
+        week_start -= timedelta(days=7)
+    return week_start
+
+
+def _parse_db_datetime(value: str | None) -> datetime | None:
+    """DB에 섞여 있는 두 가지 시각 형식을 aware datetime으로 — KST ISO 문자열
+    (scheduled_datetime/ended_at)과 CURRENT_TIMESTAMP의 naive UTC 'YYYY-MM-DD HH:MM:SS'
+    (created_at). 둘을 문자열 그대로 비교하면 형식이 달라 결과가 틀린다."""
+    if not value:
+        return None
+    text = str(value)
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        # 'T' 없는 CURRENT_TIMESTAMP 형식은 UTC, 그 외 naive ISO는 KST로 간주
+        dt = dt.replace(tzinfo=timezone.utc if "T" not in text else KST)
+    return dt
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -229,49 +285,41 @@ CREATE TABLE IF NOT EXISTS party_pre_notifications (
     discord_id  TEXT,
     PRIMARY KEY (message_id, discord_id)
 );
+
+-- 공대 "클리어"가 실제로 새로 만든 raid_completions 행 목록. 관리자 클리어 되돌리기가
+-- 이 목록에 있는 행만 지우도록 — 예전엔 (레이드, 난이도, 주차)만으로 지워서 다른 공대나
+-- 수동 체크로 얻은 기록까지 같이 날아갔다.
+CREATE TABLE IF NOT EXISTS party_clear_completions (
+    message_id      TEXT NOT NULL,
+    discord_id      TEXT NOT NULL,
+    character_name  TEXT NOT NULL,
+    raid_name       TEXT NOT NULL,
+    difficulty      TEXT NOT NULL,
+    week_key        TEXT NOT NULL,
+    PRIMARY KEY (message_id, discord_id, character_name)
+);
 """
 
 
 def get_week_key() -> str:
     """수요일 06:00 KST 기준 현재 주 키 반환"""
-    now = datetime.now(KST)
-    days_since_wed = (now.weekday() - 2) % 7
-    week_start = (now - timedelta(days=days_since_wed)).replace(
-        hour=6, minute=0, second=0, microsecond=0
-    )
-    if week_start > now:
-        week_start -= timedelta(days=7)
-    return week_start.strftime("%Y-%m-%d")
+    return _week_start_for(datetime.now(KST)).strftime("%Y-%m-%d")
 
 
 def get_week_key_for_dt(dt_iso: str) -> str:
     """임의 ISO datetime 문자열에 해당하는 주 키 반환."""
-    dt = datetime.fromisoformat(dt_iso)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=KST)
-    days_since_wed = (dt.weekday() - 2) % 7
-    week_start = (dt - timedelta(days=days_since_wed)).replace(
-        hour=6, minute=0, second=0, microsecond=0
-    )
-    if week_start > dt:
-        week_start -= timedelta(days=7)
-    return week_start.strftime("%Y-%m-%d")
+    return _week_start_for(datetime.fromisoformat(dt_iso)).strftime("%Y-%m-%d")
 
 
 def get_week_start_iso() -> str:
     """현재 주 시작 시각(수요일 06:00 KST)을 ISO 문자열로 반환."""
-    now = datetime.now(KST)
-    days_since_wed = (now.weekday() - 2) % 7
-    week_start = (now - timedelta(days=days_since_wed)).replace(
-        hour=6, minute=0, second=0, microsecond=0
-    )
-    if week_start > now:
-        week_start -= timedelta(days=7)
-    return week_start.isoformat()
+    return _week_start_for(datetime.now(KST)).isoformat()
 
 
 async def init_db() -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
+        # WAL은 DB 파일에 영구 저장되는 설정 — 읽기와 쓰기가 서로를 막지 않게 한다.
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.executescript(SCHEMA)
         # 기존 DB 마이그레이션 (컬럼 없으면 추가)
         for col, definition in [
@@ -337,6 +385,21 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE parties ADD COLUMN extreme_period_notified INTEGER NOT NULL DEFAULT 0")
         except Exception:
             pass
+        for col, definition in [
+            # 끝난 시각(KST ISO) — 주간 정리가 "언제 끝났는지" 기준으로 스레드를 지운다.
+            # 비어 있으면(이 컬럼 이전에 끝난 공대) 예전처럼 일정/생성 시각으로 판단.
+            ("ended_at",         "TEXT"),
+            # 클리어 처리 시각 — 'disbanded' 중 실제 클리어만 되돌리기 대상이 된다.
+            ("cleared_at",       "TEXT"),
+            # 시작 +6시간 정리 요청 DM 발송 여부(1회성)
+            ("overdue_notified", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE parties ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
+        # on_message가 메시지마다 channel_id로 파티를 찾는다
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_parties_channel ON parties(channel_id)")
         await db.commit()
     await seed_game_data()
     await _migrate_encrypt_api_keys()
@@ -349,7 +412,7 @@ async def init_db() -> None:
 # ──────────────────────────────────────────────
 
 async def set_forum_channel(guild_id: str, forum_channel_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT INTO guild_settings (guild_id, forum_channel_id) VALUES (?, ?) "
             "ON CONFLICT(guild_id) DO UPDATE SET forum_channel_id=excluded.forum_channel_id",
@@ -359,7 +422,7 @@ async def set_forum_channel(guild_id: str, forum_channel_id: str) -> None:
 
 
 async def get_forum_channel_id(guild_id: str) -> Optional[str]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT forum_channel_id FROM guild_settings WHERE guild_id=?", (guild_id,)
         )
@@ -377,8 +440,15 @@ async def _migrate_encrypt_api_keys() -> None:
     레거시 단일 키(users.loa_api_key)뿐 아니라 부계정 테이블(user_api_keys.api_key)도
     함께 처리한다 — 이전에는 users만 마이그레이션해서, ENCRYPTION_KEY를 나중에
     설정한 서버에서 그 이전에 부계정으로 등록된 키들이 영구히 평문으로 남는 문제가
-    있었다(add_user_api_key는 저장 "당시"의 ENCRYPTION_KEY 유무만 반영하기 때문)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    있었다(add_user_api_key는 저장 "당시"의 ENCRYPTION_KEY 유무만 반영하기 때문).
+
+    평문 판단은 Fernet 접두어로만 한다(config.is_plaintext_key) — 이미 암호문인 값은
+    현재 키로 복호화되지 않더라도(키 교체 등) 절대 다시 암호화하지 않는다."""
+    import config as _config
+
+    if not _config.encryption_enabled():
+        return
+    async with _connect() as db:
         migrated = 0
 
         cur = await db.execute("SELECT discord_id, loa_api_key FROM users")
@@ -411,7 +481,7 @@ async def _migrate_backfill_user_api_keys() -> None:
     user_api_keys에는 없어서, list_user_api_keys가 빈 목록을 반환해 /원정대 등에서
     "등록 안 됨"으로 잘못 처리되던 문제. user_api_keys가 하나도 없는 유저만
     레거시 키를 그대로 옮겨 채운다(1회성, 이미 있으면 건드리지 않아 새 가입자와 무관)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT discord_id, loa_api_key, registered_at FROM users")
         users_rows = await cur.fetchall()
@@ -451,7 +521,7 @@ async def _migrate_backfill_raid_sort_order() -> None:
     배포 직후 순서가 바뀌면 안 되므로, 기존 정렬 기준이던 rowid 순서를 그대로
     0..N-1로 옮겨 담는다(카테고리별로 따로 매김). 한 카테고리 안에서 이미
     0이 아닌 값이 하나라도 있으면 사람이 정한 순서로 보고 건드리지 않는다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT name, category, sort_order FROM raids_data ORDER BY rowid"
@@ -486,7 +556,7 @@ async def delete_user(discord_id: str) -> None:
     공대 화면에 유령 파티원이 계속 표시될 수 있었다. 파티 자체(리더 위임/해체 등
     discord 부수효과가 필요한 처리)는 여기서 다루지 않는다 — 관리자의 강제 탈퇴는
     즉시 반영되는 하드 삭제가 목적이라 봇 인스턴스 없이도 동작해야 하기 때문."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute("DELETE FROM users          WHERE discord_id=?", (discord_id,))
         await db.execute("DELETE FROM user_characters WHERE discord_id=?", (discord_id,))
         await db.execute("DELETE FROM user_preferences WHERE discord_id=?", (discord_id,))
@@ -501,7 +571,7 @@ async def delete_user(discord_id: str) -> None:
 
 
 async def set_user_api_key(discord_id: str, api_key: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT INTO users (discord_id, loa_api_key) VALUES (?, ?) "
             "ON CONFLICT(discord_id) DO UPDATE SET loa_api_key=excluded.loa_api_key",
@@ -511,7 +581,7 @@ async def set_user_api_key(discord_id: str, api_key: str) -> None:
 
 
 async def get_user_api_key(discord_id: str) -> Optional[str]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT loa_api_key FROM users WHERE discord_id=?", (discord_id,)
         )
@@ -521,7 +591,7 @@ async def get_user_api_key(discord_id: str) -> Optional[str]:
 
 async def get_all_user_ids() -> list[str]:
     """API 등록 유저 전원의 discord_id — 관리자 전체 공지 DM 대상."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute("SELECT discord_id FROM users ORDER BY registered_at")
         rows = await cur.fetchall()
     return [r[0] for r in rows]
@@ -530,7 +600,7 @@ async def get_all_user_ids() -> list[str]:
 async def get_stale_users(days: int = 14) -> list[dict]:
     """캐릭터 동기화가 N일 이상 안 된 유저 — API 키 만료 의심 목록. 매일 04시
     자동 동기화(account_sync_task)가 도는데도 cached_at이 안 움직이면 키가 죽은 것."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT u.discord_id, u.registered_at, MAX(uc.cached_at) AS last_sync "
@@ -546,7 +616,7 @@ async def get_stale_users(days: int = 14) -> list[dict]:
 
 async def user_exists(discord_id: str) -> bool:
     """discord_id가 /api등록을 마쳐 users 테이블에 있는지만 확인 (복호화 없이 가볍게)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT 1 FROM users WHERE discord_id=?", (discord_id,)
         )
@@ -558,11 +628,58 @@ async def user_exists(discord_id: str) -> bool:
 # 유저별 다중 API 키 (부계정 지원)
 # ──────────────────────────────────────────────
 
+async def api_key_already_registered(api_key: str) -> bool:
+    """같은 로스트아크 API 키가 이미 (누구의 계정으로든) 등록돼 있는지 — 저장값은 암호화돼
+    있어(암호문은 매번 달라짐) 복호화해서 비교한다. 유저 수가 수십 명이라 전수 비교로 충분."""
+    async with _connect() as db:
+        cur = await db.execute("SELECT api_key FROM user_api_keys")
+        rows = await cur.fetchall()
+    return any(decrypt_api_key(r[0]) == api_key for r in rows if r[0])
+
+
+async def add_user_api_key_unique(discord_id: str, label: str, api_key: str) -> int | None:
+    """add_user_api_key + 중복 키 거부를 한 트랜잭션(BEGIN IMMEDIATE)으로 — 검증 API 왕복
+    동안 같은 키 등록 요청이 두 번 들어와도 하나만 저장된다. 중복이면 None."""
+    now = datetime.now(KST).isoformat()
+    async with _connect() as db:
+        await db.execute("BEGIN IMMEDIATE")
+        cur = await db.execute("SELECT api_key FROM user_api_keys")
+        if any(decrypt_api_key(r[0]) == api_key for r in await cur.fetchall() if r[0]):
+            await db.rollback()
+            return None
+        cur = await db.execute(
+            "INSERT INTO user_api_keys (discord_id, label, api_key, added_at) VALUES (?, ?, ?, ?)",
+            (discord_id, label, encrypt_api_key(api_key), now),
+        )
+        new_id = cur.lastrowid
+        await db.commit()
+    existing = await list_user_api_keys(discord_id)
+    if len(existing) == 1:
+        await set_user_api_key(discord_id, api_key)
+    return new_id
+
+
+async def relink_unlinked_characters(discord_id: str, api_key_id: int, character_names: list[str]) -> int:
+    """api_key_id가 NULL인(키 삭제 후 남은) 이 유저의 캐릭터 중 character_names에 있는 것을
+    새 계정에 연결. 반환: 연결한 캐릭터 수."""
+    if not character_names:
+        return 0
+    placeholders = ",".join("?" for _ in character_names)
+    async with _connect() as db:
+        cur = await db.execute(
+            f"UPDATE user_characters SET api_key_id=? WHERE discord_id=? AND api_key_id IS NULL "
+            f"AND character_name IN ({placeholders})",
+            (api_key_id, discord_id, *character_names),
+        )
+        await db.commit()
+        return cur.rowcount
+
+
 async def add_user_api_key(discord_id: str, label: str, api_key: str) -> int:
     """새 계정(API 키)을 등록. 이 discord_id의 첫 계정이면 레거시 users.loa_api_key에도 미러링.
     반환: 새로 생성된 user_api_keys.id"""
     now = datetime.now(KST).isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "INSERT INTO user_api_keys (discord_id, label, api_key, added_at) VALUES (?, ?, ?, ?)",
             (discord_id, label, encrypt_api_key(api_key), now),
@@ -580,7 +697,7 @@ async def add_user_api_key(discord_id: str, label: str, api_key: str) -> int:
 
 async def list_user_api_keys(discord_id: str) -> list[dict]:
     """등록된 계정 목록 (복호화된 키는 포함하지 않음)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT id, label, added_at FROM user_api_keys WHERE discord_id=? ORDER BY added_at",
@@ -592,7 +709,7 @@ async def list_user_api_keys(discord_id: str) -> list[dict]:
 
 async def get_user_api_key_by_id(key_id: int) -> Optional[str]:
     """복호화된 API 키 반환 — 로스트아크 API 호출용 (내부 전용)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT api_key FROM user_api_keys WHERE id=?", (key_id,)
         )
@@ -603,7 +720,7 @@ async def get_user_api_key_by_id(key_id: int) -> Optional[str]:
 async def remove_user_api_key(discord_id: str, key_id: int) -> bool:
     """계정(API 키) 삭제. 해당 키를 쓰던 캐릭터의 api_key_id는 NULL로 남긴다(캐릭터 자체는 삭제하지 않음).
     삭제한 키가 레거시 users.loa_api_key로 미러링돼 있었다면, 남은 키 중 하나로 승격하거나(없으면) 비운다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT api_key FROM user_api_keys WHERE id=? AND discord_id=?",
             (key_id, discord_id),
@@ -631,7 +748,7 @@ async def remove_user_api_key(discord_id: str, key_id: int) -> bool:
             if promoted_key:
                 await set_user_api_key(discord_id, promoted_key)
         else:
-            async with aiosqlite.connect(DB_PATH) as db:
+            async with _connect() as db:
                 await db.execute("DELETE FROM users WHERE discord_id=?", (discord_id,))
                 await db.commit()
 
@@ -640,7 +757,7 @@ async def remove_user_api_key(discord_id: str, key_id: int) -> bool:
 
 async def get_all_api_keys() -> list[dict]:
     """모든 유저의 모든 등록 계정 — 일일 자동 동기화용. {id, discord_id, label} 목록 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT id, discord_id, label FROM user_api_keys ORDER BY discord_id, added_at"
@@ -651,7 +768,7 @@ async def get_all_api_keys() -> list[dict]:
 
 async def get_characters_by_api_key_id(api_key_id: int) -> list[str]:
     """특정 계정(api_key_id)에 연결된 캐릭터 이름 목록."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT character_name FROM user_characters WHERE api_key_id=? ORDER BY added_at",
             (api_key_id,),
@@ -662,7 +779,7 @@ async def get_characters_by_api_key_id(api_key_id: int) -> list[str]:
 
 async def get_character_api_key_id(discord_id: str, character_name: str) -> Optional[int]:
     """단일 캐릭터가 연결된 api_key_id 조회. 없으면(레거시 데이터) None."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT api_key_id FROM user_characters WHERE discord_id=? AND character_name=?",
             (discord_id, character_name),
@@ -683,7 +800,7 @@ async def find_conflicting_owner(character_names: list[str], discord_id: str) ->
     if not character_names:
         return None
     placeholders = ",".join("?" for _ in character_names)
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             f"SELECT character_name, discord_id FROM user_characters "
             f"WHERE character_name IN ({placeholders}) AND discord_id != ? LIMIT 1",
@@ -698,7 +815,7 @@ async def add_character(discord_id: str, character_name: str, api_key_id: int | 
     verify_and_register_api_key에서 원정대 단위로 미리 막지만, 여기서도 한 번 더
     막아 레이스(동시 등록) 상황에서도 중복 등록이 뚫리지 않게 한다."""
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             cur = await db.execute(
                 "SELECT 1 FROM user_characters WHERE character_name=? AND discord_id!=?",
                 (character_name, discord_id),
@@ -716,7 +833,7 @@ async def add_character(discord_id: str, character_name: str, api_key_id: int | 
 
 
 async def remove_character(discord_id: str, character_name: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM user_characters WHERE discord_id=? AND character_name=?",
             (discord_id, character_name),
@@ -729,7 +846,7 @@ async def get_active_party_slots_for_character(discord_id: str, character_name: 
     """이 discord_id가 이 캐릭터로 현재 참여 중인 활성(recruiting/full/closed) 파티의
     message_id 목록. 캐릭터 삭제 시 그 파티에서도 자동으로 나가게 하기 위한 조회 —
     이전에는 캐릭터를 삭제해도 참여 중이던 파티 슬롯이 그대로 남아 유령 파티원이 됐다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT ps.party_message_id FROM party_slots ps "
             "JOIN parties p ON p.message_id = ps.party_message_id "
@@ -742,7 +859,7 @@ async def get_active_party_slots_for_character(discord_id: str, character_name: 
 
 
 async def get_user_characters(discord_id: str) -> list[str]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT character_name FROM user_characters WHERE discord_id=? ORDER BY added_at",
             (discord_id,),
@@ -758,7 +875,7 @@ async def update_character_combat_power(discord_id: str, character_name: str, co
     잘라내지 않고 REAL로 그대로 보존한다(정수로 반올림해서 버리지 않음).
     반환값 False는 discord_id+character_name이 user_characters에 없어(등록 안 된 캐릭터,
     또는 다른 계정 소유) 아무 행도 갱신되지 않았다는 뜻 — 호출부가 로깅할 수 있게 알려준다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE user_characters SET combat_power=?, combat_power_at=CURRENT_TIMESTAMP "
             "WHERE discord_id=? AND character_name=?",
@@ -771,7 +888,7 @@ async def update_character_combat_power(discord_id: str, character_name: str, co
 async def get_character_armory_cache(discord_id: str, character_name: str) -> dict | None:
     """캐릭터 상세 페이지 캐시(아머리 조회 결과) — "동기화"를 누르기 전까지는 이 값을 그대로
     보여준다(F5로 로스트아크 API를 다시 부르지 않기 위함). 캐시가 없으면 None."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT armory_detail_json, armory_synced_at FROM user_characters "
             "WHERE discord_id=? AND character_name=?",
@@ -790,7 +907,7 @@ async def set_character_armory_cache(discord_id: str, character_name: str, detai
     반환값 False는 update_character_combat_power와 동일한 이유로 아무 행도 갱신되지 않았다는 뜻."""
     import json
 
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE user_characters SET armory_detail_json=?, armory_synced_at=CURRENT_TIMESTAMP "
             "WHERE discord_id=? AND character_name=?",
@@ -809,7 +926,7 @@ async def get_expedition_ranking(metric: str, limit: int = 100, role: str | None
     weekly_clears에는 적용하지 않는다(요청 범위가 전투력 랭킹으로 한정됨).
     반환 각 항목: discord_id, character_name, character_class, value(정렬 기준값),
     item_level, combat_power(참고 표시용)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         if metric == "weekly_clears":
             week = get_week_key()
@@ -866,7 +983,7 @@ async def update_character_cache(
 ) -> None:
     """캐릭터 캐시 갱신. api_key_id를 넘기면 해당 캐릭터가 어느 계정 소속인지도 함께 기록한다
     (None이면 기존 값 유지 — 매번 새로 조회하지 않는 호출부와 호환)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         if api_key_id is not None:
             await db.execute(
                 "UPDATE user_characters SET item_level=?, character_class=?, "
@@ -885,7 +1002,7 @@ async def update_character_cache(
 
 async def get_cached_characters(discord_id: str, max_age_hours: int = 6) -> list[dict]:
     """캐시된 캐릭터 목록. max_age_hours 이상 지난 항목은 item_level=None 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT character_name, character_class, "
@@ -900,7 +1017,7 @@ async def get_cached_characters(discord_id: str, max_age_hours: int = 6) -> list
 async def get_cached_characters_with_account(discord_id: str, max_age_hours: int = 6) -> list[dict]:
     """캐시된 캐릭터 목록 + 소속 계정 라벨(account_label). 웹 원정대 페이지에서
     계정별로 묶어 보여주는 용도. 계정 정보가 없는(레거시) 캐릭터는 account_label=None."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT uc.character_name, uc.character_class, "
@@ -923,7 +1040,7 @@ async def get_completions(
     discord_id: str, character_name: str, week_key: str | None = None
 ) -> set[str]:
     week = week_key if week_key is not None else get_week_key()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT raid_name, difficulty FROM raid_completions "
             "WHERE discord_id=? AND character_name=? AND week_key=?",
@@ -933,11 +1050,46 @@ async def get_completions(
     return {f"{r[0]}_{r[1]}" for r in rows}
 
 
+async def get_week_completions_by_character(discord_id: str, week_key: str) -> dict[str, set[str]]:
+    """원정대 전체의 그 주 완료 기록을 쿼리 한 번으로 — {캐릭터명: {"레이드_난이도", ...}}.
+    캐릭터마다 get_completions를 부르면 캐릭터 수만큼 커넥션을 열었다."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT character_name, raid_name, difficulty FROM raid_completions "
+            "WHERE discord_id=? AND week_key=?",
+            (discord_id, week_key),
+        )
+        rows = await cur.fetchall()
+    result: dict[str, set[str]] = {}
+    for name, raid_name, difficulty in rows:
+        result.setdefault(name, set()).add(f"{raid_name}_{difficulty}")
+    return result
+
+
+async def get_all_selected_raids(discord_id: str) -> dict[str, list[str]]:
+    """원정대 전체의 "표시할 레이드" 선택을 한 번에 — 커스터마이즈한 캐릭터만 키로 들어간다
+    (키가 없으면 get_selected_raids의 None과 같은 뜻: 입장 가능한 레이드 전체 표시)."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT character_name FROM character_raid_selection_state WHERE discord_id=?",
+            (discord_id,),
+        )
+        result: dict[str, list[str]] = {r[0]: [] for r in await cur.fetchall()}
+        cur = await db.execute(
+            "SELECT character_name, raid_name FROM character_raid_selection WHERE discord_id=?",
+            (discord_id,),
+        )
+        for name, raid_name in await cur.fetchall():
+            if name in result:
+                result[name].append(raid_name)
+    return result
+
+
 async def toggle_completion(
     discord_id: str, character_name: str, raid_name: str, difficulty: str
 ) -> bool:
     week = get_week_key()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT 1 FROM raid_completions "
             "WHERE discord_id=? AND character_name=? AND raid_name=? AND difficulty=? AND week_key=?",
@@ -973,7 +1125,7 @@ async def get_selected_raids(discord_id: str, character_name: str) -> list[str] 
     """캐릭터별로 저장된 "표시할 레이드" 선택 목록. 커스터마이즈한 적이 없으면 None
     (호출 측에서 입장 가능한 레이드 전체를 보여주면 됨), 있으면 선택된 raid_name 목록
     (전부 해제했으면 빈 리스트)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT 1 FROM character_raid_selection_state WHERE discord_id=? AND character_name=?",
             (discord_id, character_name),
@@ -989,7 +1141,7 @@ async def get_selected_raids(discord_id: str, character_name: str) -> list[str] 
 
 
 async def set_selected_raids(discord_id: str, character_name: str, raid_names: list[str]) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT OR IGNORE INTO character_raid_selection_state (discord_id, character_name) VALUES (?, ?)",
             (discord_id, character_name),
@@ -1023,7 +1175,7 @@ async def create_party(
     min_level: int,
     memo: str | None = None,
 ) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT INTO parties (message_id, channel_id, guild_id, leader_id, "
             "raid_name, difficulty, proficiency, scheduled_time, scheduled_datetime, "
@@ -1043,7 +1195,7 @@ async def find_recent_duplicate_party(
     """방금 이 리더가 똑같은 조건(레이드/난이도/일정)으로 만든 파티가 있는지 확인.
     응답이 느릴 때 이중 클릭/폼 재제출로 스레드가 두 개 생성되는 것을 막기 위한 가드 —
     있으면 새로 만들지 않고 이 파티를 그대로 재사용한다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT * FROM parties WHERE leader_id=? AND raid_name=? AND difficulty=? "
@@ -1058,7 +1210,7 @@ async def find_recent_duplicate_party(
 
 async def get_parties_due_notification(now_iso: str) -> list[dict]:
     """알림 시간이 된 미통보 파티 목록"""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT * FROM parties "
@@ -1073,7 +1225,7 @@ async def get_parties_due_notification(now_iso: str) -> list[dict]:
 
 
 async def mark_notified(message_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET notified=1 WHERE message_id=?", (message_id,)
         )
@@ -1081,7 +1233,7 @@ async def mark_notified(message_id: str) -> None:
 
 
 async def get_party(message_id: str) -> Optional[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM parties WHERE message_id=?", (message_id,))
         row = await cur.fetchone()
@@ -1095,7 +1247,7 @@ async def get_user_active_slots_in_raid(
     """같은 레이드의 다른 활성 파티에 이미 참여 중인 슬롯 목록.
     party_week_key가 주어지면 같은 주차 파티만 반환한다.
     """
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT ps.character_name, ps.party_message_id AS message_id, p.scheduled_datetime "
@@ -1125,7 +1277,7 @@ async def get_user_active_slots_in_raid(
 
 async def get_party_by_channel(channel_id: str) -> Optional[dict]:
     """Forum Thread ID(channel_id)로 파티 조회."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM parties WHERE channel_id=?", (channel_id,))
         row = await cur.fetchone()
@@ -1134,7 +1286,7 @@ async def get_party_by_channel(channel_id: str) -> Optional[dict]:
 
 async def get_party_slots(message_id: str) -> list[dict]:
     """is_guest: /api등록으로 users 테이블에 있는 유저가 아니면(=게스트 초대로 참여) True."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT ps.*, (u.discord_id IS NULL) AS is_guest FROM party_slots ps "
@@ -1166,91 +1318,163 @@ async def auto_assign_slot(
     """자동 슬롯 배정.
     party_group/party_split 지정 시 해당 파티 슬롯 범위 내에서만 배정.
     반환: (success, slot_number, message)
+
+    확인(빈 슬롯·서포터 수)과 INSERT를 BEGIN IMMEDIATE 한 트랜잭션으로 묶는다 — 예전엔
+    서포터 두 명이 동시에 누르면 둘 다 "서포터 없음"을 확인한 뒤 각자 다른 슬롯에 들어갔다.
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "SELECT slot_number FROM party_slots WHERE party_message_id=? AND discord_id=?",
-            (message_id, discord_id),
+    if party_split and party_group is not None:
+        # 웹 폼은 party_group을 그대로 넘긴다 — 범위 밖 번호(0, -1, 3 등)는 정원 밖 슬롯
+        # 번호(-7, 9 …)를 만들어 화면엔 안 보이는데 인원·클리어에는 잡히는 유령 파티원이 됐다.
+        num_groups = total_slots // party_split if party_split > 0 else 0
+        if not (1 <= party_group <= num_groups):
+            return False, 0, "참여할 파티 번호가 올바르지 않습니다."
+    async with _connect() as db:
+        await db.execute("BEGIN IMMEDIATE")
+        result = await _auto_assign_slot_tx(
+            db, message_id, discord_id, character_name, character_class, role, total_slots,
+            party_group=party_group, party_split=party_split,
         )
-        existing = await cur.fetchone()
-        if existing:
-            return False, 0, f"이미 **{existing[0]}번** 슬롯에 참여 중입니다."
-
-        cur = await db.execute(
-            "SELECT slot_number FROM party_slots WHERE party_message_id=? ORDER BY slot_number",
-            (message_id,),
-        )
-        taken = {r[0] for r in await cur.fetchall()}
-        # party_invites 예약 슬롯도 taken으로 처리 — 초대 중인 슬롯 탈취 방지
-        cur = await db.execute(
-            "SELECT slot_number FROM party_invites WHERE message_id=?",
-            (message_id,),
-        )
-        taken |= {r[0] for r in await cur.fetchall()}
-
-        if party_group and party_split:
-            start = (party_group - 1) * party_split + 1
-            end   = start + party_split
-            available = [s for s in range(start, end) if s not in taken]
-            if not available:
-                return False, 0, f"{party_group}파티에 빈 자리가 없습니다."
-            # 서포터 중복 체크 (파티당 1명 제한)
-            if role == "support":
-                cur = await db.execute(
-                    "SELECT COUNT(*) FROM party_slots "
-                    "WHERE party_message_id=? AND slot_number >= ? AND slot_number < ? AND role='support'",
-                    (message_id, start, end),
-                )
-                support_count = (await cur.fetchone())[0]
-                if support_count >= 1:
-                    return False, 0, f"{party_group}파티에 이미 서포터가 있습니다."
+        if result[0]:
+            await db.commit()
         else:
-            available = [s for s in range(1, total_slots + 1) if s not in taken]
-            if not available:
-                return False, 0, "빈 슬롯이 없습니다."
-            # 단일 파티 서포터 중복 체크
-            if role == "support":
-                cur = await db.execute(
-                    "SELECT COUNT(*) FROM party_slots "
-                    "WHERE party_message_id=? AND role='support'",
-                    (message_id,),
-                )
-                support_count = (await cur.fetchone())[0]
-                if support_count >= 1:
-                    return False, 0, "이미 파티에 서포터가 있습니다."
+            await db.rollback()
+    return result
 
-        slot_number = available[0]
 
-        try:
-            await db.execute(
-                "INSERT INTO party_slots "
-                "(party_message_id, slot_number, discord_id, character_name, character_class, role) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (message_id, slot_number, discord_id, character_name, character_class, role),
+async def _auto_assign_slot_tx(
+    db, message_id: str, discord_id: str, character_name: str, character_class: str,
+    role: str, total_slots: int, *, party_group: int | None, party_split: int | None,
+) -> tuple[bool, int, str]:
+    cur = await db.execute(
+        "SELECT slot_number FROM party_slots WHERE party_message_id=? AND discord_id=?",
+        (message_id, discord_id),
+    )
+    existing = await cur.fetchone()
+    if existing:
+        return False, 0, f"이미 **{existing[0]}번** 슬롯에 참여 중입니다."
+
+    cur = await db.execute(
+        "SELECT slot_number FROM party_slots WHERE party_message_id=? ORDER BY slot_number",
+        (message_id,),
+    )
+    taken = {r[0] for r in await cur.fetchall()}
+    # party_invites 예약 슬롯도 taken으로 처리 — 초대 중인 슬롯 탈취 방지
+    cur = await db.execute(
+        "SELECT slot_number FROM party_invites WHERE message_id=?",
+        (message_id,),
+    )
+    taken |= {r[0] for r in await cur.fetchall()}
+
+    if party_group and party_split:
+        start = (party_group - 1) * party_split + 1
+        end   = start + party_split
+        available = [s for s in range(start, end) if s not in taken]
+        if not available:
+            return False, 0, f"{party_group}파티에 빈 자리가 없습니다."
+        # 서포터 중복 체크 (파티당 1명 제한)
+        if role == "support":
+            cur = await db.execute(
+                "SELECT COUNT(*) FROM party_slots "
+                "WHERE party_message_id=? AND slot_number >= ? AND slot_number < ? AND role='support'",
+                (message_id, start, end),
             )
-        except aiosqlite.IntegrityError:
-            # 동시 참여 요청으로 슬롯 충돌 발생 시
-            return False, 0, "다른 유저가 동시에 참여해 슬롯이 찼습니다. 다시 시도해주세요."
+            support_count = (await cur.fetchone())[0]
+            if support_count >= 1:
+                return False, 0, f"{party_group}파티에 이미 서포터가 있습니다."
+    else:
+        available = [s for s in range(1, total_slots + 1) if s not in taken]
+        if not available:
+            return False, 0, "빈 슬롯이 없습니다."
+        # 단일 파티 서포터 중복 체크
+        if role == "support":
+            cur = await db.execute(
+                "SELECT COUNT(*) FROM party_slots "
+                "WHERE party_message_id=? AND role='support'",
+                (message_id,),
+            )
+            support_count = (await cur.fetchone())[0]
+            if support_count >= 1:
+                return False, 0, "이미 파티에 서포터가 있습니다."
 
-        cur = await db.execute(
-            "SELECT COUNT(*), p.total_slots FROM party_slots ps "
-            "JOIN parties p ON p.message_id = ps.party_message_id "
-            "WHERE ps.party_message_id=?",
-            (message_id,),
+    slot_number = available[0]
+
+    try:
+        await db.execute(
+            "INSERT INTO party_slots "
+            "(party_message_id, slot_number, discord_id, character_name, character_class, role) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (message_id, slot_number, discord_id, character_name, character_class, role),
         )
-        count, total = await cur.fetchone()
-        if count >= total:
-            await db.execute(
-                "UPDATE parties SET status='full' WHERE message_id=? AND status='recruiting'",
-                (message_id,)
-            )
+    except aiosqlite.IntegrityError:
+        # 동시 참여 요청으로 슬롯 충돌 발생 시
+        return False, 0, "다른 유저가 동시에 참여해 슬롯이 찼습니다. 다시 시도해주세요."
 
-        await db.commit()
+    cur = await db.execute(
+        "SELECT COUNT(*), p.total_slots FROM party_slots ps "
+        "JOIN parties p ON p.message_id = ps.party_message_id "
+        "WHERE ps.party_message_id=?",
+        (message_id,),
+    )
+    count, total = await cur.fetchone()
+    if count >= total:
+        await db.execute(
+            "UPDATE parties SET status='full' WHERE message_id=? AND status='recruiting'",
+            (message_id,)
+        )
     return True, slot_number, "참여 완료"
 
 
-async def get_party_join_eligibility(message_id: str, discord_id: str) -> dict:
+async def get_extreme_join_block_reason(discord_id: str, party: dict) -> str | None:
+    """익스트림 공대 참여를 막아야 하면 사유, 아니면 None. 일반 레이드면 항상 None.
+
+    규칙(원정대 단위 주 1회): 그 주에 이 discord_id가 (어느 캐릭터로든, 어느 익스트림
+    레이드든) 이미 다른 익스트림 공대에 참여 중이거나 익스트림을 클리어했다면 막는다.
+    예전엔 "참여 중" 확인은 익스트림 전체, "클리어" 확인은 같은 레이드만 봐서 범위가 달랐고,
+    게스트 초대 수락은 이 확인을 아예 건너뛰었다. 등록 유저 참여/초대 수락/게스트 수락이
+    모두 이 함수를 쓴다."""
+    from bot.data.raids import RAIDS, _parse_aware
+
+    raid_info = RAIDS.get(party["raid_name"], {})
+    if not raid_info.get("is_extreme"):
+        return None
+
+    party_week_key = (
+        get_week_key_for_dt(party["scheduled_datetime"])
+        if party.get("scheduled_datetime")
+        else get_week_key()
+    )
+    # naive로 저장된 기간 값도 KST로 간주해 비교한다(aware와 비교하다 TypeError 나던 문제)
+    avail_from = _parse_aware(raid_info.get("available_from"))
+    avail_until = _parse_aware(raid_info.get("available_until"))
+    sdt = _parse_aware(party.get("scheduled_datetime"))
+    if sdt and avail_from and sdt < avail_from:
+        return f"이 공대 일정은 운영 기간 시작({avail_from.month}/{avail_from.day}) 전입니다."
+    if avail_until and avail_until < datetime.now(KST):
+        return "운영 기간이 종료된 레이드입니다."
+
+    extreme_slot = await get_user_extreme_slot_this_week(
+        discord_id, party_week_key, exclude_message_id=party["message_id"],
+    )
+    if extreme_slot:
+        return (
+            f"이번 주 익스트림 레이드는 **{extreme_slot['character_name']}**으로 "
+            f"이미 참여 중입니다.\n원정대당 1캐릭터만 참여할 수 있습니다."
+        )
+    # 진행 중 공대만 보면 클리어 뒤엔 같은 주에 또 들어갈 수 있었다 — 클리어 기록도 본다
+    status = await get_expedition_extreme_status(discord_id, party_week_key)
+    if status:
+        cleared = next(iter(status.values()))
+        return (
+            f"이번 주 익스트림 레이드는 이미 **{cleared['character_name']}**(캐릭터)로 클리어했습니다.\n"
+            f"원정대당 주 1회만 클리어할 수 있습니다."
+        )
+    return None
+
+
+async def get_party_join_eligibility(message_id: str, discord_id: str, *, via_invite: bool = False) -> dict:
     """파티 참여 가능 여부 + 캐릭터별 필터링 결과.
+
+    via_invite=True(초대 수락 경로)면 이 유저에게 유효한 초대가 있을 때 '모집 마감' 상태여도 통과.
 
     Discord의 참여하기 버튼(bot/ui/views.py PartyView._handle_join)과 웹의 참여 API가
     동일하게 사용하는 단일 검증 로직 — 두 곳에서 각자 구현하면 규칙이 어긋날 수 있으니
@@ -1265,16 +1489,15 @@ async def get_party_join_eligibility(message_id: str, discord_id: str) -> dict:
        "level_too_low": [{"name","level"}, ...], "no_cache": [...],
        "min_level": int}
     """
-    from datetime import datetime, timedelta, timezone
-
     from bot.data.raids import RAIDS
 
-    KST = timezone(timedelta(hours=9))
-
     party = await get_party(message_id)
-    if not party or party["status"] == "disbanded":
+    if is_ended(party):
         return {"can_join": False, "reason": "유효하지 않은 파티입니다."}
-    if party["status"] == "closed":
+    # 파티장이 마감 후에도 초대는 보낼 수 있으므로, 유효한 초대를 가진 사람은 마감 상태여도
+    # 수락으로 들어올 수 있어야 한다(예약 슬롯이 있으니 정원 문제도 없다).
+    has_invite = via_invite and (await get_invite(message_id, discord_id)) is not None
+    if party["status"] == "closed" and not has_invite:
         return {"can_join": False, "reason": "모집이 마감된 파티입니다."}
     if party["status"] == "full":
         return {"can_join": False, "reason": "파티가 이미 꽉 찼습니다."}
@@ -1290,49 +1513,9 @@ async def get_party_join_eligibility(message_id: str, discord_id: str) -> dict:
         return {"can_join": False, "reason": "이미 파티에 참여 중입니다."}
 
     raid_info = RAIDS.get(party["raid_name"], {})
-    if raid_info.get("is_extreme"):
-        now = datetime.now(KST)
-        avail_from = raid_info.get("available_from")
-        avail_until = raid_info.get("available_until")
-        sdt = party.get("scheduled_datetime")
-
-        if sdt and avail_from:
-            try:
-                if datetime.fromisoformat(sdt) < datetime.fromisoformat(avail_from):
-                    from_dt = datetime.fromisoformat(avail_from)
-                    return {
-                        "can_join": False,
-                        "reason": f"이 공대 일정은 운영 기간 시작({from_dt.month}/{from_dt.day}) 전입니다.",
-                    }
-            except ValueError:
-                pass
-
-        if avail_until:
-            try:
-                if datetime.fromisoformat(avail_until) < now:
-                    return {"can_join": False, "reason": "운영 기간이 종료된 레이드입니다."}
-            except ValueError:
-                pass
-
-        extreme_slot = await get_user_extreme_slot_this_week(discord_id, party_week_key)
-        if extreme_slot:
-            return {
-                "can_join": False,
-                "reason": (
-                    f"이번 주 익스트림 레이드는 **{extreme_slot['character_name']}**으로 "
-                    f"이미 참여 중입니다.\n원정대당 1캐릭터만 참여할 수 있습니다."
-                ),
-            }
-        # 진행 중 공대만 보면 클리어(disbanded) 뒤엔 같은 주에 또 들어갈 수 있었다 — 클리어 기록도 본다
-        cleared = await get_expedition_extreme_completion(discord_id, party["raid_name"], party_week_key)
-        if cleared:
-            return {
-                "can_join": False,
-                "reason": (
-                    f"이번 주 익스트림 레이드는 이미 **{cleared['character_name']}**(캐릭터)로 클리어했습니다.\n"
-                    f"원정대당 주 1회만 클리어할 수 있습니다."
-                ),
-            }
+    block = await get_extreme_join_block_reason(discord_id, party)
+    if block:
+        return {"can_join": False, "reason": block}
 
     api_key = await get_user_api_key(discord_id)
     if not api_key:
@@ -1420,7 +1603,7 @@ async def get_party_switch_eligibility(message_id: str, discord_id: str) -> dict
        "gold_done": [...], "level_too_low": [...], "no_cache": [...]}
     """
     party = await get_party(message_id)
-    if not party or party["status"] == "disbanded":
+    if is_ended(party):
         return {"can_switch": False, "reason": "유효하지 않은 파티입니다."}
 
     slots = await get_party_slots(message_id)
@@ -1436,7 +1619,9 @@ async def get_party_switch_eligibility(message_id: str, discord_id: str) -> dict
 
     from bot.data.raids import RAIDS as _RAIDS
     if _RAIDS.get(party["raid_name"], {}).get("is_extreme"):
-        cleared = await get_expedition_extreme_completion(discord_id, party["raid_name"], party_week_key)
+        # 원정대 단위 주 1회 — 어느 익스트림 레이드든 그 주에 클리어했으면 막는다(참여 규칙과 같은 범위)
+        status = await get_expedition_extreme_status(discord_id, party_week_key)
+        cleared = next(iter(status.values()), None)
         if cleared:
             return {
                 "can_switch": False,
@@ -1498,7 +1683,7 @@ async def switch_party_character(
     message_id: str, discord_id: str, character_name: str, character_class: str, role: str
 ) -> None:
     """참여 중인 슬롯의 캐릭터만 교체한다(슬롯 번호·참여 시각은 유지)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE party_slots SET character_name=?, character_class=?, role=? "
             "WHERE party_message_id=? AND discord_id=?",
@@ -1521,10 +1706,10 @@ async def switch_party_role(message_id: str, discord_id: str, new_role: str) -> 
         return False, "잘못된 역할입니다."
 
     party = await get_party(message_id)
-    if not party or party["status"] == "disbanded":
+    if is_ended(party):
         return False, "유효하지 않은 파티입니다."
 
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT * FROM party_slots WHERE party_message_id=? AND discord_id=?",
@@ -1571,7 +1756,7 @@ async def switch_party_role(message_id: str, discord_id: str, new_role: str) -> 
 
 
 async def leave_slot(message_id: str, discord_id: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM party_slots WHERE party_message_id=? AND discord_id=?",
             (message_id, discord_id),
@@ -1588,7 +1773,7 @@ async def leave_slot(message_id: str, discord_id: str) -> bool:
 
 
 async def transfer_leader(message_id: str, new_leader_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET leader_id=? WHERE message_id=?",
             (new_leader_id, message_id),
@@ -1614,13 +1799,21 @@ async def complete_raid_for_party(message_id: str) -> int:
     from bot.data.raids import RAIDS
     is_extreme = bool(RAIDS.get(raid_name, {}).get("is_extreme"))
     count = 0
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         for slot in slots:
             if is_extreme:
                 # 익스트림은 원정대당 주 1줄 — 웹에서 다른 캐릭터로 미리 체크해둔 게 있으면 공대 기록이 대체한다
                 await db.execute(
                     "DELETE FROM raid_completions WHERE discord_id=? AND raid_name=? AND week_key=?",
                     (slot["discord_id"], raid_name, week),
+                )
+            else:
+                # 레이드 하나당 그 주에 인정되는 난이도는 1개(toggle_completion과 같은 규칙) —
+                # 수동으로 노말을 체크해 둔 캐릭터가 하드 공대를 클리어하면 두 줄이 되어 이중 집계됐다.
+                await db.execute(
+                    "DELETE FROM raid_completions WHERE discord_id=? AND character_name=? "
+                    "AND raid_name=? AND week_key=? AND difficulty!=?",
+                    (slot["discord_id"], slot["character_name"], raid_name, week, difficulty),
                 )
             cur = await db.execute(
                 "INSERT OR IGNORE INTO raid_completions "
@@ -1630,19 +1823,80 @@ async def complete_raid_for_party(message_id: str) -> int:
             )
             if cur.rowcount > 0:
                 count += 1
+                # 이 클리어가 "새로 만든" 행만 기록 — 되돌리기는 이 행들만 지운다
+                await db.execute(
+                    "INSERT OR REPLACE INTO party_clear_completions "
+                    "(message_id, discord_id, character_name, raid_name, difficulty, week_key) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (message_id, slot["discord_id"], slot["character_name"], raid_name, difficulty, week),
+                )
         await db.commit()
     return count
 
 
-async def disband_party(message_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+async def disband_party(message_id: str, *, cleared: bool = False) -> None:
+    """파티 종료(status='disbanded'). cleared=True면 클리어 처리로 끝났다는 표시(cleared_at)도
+    남긴다 — 관리자 되돌리기는 이 표시가 있는 공대만 받는다."""
+    now_iso = datetime.now(KST).isoformat()
+    async with _connect() as db:
         await db.execute(
-            "UPDATE parties SET status='disbanded' WHERE message_id=?", (message_id,)
+            "UPDATE parties SET status='disbanded', ended_at=?, "
+            "cleared_at=CASE WHEN ? THEN ? ELSE cleared_at END WHERE message_id=?",
+            (now_iso, int(cleared), now_iso, message_id),
         )
         await db.execute(
             "DELETE FROM party_waitlist WHERE party_message_id=?", (message_id,)
         )
         await db.commit()
+
+
+async def expire_party(message_id: str) -> bool:
+    """주간 리셋 자동 종료 — 클리어 없이 기한이 지난 공대. 'expired'는 클리어가 아니므로
+    완료 기록·이력·캘린더 어디에서도 클리어로 세지 않는다. 진행 중 상태일 때만 바꾼다."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "UPDATE parties SET status='expired', ended_at=? "
+            "WHERE message_id=? AND status IN ('recruiting', 'full', 'closed')",
+            (datetime.now(KST).isoformat(), message_id),
+        )
+        await db.execute(
+            "DELETE FROM party_waitlist WHERE party_message_id=?", (message_id,)
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def get_party_clear_completions(message_id: str) -> list[dict]:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT discord_id, character_name, raid_name, difficulty, week_key "
+            "FROM party_clear_completions WHERE message_id=?",
+            (message_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def revert_party_clear_completions(message_id: str) -> int:
+    """클리어가 만든 완료 기록만 지운다(다른 공대·수동 체크로 얻은 같은 레이드 기록은 보존).
+    반환: 지운 완료 행 수."""
+    removed = 0
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT discord_id, character_name, raid_name, difficulty, week_key "
+            "FROM party_clear_completions WHERE message_id=?",
+            (message_id,),
+        )
+        for discord_id, character_name, raid_name, difficulty, week_key in await cur.fetchall():
+            d = await db.execute(
+                "DELETE FROM raid_completions WHERE discord_id=? AND character_name=? "
+                "AND raid_name=? AND difficulty=? AND week_key=?",
+                (discord_id, character_name, raid_name, difficulty, week_key),
+            )
+            removed += d.rowcount
+        await db.execute("DELETE FROM party_clear_completions WHERE message_id=?", (message_id,))
+        await db.commit()
+    return removed
 
 
 # ──────────────────────────────────────────────
@@ -1652,7 +1906,7 @@ async def disband_party(message_id: str) -> None:
 async def add_waitlist(message_id: str, discord_id: str) -> bool:
     """대기열 등록. 이미 있으면 False 반환."""
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO party_waitlist (party_message_id, discord_id) VALUES (?, ?)",
                 (message_id, discord_id),
@@ -1665,7 +1919,7 @@ async def add_waitlist(message_id: str, discord_id: str) -> bool:
 
 async def remove_waitlist(message_id: str, discord_id: str) -> bool:
     """대기열 취소. 없으면 False 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM party_waitlist WHERE party_message_id=? AND discord_id=?",
             (message_id, discord_id),
@@ -1676,7 +1930,7 @@ async def remove_waitlist(message_id: str, discord_id: str) -> bool:
 
 async def get_waitlist(message_id: str) -> list[str]:
     """대기열 discord_id 목록 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT discord_id FROM party_waitlist WHERE party_message_id=? ORDER BY created_at",
             (message_id,),
@@ -1686,7 +1940,7 @@ async def get_waitlist(message_id: str) -> list[str]:
 
 
 async def clear_waitlist(message_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "DELETE FROM party_waitlist WHERE party_message_id=?", (message_id,)
         )
@@ -1694,7 +1948,7 @@ async def clear_waitlist(message_id: str) -> None:
 
 
 async def update_party_memo(message_id: str, memo: str | None) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET memo=? WHERE message_id=?", (memo, message_id)
         )
@@ -1705,10 +1959,10 @@ async def update_party_schedule(
     message_id: str, scheduled_time: str, scheduled_datetime: str
 ) -> None:
     """일정 변경. notified·pre_notified 모두 리셋하여 새 시각에 알림이 재발송된다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET scheduled_time=?, scheduled_datetime=?, "
-            "notified=0, pre_notified=0 WHERE message_id=?",
+            "notified=0, pre_notified=0, overdue_notified=0 WHERE message_id=?",
             (scheduled_time, scheduled_datetime, message_id),
         )
         await db.execute(
@@ -1725,7 +1979,7 @@ async def update_party_difficulty(
     정원이 바뀌면 full/recruiting 상태도 같은 트랜잭션에서 다시 계산한다 — 안 그러면
     8/8 완성 파티를 16인 난이도로 바꿔도 'full'이 남아 아무도 참여할 수 없었다
     (상태를 full로 바꾸는 곳이 auto_assign_slot뿐이고 되돌리는 곳이 없었음)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET difficulty=?, proficiency=?, total_slots=?, min_level=? WHERE message_id=?",
             (difficulty, proficiency, total_slots, min_level, message_id),
@@ -1745,7 +1999,7 @@ async def update_party_difficulty(
 async def get_party_slot_item_levels(message_id: str) -> list[dict]:
     """참여 중인 슬롯별 캐릭터/아이템 레벨 — 난이도 변경 시 레벨 요건 검증용.
     게스트 초대 등 user_characters에 매칭되는 캐릭터가 없으면 item_level=None."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT ps.discord_id, ps.character_name, uc.item_level "
@@ -1760,7 +2014,7 @@ async def get_party_slot_item_levels(message_id: str) -> list[dict]:
 
 async def close_party(message_id: str) -> None:
     """모집만 마감 (파티는 유지 — 클리어 가능)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET status='closed' WHERE message_id=?", (message_id,)
         )
@@ -1774,7 +2028,7 @@ async def reopen_party(message_id: str) -> None:
         return
     slots = await get_party_slots(message_id)
     new_status = "full" if len(slots) >= party["total_slots"] else "recruiting"
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET status=? WHERE message_id=?", (new_status, message_id)
         )
@@ -1787,13 +2041,14 @@ async def revert_disbanded_party(message_id: str) -> str | None:
     가드를 풀어 disbanded도 받아주면, 리더가 실수로 그 경로를 타서 완료 체크
     취소 같은 부수효과 없이 상태만 되돌리는 불일치가 생길 수 있다."""
     party = await get_party(message_id)
-    if not party or party["status"] != "disbanded":
+    if not party or party["status"] != "disbanded" or not party.get("cleared_at"):
         return None
     slots = await get_party_slots(message_id)
     new_status = "full" if len(slots) >= party["total_slots"] else "recruiting"
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
-            "UPDATE parties SET status=? WHERE message_id=?", (new_status, message_id)
+            "UPDATE parties SET status=?, cleared_at=NULL, ended_at=NULL WHERE message_id=?",
+            (new_status, message_id),
         )
         await db.commit()
     return new_status
@@ -1801,7 +2056,7 @@ async def revert_disbanded_party(message_id: str) -> str | None:
 
 async def get_user_parties(discord_id: str) -> list[dict]:
     """특정 유저가 참여 중인 활성 파티 목록."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT DISTINCT p.* FROM parties p "
@@ -1814,9 +2069,20 @@ async def get_user_parties(discord_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def get_parties_led_by(discord_id: str) -> list[dict]:
+    """이 유저가 파티장인 활성 공대."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM parties WHERE leader_id=? AND status IN ('recruiting', 'full', 'closed')",
+            (discord_id,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
 async def get_guild_parties(guild_id: str) -> list[dict]:
     """서버의 모집 중/완성된 파티 목록 (최신순)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT * FROM parties WHERE guild_id=? AND status IN ('recruiting', 'full', 'closed') "
@@ -1836,7 +2102,7 @@ async def get_guild_parties_with_slots(guild_id: str) -> list[dict]:
         return []
     ids = [p["message_id"] for p in parties]
     placeholders = ",".join("?" * len(ids))
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT ps.*, (u.discord_id IS NULL) AS is_guest FROM party_slots ps "
@@ -1873,27 +2139,39 @@ async def get_guild_parties_with_slots(guild_id: str) -> list[dict]:
     ]
 
 
+def _party_reference_dt(party: dict) -> datetime | None:
+    """주차 판단 기준 시각 — 일정이 있으면 일정, 없으면(레거시) 생성 시각."""
+    return _parse_db_datetime(party.get("scheduled_datetime")) or _parse_db_datetime(party.get("created_at"))
+
+
 async def get_prev_week_disbanded_parties(week_start_iso: str) -> list[dict]:
-    """현재 주 시작 이전에 scheduled된 disbanded 파티 (스레드 삭제용).
-    scheduled_datetime이 없는 파티는 created_at 기준으로 현재 주 이전 파티를 포함한다.
-    """
-    async with aiosqlite.connect(DB_PATH) as db:
+    """스레드 삭제 + purge 대상 — 이번 주가 시작되기 전에 "끝난"(disbanded/expired) 파티.
+
+    끝난 시각(ended_at)이 있으면 그것으로 판단한다. 예전엔 일정(scheduled_datetime) 기준이라,
+    주간 리셋 때 자동 종료된 공대(일정은 당연히 지난주)가 30초 뒤 다음 주기에 곧바로
+    삭제됐다(한 주 보관하려던 의도와 다르게). ended_at이 없는 옛 행은 예전 기준을 쓰되,
+    문자열 비교 대신 datetime으로 비교한다(created_at은 UTC 'YYYY-MM-DD HH:MM:SS'라
+    KST ISO 문자열과 직접 비교하면 틀린다)."""
+    week_start = _parse_db_datetime(week_start_iso)
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT * FROM parties "
-            "WHERE status = 'disbanded' "
-            "AND (scheduled_datetime < ? OR (scheduled_datetime IS NULL AND created_at < ?))",
-            (week_start_iso, week_start_iso),
+            "SELECT * FROM parties WHERE status IN ('disbanded', 'expired')"
         )
-        rows = await cur.fetchall()
-    return [dict(r) for r in rows]
+        rows = [dict(r) for r in await cur.fetchall()]
+    result = []
+    for p in rows:
+        ref = _parse_db_datetime(p.get("ended_at")) or _party_reference_dt(p)
+        if ref is not None and week_start is not None and ref < week_start:
+            result.append(p)
+    return result
 
 
 async def purge_party(message_id: str, archived_status: str | None = None) -> None:
     """파티·슬롯·대기열·알림 기록을 완전히 삭제하기 전에 party_history에 이력을 남긴다.
     archived_status를 넘기면 그 값으로 기록(예: 취소 흐름에서 "cancelled"), 안 넘기면
     파티의 현재 status 그대로 남긴다(예: 주간 리셋 때 정리되는 클리어된 파티는 "disbanded")."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM parties WHERE message_id=?", (message_id,))
         party = await cur.fetchone()
@@ -1932,16 +2210,44 @@ async def get_prev_week_active_parties(week_start_iso: str) -> list[dict]:
     """현재 주 시작 이전인 미종료 파티 (주간 리셋 정리용).
     scheduled_datetime이 없는 파티는 created_at 기준으로 판단한다.
     """
-    async with aiosqlite.connect(DB_PATH) as db:
+    week_start = _parse_db_datetime(week_start_iso)
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
-            "SELECT * FROM parties "
-            "WHERE status IN ('recruiting', 'full', 'closed') "
-            "AND (scheduled_datetime < ? OR (scheduled_datetime IS NULL AND created_at < ?))",
-            (week_start_iso, week_start_iso),
+            "SELECT * FROM parties WHERE status IN ('recruiting', 'full', 'closed')"
         )
-        rows = await cur.fetchall()
-    return [dict(r) for r in rows]
+        rows = [dict(r) for r in await cur.fetchall()]
+    result = []
+    for p in rows:
+        ref = _party_reference_dt(p)
+        if ref is not None and week_start is not None and ref < week_start:
+            result.append(p)
+    return result
+
+
+async def get_overdue_parties(now: datetime) -> list[dict]:
+    """시작 시각 + OVERDUE_NOTIFY_HOURS가 지났는데 아직 진행 중(클리어/취소 안 됨)이고,
+    파티장에게 정리 요청 DM을 아직 안 보낸 파티."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM parties WHERE status IN ('recruiting', 'full', 'closed') "
+            "AND scheduled_datetime IS NOT NULL "
+            "AND (overdue_notified IS NULL OR overdue_notified = 0)"
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+    due = []
+    for p in rows:
+        start = _parse_db_datetime(p["scheduled_datetime"])
+        if start is not None and start + timedelta(hours=OVERDUE_NOTIFY_HOURS) <= now:
+            due.append(p)
+    return due
+
+
+async def mark_overdue_notified(message_id: str) -> None:
+    async with _connect() as db:
+        await db.execute("UPDATE parties SET overdue_notified=1 WHERE message_id=?", (message_id,))
+        await db.commit()
 
 
 async def get_calendar_parties(guild_id: str, start_iso: str, end_iso: str) -> list[dict]:
@@ -1950,7 +2256,7 @@ async def get_calendar_parties(guild_id: str, start_iso: str, end_iso: str) -> l
     지난 이력(party_history 테이블)을 합쳐서 반환한다 — 그래야 지난달 이전 기록도 보인다.
     취소된 파티(status='cancelled')는 party_history에 남지만, 실제 진행되지 않은 일정이라
     캘린더에는 굳이 보여주지 않는다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT message_id, raid_name, difficulty, proficiency, scheduled_time, "
@@ -1958,11 +2264,11 @@ async def get_calendar_parties(guild_id: str, start_iso: str, end_iso: str) -> l
             "  SELECT p.message_id, p.raid_name, p.difficulty, p.proficiency, p.scheduled_time, "
             "         p.scheduled_datetime, p.total_slots, p.min_level, p.status, "
             "         (SELECT COUNT(*) FROM party_slots s WHERE s.party_message_id = p.message_id) AS slot_count "
-            "  FROM parties p WHERE p.guild_id = ? "
+            "  FROM parties p WHERE p.guild_id = ? AND p.status != 'expired' "
             "  UNION ALL "
             "  SELECT h.message_id, h.raid_name, h.difficulty, h.proficiency, h.scheduled_time, "
             "         h.scheduled_datetime, h.total_slots, h.min_level, h.status, h.slot_count "
-            "  FROM party_history h WHERE h.guild_id = ? AND h.status != 'cancelled' "
+            "  FROM party_history h WHERE h.guild_id = ? AND h.status NOT IN ('cancelled', 'expired') "
             ") combined "
             "WHERE scheduled_datetime IS NOT NULL AND scheduled_datetime >= ? AND scheduled_datetime < ? "
             "ORDER BY scheduled_datetime ASC",
@@ -1975,21 +2281,22 @@ async def get_calendar_parties(guild_id: str, start_iso: str, end_iso: str) -> l
 async def get_disbanded_parties(guild_id: str, limit: int = 50) -> list[dict]:
     """disbanded(클리어) 파티 이력 (최신순). 주간 리셋으로 이미 purge된 지난 이력은
     party_history에서, 아직 살아있는(이번 주) 것은 parties에서 가져와 합친다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT message_id, channel_id, guild_id, leader_id, raid_name, difficulty, proficiency, "
             "scheduled_time, scheduled_datetime, total_slots, min_level, status, notified, memo, "
-            "created_at, slot_count FROM ("
+            "created_at, slot_count, cleared_at FROM ("
             "  SELECT p.message_id, p.channel_id, p.guild_id, p.leader_id, p.raid_name, p.difficulty, "
             "         p.proficiency, p.scheduled_time, p.scheduled_datetime, p.total_slots, p.min_level, "
             "         p.status, p.notified, p.memo, p.created_at, "
-            "         (SELECT COUNT(*) FROM party_slots s WHERE s.party_message_id = p.message_id) AS slot_count "
+            "         (SELECT COUNT(*) FROM party_slots s WHERE s.party_message_id = p.message_id) AS slot_count, "
+            "         p.cleared_at "
             "  FROM parties p WHERE p.guild_id=? AND p.status='disbanded' "
             "  UNION ALL "
             "  SELECT h.message_id, NULL, h.guild_id, h.leader_id, h.raid_name, h.difficulty, "
             "         h.proficiency, h.scheduled_time, h.scheduled_datetime, h.total_slots, h.min_level, "
-            "         h.status, NULL, h.memo, h.created_at, h.slot_count "
+            "         h.status, NULL, h.memo, h.created_at, h.slot_count, NULL "
             "  FROM party_history h WHERE h.guild_id=? AND h.status='disbanded'"
             ") combined "
             "ORDER BY created_at DESC LIMIT ?",
@@ -2004,7 +2311,7 @@ async def add_completion(
 ) -> bool:
     """레이드 클리어 수동 추가."""
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO raid_completions "
                 "(discord_id, character_name, raid_name, difficulty, week_key) "
@@ -2021,7 +2328,7 @@ async def remove_completion(
     discord_id: str, character_name: str, raid_name: str, difficulty: str, week_key: str
 ) -> bool:
     """레이드 클리어 수동 삭제."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM raid_completions "
             "WHERE discord_id=? AND character_name=? AND raid_name=? AND difficulty=? AND week_key=?",
@@ -2034,7 +2341,7 @@ async def remove_completion(
 async def get_weekly_clear_stats(week_key: str | None = None) -> list[dict]:
     """주차별 레이드×난이도 클리어 수 — 관리자 통계(관리자 API·웹 공용)."""
     week = week_key or get_week_key()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT raid_name, difficulty, COUNT(*) AS count "
@@ -2049,7 +2356,7 @@ async def get_weekly_clear_stats(week_key: str | None = None) -> list[dict]:
 async def get_character_clear_stats(week_key: str | None = None) -> list[dict]:
     """주차별 캐릭터별 클리어 수 — 관리자 통계(관리자 API·웹 공용)."""
     week = week_key or get_week_key()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT discord_id, character_name, COUNT(*) AS clears "
@@ -2063,7 +2370,7 @@ async def get_character_clear_stats(week_key: str | None = None) -> list[dict]:
 
 async def get_available_weeks(limit: int = 12) -> list[str]:
     """클리어 기록이 있는 주차 키(최신순)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT DISTINCT week_key FROM raid_completions ORDER BY week_key DESC LIMIT ?",
             (limit,),
@@ -2078,7 +2385,7 @@ async def get_representative_names(discord_ids: list[str]) -> dict[str, str | No
     if not ids:
         return {}
     placeholders = ",".join("?" * len(ids))
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT u.discord_id, "
             f"{_REPRESENTATIVE_CHARACTER_SQL.format(alias='u')} AS representative "
@@ -2091,7 +2398,7 @@ async def get_representative_names(discord_ids: list[str]) -> dict[str, str | No
 
 async def get_weekly_activity(guild_id: str) -> list[dict]:
     """서버의 주차별 파티 생성 수."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT strftime('%Y-%W', created_at) AS week, COUNT(*) AS count "
@@ -2105,7 +2412,7 @@ async def get_weekly_activity(guild_id: str) -> list[dict]:
 
 async def get_popular_raids(guild_id: str) -> list[dict]:
     """서버의 레이드별 공대 생성 수 (전체 기간)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT raid_name, difficulty, COUNT(*) AS count "
@@ -2119,12 +2426,12 @@ async def get_popular_raids(guild_id: str) -> list[dict]:
 
 async def get_active_users(guild_id: str) -> list[dict]:
     """서버에서 파티에 참여한 유저 수 (주차별)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT COUNT(DISTINCT ps.discord_id) AS user_count "
             "FROM party_slots ps JOIN parties p ON ps.party_message_id = p.message_id "
-            "WHERE p.guild_id=? AND p.status != 'disbanded'",
+            "WHERE p.guild_id=? AND p.status IN ('recruiting', 'full', 'closed')",
             (guild_id,),
         )
         row = await cur.fetchone()
@@ -2134,7 +2441,7 @@ async def get_active_users(guild_id: str) -> list[dict]:
 async def create_invite(message_id: str, discord_id: str, slot_number: int) -> bool:
     """초대 생성. 중복이면 False."""
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO party_invites (message_id, discord_id, slot_number) VALUES (?, ?, ?)",
                 (message_id, discord_id, slot_number),
@@ -2146,7 +2453,7 @@ async def create_invite(message_id: str, discord_id: str, slot_number: int) -> b
 
 
 async def delete_invite(message_id: str, discord_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "DELETE FROM party_invites WHERE message_id=? AND discord_id=?",
             (message_id, discord_id),
@@ -2163,7 +2470,7 @@ async def get_expired_invites(hours: int = 1) -> list[dict]:
     주기적으로 만료 대상을 찾아 정리한다. find_recent_duplicate_party와 동일하게
     SQLite의 datetime('now', ...)로 비교해 파이썬 쪽 타임존(KST) 변환 없이 처리한다
     (invited_at은 CURRENT_TIMESTAMP로 저장되는 naive UTC)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT message_id, discord_id, slot_number, dm_channel_id, dm_message_id FROM party_invites "
@@ -2176,7 +2483,7 @@ async def get_expired_invites(hours: int = 1) -> list[dict]:
 
 async def set_invite_dm_message(message_id: str, discord_id: str, dm_channel_id: str, dm_message_id: str) -> None:
     """초대 DM을 보낸 직후 그 메시지 위치를 기록 — 나중에 버튼 없는 최종 상태로 편집하기 위해."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE party_invites SET dm_channel_id=?, dm_message_id=? WHERE message_id=? AND discord_id=?",
             (dm_channel_id, dm_message_id, message_id, discord_id),
@@ -2184,8 +2491,19 @@ async def set_invite_dm_message(message_id: str, discord_id: str, dm_channel_id:
         await db.commit()
 
 
+async def get_pending_invites_with_dm() -> list[dict]:
+    """DM 위치가 기록된 대기 중 초대 — 봇 재시작 시 수락/거절 버튼을 다시 붙이는 용도."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT message_id, discord_id, dm_channel_id, dm_message_id FROM party_invites "
+            "WHERE dm_message_id IS NOT NULL"
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
 async def get_invite(message_id: str, discord_id: str) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT message_id, discord_id, slot_number, invited_at, dm_channel_id, dm_message_id "
@@ -2198,7 +2516,7 @@ async def get_invite(message_id: str, discord_id: str) -> dict | None:
 
 async def get_reserved_slots(message_id: str) -> dict[int, str]:
     """예약된 슬롯 번호 → discord_id 맵 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT slot_number, discord_id FROM party_invites WHERE message_id=?",
             (message_id,),
@@ -2227,7 +2545,7 @@ async def get_invitable_users(exclude_ids: set[str] | list[str]) -> list[dict]:
     """등록된(API 키 있는) 유저 전체 + 대표 캐릭터명 — Discord "초대" 버튼
     (ManageView._handle_invite)이 쓰던 인라인 쿼리를 옮긴 것. exclude_ids(이미
     파티에 있거나 초대/예약된 유저)는 호출부에서 걸러낸다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT u.discord_id, "
@@ -2243,7 +2561,7 @@ async def get_user_invites(discord_id: str) -> list[dict]:
     """로그인한 유저에게 온 대기 중인 초대 목록 — 웹 "내게 온 초대" 화면용.
     디스코드는 DM으로 바로 알림이 가서 이 조회가 필요 없었지만, 웹은 이 목록이
     있어야 수락/거절할 방법이 생긴다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT i.message_id, i.slot_number, i.invited_at, "
@@ -2264,7 +2582,7 @@ async def add_party_comment(
 ) -> None:
     """파티 스레드 댓글 저장(디스코드/웹 공용) — 파티가 나중에 purge(party_history로
     이관)돼도 이 테이블은 독립적이라 계속 조회 가능하다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT INTO party_comments "
             "(party_message_id, discord_id, author_name, content, source, discord_message_id) "
@@ -2275,7 +2593,7 @@ async def add_party_comment(
 
 
 async def get_party_comments(party_message_id: str) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT id, discord_id, author_name, content, source, created_at "
@@ -2288,7 +2606,7 @@ async def get_party_comments(party_message_id: str) -> list[dict]:
 
 async def delete_party_comment(comment_id: int, discord_id: str) -> tuple[bool, str | None]:
     """본인이 웹에서 쓴 댓글만 삭제 가능. (삭제됐는지, 그 댓글의 discord_message_id)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT discord_message_id FROM party_comments WHERE id=? AND discord_id=? AND source='web'",
@@ -2306,8 +2624,10 @@ async def assign_invite_slot(
     message_id: str, discord_id: str,
     character_name: str, character_class: str, role: str,
 ) -> tuple[bool, str]:
-    """예약된 슬롯에 직접 배정. (success, message)"""
-    async with aiosqlite.connect(DB_PATH) as db:
+    """예약된 슬롯에 직접 배정. (success, message)
+    확인~INSERT를 BEGIN IMMEDIATE로 묶어 동시 수락·동시 서포터 참여를 직렬화한다."""
+    async with _connect() as db:
+        await db.execute("BEGIN IMMEDIATE")
         # 예약 슬롯 번호 조회
         cur = await db.execute(
             "SELECT slot_number FROM party_invites WHERE message_id=? AND discord_id=?",
@@ -2363,12 +2683,17 @@ async def assign_invite_slot(
                 if (await cur.fetchone())[0] >= 1:
                     return False, "이미 서포터가 있습니다."
 
-        await db.execute(
-            "INSERT INTO party_slots "
-            "(party_message_id, slot_number, discord_id, character_name, character_class, role) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (message_id, slot_number, discord_id, character_name, character_class, role),
-        )
+        try:
+            await db.execute(
+                "INSERT INTO party_slots "
+                "(party_message_id, slot_number, discord_id, character_name, character_class, role) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (message_id, slot_number, discord_id, character_name, character_class, role),
+            )
+        except aiosqlite.IntegrityError:
+            # 수락 버튼/웹 수락이 동시에 두 번 들어온 경우 — 500 대신 사유를 돌려준다
+            await db.rollback()
+            return False, "이미 파티에 참여 중입니다."
         await db.execute(
             "DELETE FROM party_invites WHERE message_id=? AND discord_id=?",
             (message_id, discord_id),
@@ -2397,7 +2722,7 @@ async def log_notification(
     discord_id: str, raid_name: str, difficulty: str, message_id: str
 ) -> None:
     """구독 DM 발송 이력 기록."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT INTO notification_logs (discord_id, raid_name, difficulty, message_id) "
             "VALUES (?, ?, ?, ?)",
@@ -2409,7 +2734,7 @@ async def log_notification(
 async def add_web_notification(discord_id: str, kind: str, message_id: str | None, text: str) -> int:
     """웹 알림함용 개인 알림 1건 저장. 7일 지난 행은 같이 정리한다(웹앱이 이미 가져갔고,
     웹 알림함 자체의 보관기간이 따로 있다)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "INSERT INTO web_notifications (discord_id, kind, message_id, text) VALUES (?, ?, ?, ?)",
             (discord_id, kind, message_id, text),
@@ -2420,13 +2745,13 @@ async def add_web_notification(discord_id: str, kind: str, message_id: str | Non
 
 
 async def get_latest_web_notification_id() -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute("SELECT COALESCE(MAX(id), 0) FROM web_notifications")
         return (await cur.fetchone())[0]
 
 
 async def get_web_notifications_after(after_id: int, limit: int = 200) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT id, discord_id, kind, message_id, text, created_at FROM web_notifications "
@@ -2438,7 +2763,7 @@ async def get_web_notifications_after(after_id: int, limit: int = 200) -> list[d
 
 async def get_notification_logs(limit: int = 100) -> list[dict]:
     """알림 발송 이력 조회."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT * FROM notification_logs ORDER BY sent_at DESC LIMIT ?",
@@ -2463,7 +2788,7 @@ async def get_user_party_history(
   같이 낸다 — 이 UNION ALL은 party_history 쪽이 인덱스 없는 JSON 필터라 ORDER BY로
   정렬할 때 이미 전체를 훑어야 하므로(LIMIT/OFFSET으로 건너뛸 수 없음), COUNT를
   추가해도 같은 데이터를 한 번 더 훑는 정도지 새로운 차수의 비용이 아니다."""
-  async with aiosqlite.connect(DB_PATH) as db:
+  async with _connect() as db:
     db.row_factory = aiosqlite.Row
     # slots_json: 살아있는 파티는 party_slots를 그 자리에서 JSON으로 묶고, 지난 이력은
     # purge_party가 남긴 스냅샷을 그대로 쓴다 — 웹 이력 화면의 "함께한 멤버" 표시용.
@@ -2514,7 +2839,7 @@ async def get_user_party_history(
 
 async def get_all_active_party_ids() -> list[tuple[str, str]]:
     """봇 재시작 시 활성 파티 복구용. (message_id, channel_id) 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT message_id, channel_id FROM parties WHERE status IN ('recruiting', 'full', 'closed')"
         )
@@ -2529,7 +2854,7 @@ async def get_all_active_party_ids() -> list[tuple[str, str]]:
 # ── 카테고리 ───────────────────────────────────
 
 async def get_categories() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT name, sort_order, is_extreme FROM raid_categories ORDER BY sort_order"
@@ -2540,7 +2865,7 @@ async def get_categories() -> list[dict]:
 
 async def add_category(name: str, sort_order: int) -> bool:
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO raid_categories (name, sort_order) VALUES (?, ?)",
                 (name, sort_order),
@@ -2552,7 +2877,7 @@ async def add_category(name: str, sort_order: int) -> bool:
 
 
 async def remove_category(name: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM raid_categories WHERE name=?", (name,)
         )
@@ -2561,7 +2886,7 @@ async def remove_category(name: str) -> bool:
 
 
 async def update_category_sort(name: str, sort_order: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raid_categories SET sort_order=? WHERE name=?", (sort_order, name)
         )
@@ -2573,7 +2898,7 @@ async def update_category_sort(name: str, sort_order: int) -> bool:
 
 async def get_raids_dict() -> dict:
     """RAIDS 딕셔너리 포맷으로 반환 (카테고리 순 → 난이도 순)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT r.name, r.short_name, r.icon, r.category, "
@@ -2619,7 +2944,7 @@ async def get_next_raid_sort_order(category: str) -> int:
     """이 카테고리에 레이드를 추가할 때 쓸 sort_order(현재 최댓값+1).
     난이도(get_next_difficulty_sort_order)와 같은 이유 — 전부 0으로 넣으면
     정렬이 동점이 되어 추가한 순서가 지켜지지 않는다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT COALESCE(MAX(sort_order), -1) FROM raids_data WHERE category=?",
             (category,),
@@ -2630,7 +2955,7 @@ async def get_next_raid_sort_order(category: str) -> int:
 async def add_raid(name: str, short_name: str, icon: str, category: str) -> bool:
     try:
         sort_order = await get_next_raid_sort_order(category)
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO raids_data (name, short_name, icon, category, sort_order) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -2648,7 +2973,7 @@ async def reorder_raids(category: str, order: list[str]) -> int:
     순서가 깨진다 — 배열 하나를 한 트랜잭션에서 적용한다.
     order에 없는 레이드는 뒤로 밀리되 기존 상대 순서를 유지한다.
     반환값은 실제로 순서를 부여한 레이드 수."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT name FROM raids_data WHERE category=? ORDER BY sort_order, rowid",
             (category,),
@@ -2669,7 +2994,7 @@ async def reorder_raids(category: str, order: list[str]) -> int:
 
 async def reorder_categories(order: list[str]) -> int:
     """카테고리 순서를 배열로 통째로 재부여. reorder_raids와 같은 이유."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT name FROM raid_categories ORDER BY sort_order, name"
         )
@@ -2689,7 +3014,7 @@ async def reorder_categories(order: list[str]) -> int:
 
 async def set_raid_pinned(name: str, is_pinned: bool) -> bool:
     """상단 고정 — 카테고리를 무시하고 모집 목록 맨 위로 올린다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raids_data SET is_pinned=? WHERE name=?", (int(is_pinned), name)
         )
@@ -2700,7 +3025,7 @@ async def set_raid_pinned(name: str, is_pinned: bool) -> bool:
 async def move_raid_category(name: str, category: str) -> bool:
     """레이드를 다른 카테고리로 옮긴다(순서는 그 카테고리 맨 뒤)."""
     next_sort = await get_next_raid_sort_order(category)
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raids_data SET category=?, sort_order=? WHERE name=?",
             (category, next_sort, name),
@@ -2710,7 +3035,7 @@ async def move_raid_category(name: str, category: str) -> bool:
 
 
 async def remove_raid(name: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "DELETE FROM raid_difficulties WHERE raid_name=?", (name,)
         )
@@ -2719,8 +3044,19 @@ async def remove_raid(name: str) -> bool:
         return cur.rowcount > 0
 
 
+async def count_live_parties_for_raid(name: str) -> int:
+    """레이드 삭제 가드 — 진행 중(모집중/완성/마감) 공대가 이 레이드를 쓰고 있으면 지우지 않는다
+    (지우면 그 공대의 정원·서포터 분할·익스트림 판정 정보가 사라진다)."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT COUNT(*) FROM parties WHERE raid_name=? AND status IN ('recruiting', 'full', 'closed')",
+            (name,),
+        )
+        return (await cur.fetchone())[0]
+
+
 async def raid_exists(name: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT 1 FROM raids_data WHERE name=?", (name,)
         )
@@ -2728,7 +3064,7 @@ async def raid_exists(name: str) -> bool:
 
 
 async def update_category_extreme(name: str, is_extreme: bool) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raid_categories SET is_extreme=? WHERE name=?",
             (int(is_extreme), name),
@@ -2738,7 +3074,7 @@ async def update_category_extreme(name: str, is_extreme: bool) -> bool:
 
 
 async def set_raid_active(name: str, is_active: bool) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raids_data SET is_active=? WHERE name=?",
             (int(is_active), name),
@@ -2748,7 +3084,7 @@ async def set_raid_active(name: str, is_active: bool) -> bool:
 
 
 async def set_raid_period(name: str, from_iso: str | None, until_iso: str | None) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raids_data SET available_from=?, available_until=? WHERE name=?",
             (from_iso, until_iso, name),
@@ -2758,10 +3094,10 @@ async def set_raid_period(name: str, from_iso: str | None, until_iso: str | None
 
 
 async def get_user_extreme_slot_this_week(
-    discord_id: str, party_week_key: str
+    discord_id: str, party_week_key: str, exclude_message_id: str | None = None,
 ) -> dict | None:
-    """이번 주 익스트림 파티에 참여 중인 슬롯 반환. 없으면 None."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    """이번 주 익스트림 파티에 참여 중인 슬롯 반환(exclude_message_id 공대는 제외). 없으면 None."""
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT ps.character_name, p.raid_name, p.scheduled_datetime "
@@ -2771,8 +3107,9 @@ async def get_user_extreme_slot_this_week(
             "JOIN raid_categories c ON c.name = r.category "
             "WHERE ps.discord_id = ? "
             "AND c.is_extreme = 1 "
+            "AND p.message_id != ? "
             "AND p.status IN ('recruiting', 'full', 'closed')",
-            (discord_id,),
+            (discord_id, exclude_message_id or ""),
         )
         rows = await cur.fetchall()
     for row in rows:
@@ -2785,7 +3122,7 @@ async def get_user_extreme_slot_this_week(
 
 async def get_expired_extreme_parties(now_iso: str) -> list[dict]:
     """available_until이 지났고 아직 기간 만료 알림이 발송되지 않은 익스트림 레이드의 활성 파티."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT p.* FROM parties p "
@@ -2804,7 +3141,7 @@ async def get_expired_extreme_parties(now_iso: str) -> list[dict]:
 
 async def mark_extreme_period_notified(message_id: str) -> None:
     """익스트림 레이드 운영 기간 만료 알림 발송 완료 표시 — 30초 루프 중복 방지."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "UPDATE parties SET extreme_period_notified = 1 WHERE message_id = ?",
             (message_id,),
@@ -2818,7 +3155,7 @@ async def get_next_difficulty_sort_order(raid_name: str) -> int:
     """이 레이드에 다음 난이도를 추가할 때 쓸 sort_order(현재 최댓값+1).
     관리자 앱처럼 순서를 직접 입력받지 않는 호출부가, 매번 0을 넣어서
     입력 순서(노말→하드→나이트메어)가 가나다 순으로 뒤섞이는 걸 방지한다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT COALESCE(MAX(sort_order), -1) FROM raid_difficulties WHERE raid_name=?",
             (raid_name,),
@@ -2832,7 +3169,7 @@ async def add_difficulty(
     total_slots: int, party_split: int | None, gates: int, sort_order: int,
 ) -> bool:
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO raid_difficulties "
                 "(raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order) "
@@ -2847,7 +3184,7 @@ async def add_difficulty(
 
 async def reorder_difficulties(raid_name: str, order: list[str]) -> int:
     """한 레이드의 난이도 순서를 배열로 통째로 재부여. reorder_raids와 같은 이유."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT difficulty FROM raid_difficulties WHERE raid_name=? ORDER BY sort_order",
             (raid_name,),
@@ -2867,18 +3204,8 @@ async def reorder_difficulties(raid_name: str, order: list[str]) -> int:
         return len(final)
 
 
-async def update_difficulty_sort(raid_name: str, difficulty: str, sort_order: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "UPDATE raid_difficulties SET sort_order=? WHERE raid_name=? AND difficulty=?",
-            (sort_order, raid_name, difficulty),
-        )
-        await db.commit()
-        return cur.rowcount > 0
-
-
 async def remove_difficulty(raid_name: str, difficulty: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM raid_difficulties WHERE raid_name=? AND difficulty=?",
             (raid_name, difficulty),
@@ -2890,7 +3217,7 @@ async def remove_difficulty(raid_name: str, difficulty: str) -> bool:
 # ── 직업 ───────────────────────────────────────
 
 async def get_support_classes_set() -> set[str]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT name FROM job_classes WHERE is_support=1"
         )
@@ -2899,7 +3226,7 @@ async def get_support_classes_set() -> set[str]:
 
 
 async def get_all_job_classes() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT name, is_support FROM job_classes ORDER BY name"
@@ -2910,7 +3237,7 @@ async def get_all_job_classes() -> list[dict]:
 
 async def add_job_class(name: str, is_support: bool) -> bool:
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO job_classes (name, is_support) VALUES (?, ?)",
                 (name, int(is_support)),
@@ -2922,7 +3249,7 @@ async def add_job_class(name: str, is_support: bool) -> bool:
 
 
 async def remove_job_class(name: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute("DELETE FROM job_classes WHERE name=?", (name,))
         await db.commit()
         return cur.rowcount > 0
@@ -2937,7 +3264,7 @@ async def remove_job_class(name: str) -> bool:
 async def subscribe_raid(discord_id: str, raid_name: str, difficulty: str) -> bool:
     """구독 등록. 이미 있으면 False 반환."""
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
+        async with _connect() as db:
             await db.execute(
                 "INSERT INTO raid_subscriptions (discord_id, raid_name, difficulty) VALUES (?, ?, ?)",
                 (discord_id, raid_name, difficulty),
@@ -2950,7 +3277,7 @@ async def subscribe_raid(discord_id: str, raid_name: str, difficulty: str) -> bo
 
 async def unsubscribe_raid(discord_id: str, raid_name: str, difficulty: str) -> bool:
     """구독 취소. 없으면 False 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM raid_subscriptions WHERE discord_id=? AND raid_name=? AND difficulty=?",
             (discord_id, raid_name, difficulty),
@@ -2961,7 +3288,7 @@ async def unsubscribe_raid(discord_id: str, raid_name: str, difficulty: str) -> 
 
 async def get_user_subscriptions(discord_id: str) -> list[dict]:
     """유저의 구독 목록 반환."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT raid_name, difficulty, created_at FROM raid_subscriptions "
@@ -2974,7 +3301,7 @@ async def get_user_subscriptions(discord_id: str) -> list[dict]:
 
 async def get_all_subscriptions() -> list[dict]:
     """관리자용 — 전체 구독 목록."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT discord_id, raid_name, difficulty, created_at "
@@ -2987,7 +3314,7 @@ async def get_all_subscriptions() -> list[dict]:
 async def get_raid_subscribers(raid_name: str, difficulty: str) -> list[str]:
     """특정 레이드+난이도 구독자 discord_id 목록 반환. "전체" 난이도로 구독한
     사람(RaidSelectView의 "전체 난이도" 옵션)도 같이 포함한다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT discord_id FROM raid_subscriptions "
             "WHERE raid_name=? AND difficulty IN (?, '전체')",
@@ -2999,7 +3326,7 @@ async def get_raid_subscribers(raid_name: str, difficulty: str) -> list[str]:
 
 async def seed_game_data() -> None:
     """테이블이 비어있을 때 기본 레이드·직업 데이터를 삽입한다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute("SELECT COUNT(*) FROM raid_categories")
         if (await cur.fetchone())[0] > 0:
             return  # 이미 시드됨
@@ -3064,7 +3391,7 @@ PRE_NOTIFY_HOURS_CHOICES = (0.0, 0.5, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0)
 async def get_pre_notify_hours(discord_id: str) -> float:
     """행이 없으면 0(끔) — 스키마 DEFAULT 1.0은 이 기능이 구현되기 전 값이라, 아무도
     설정한 적 없는 유저에게 갑자기 DM이 가지 않도록 '설정한 사람만' 받는다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT pre_notify_hours FROM user_preferences WHERE discord_id=?", (discord_id,)
         )
@@ -3073,7 +3400,7 @@ async def get_pre_notify_hours(discord_id: str) -> float:
 
 
 async def set_pre_notify_hours(discord_id: str, hours: float) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT INTO user_preferences (discord_id, pre_notify_hours) VALUES (?, ?) "
             "ON CONFLICT(discord_id) DO UPDATE SET pre_notify_hours=excluded.pre_notify_hours",
@@ -3086,7 +3413,7 @@ async def get_due_pre_notifications(now: datetime) -> list[dict]:
     """(파티, 참여자) 쌍 중 사전 알림을 보내야 하는 것들 — 참여자가 N시간 전 알림을 켜뒀고,
     시작까지 남은 시간이 N시간 이내이며, 아직 시작 전이고, 이 파티에 대해 아직 안 보낸 것.
     scheduled_datetime은 KST ISO 문자열이라 시간 비교는 파이썬에서 한다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT p.message_id, p.guild_id, p.channel_id, p.raid_name, p.difficulty, "
@@ -3120,7 +3447,7 @@ async def get_due_pre_notifications(now: datetime) -> list[dict]:
 
 
 async def mark_pre_notified(message_id: str, discord_id: str) -> None:
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "INSERT OR IGNORE INTO party_pre_notifications (message_id, discord_id) VALUES (?, ?)",
             (message_id, discord_id),
@@ -3134,7 +3461,7 @@ async def mark_pre_notified(message_id: str, discord_id: str) -> None:
 
 async def get_user_completion_weeks(discord_id: str, limit: int = 12) -> list[str]:
     """이 유저의 클리어 기록이 있는 주차 키(최신순)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "SELECT DISTINCT week_key FROM raid_completions WHERE discord_id=? "
             "ORDER BY week_key DESC LIMIT ?",
@@ -3146,7 +3473,7 @@ async def get_user_completion_weeks(discord_id: str, limit: int = 12) -> list[st
 
 async def get_user_week_completions(discord_id: str, week_key: str) -> list[dict]:
     """주차 하나의 캐릭터별 클리어 목록. 캐릭터 직업은 지금 캐시 기준(과거 주차엔 저장 안 됨)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT c.character_name, c.raid_name, c.difficulty, uc.character_class "
@@ -3176,7 +3503,7 @@ async def get_user_week_completions(discord_id: str, week_key: str) -> list[dict
 
 async def update_raid(name: str, short_name: str, icon: str) -> bool:
     """약칭·아이콘만 바꾼다(이름은 rename_raid). 정렬/카테고리/기간/고정은 그대로."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raids_data SET short_name=?, icon=? WHERE name=?",
             (short_name, icon, name),
@@ -3192,7 +3519,7 @@ async def update_difficulty(
     """난이도 수치 변경. parties.total_slots/min_level은 개설 시점 스냅샷이라 여기서
     건드리지 않는다 — 이미 올라간 공대는 자기 값을 유지하고, 개별 공대는
     update_party_difficulty로 따로 바꾼다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "UPDATE raid_difficulties SET min_level=?, total_slots=?, party_split=?, gates=? "
             "WHERE raid_name=? AND difficulty=?",
@@ -3211,7 +3538,7 @@ _RAID_NAME_REFS_PLAIN = ("parties", "party_history", "notification_logs")
 
 async def rename_raid(old: str, new: str) -> bool:
     """레이드 이름 변경 + 참조 테이블 전부 연쇄 갱신(한 트랜잭션). old가 없으면 False."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         try:
             cur = await db.execute("UPDATE raids_data SET name=? WHERE name=?", (new, old))
             if cur.rowcount == 0:
@@ -3230,7 +3557,7 @@ async def rename_raid(old: str, new: str) -> bool:
 
 async def rename_category(old: str, new: str) -> bool:
     """카테고리 이름 변경 — raids_data.category만 따라간다(카테고리를 참조하는 곳은 그것뿐)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         try:
             cur = await db.execute("UPDATE raid_categories SET name=? WHERE name=?", (new, old))
             if cur.rowcount == 0:
@@ -3247,7 +3574,7 @@ async def rename_category(old: str, new: str) -> bool:
 async def rename_difficulty(raid_name: str, old: str, new: str) -> bool:
     """난이도 이름 변경 — (레이드, 난이도) 쌍을 참조하는 테이블을 연쇄 갱신.
     raid_subscriptions의 '전체' 와일드카드 행은 difficulty=old에 안 걸리므로 그대로 남는다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         try:
             cur = await db.execute(
                 "UPDATE OR REPLACE raid_difficulties SET difficulty=? WHERE raid_name=? AND difficulty=?",
@@ -3276,7 +3603,7 @@ async def rename_difficulty(raid_name: str, old: str, new: str) -> bool:
 async def count_raid_references(name: str, difficulty: str | None = None) -> dict:
     """이름 변경 확인 창에 보여줄 참조 건수. difficulty를 주면 (레이드, 난이도) 쌍 기준
     (character_raid_selection은 난이도가 없어 레이드 기준 그대로)."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         async def count(table: str, extra: str = "", with_diff: bool = True) -> int:
             sql = f"SELECT COUNT(*) FROM {table} WHERE raid_name=?"
             params: list = [name]
@@ -3299,7 +3626,7 @@ async def count_raid_references(name: str, difficulty: str | None = None) -> dic
 
 async def count_raids_in_category(name: str) -> int:
     """카테고리 삭제 가드용 — get_raids_dict는 카테고리와 inner JOIN이라 고아를 못 보니 직접 센다."""
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute("SELECT COUNT(*) FROM raids_data WHERE category=?", (name,))
         return (await cur.fetchone())[0]
 
@@ -3320,7 +3647,7 @@ _EXTREME_COMPLETION_JOIN = (
 async def get_expedition_extreme_status(discord_id: str, week_key: str | None = None) -> dict[str, dict]:
     """주차의 익스트림 클리어 상태 — {raid_name: {"difficulty", "character_name"}}. 없으면 빈 dict."""
     week = week_key or get_week_key()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             "SELECT c.raid_name, c.difficulty, c.character_name "
@@ -3346,7 +3673,7 @@ async def set_extreme_completion(
 ) -> None:
     """원정대 단위 체크 — 같은 주 그 레이드의 기존 줄(캐릭터·난이도 무관)을 지우고 한 줄만 남긴다."""
     week = week_key or get_week_key()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         await db.execute(
             "DELETE FROM raid_completions WHERE discord_id=? AND raid_name=? AND week_key=?",
             (discord_id, raid_name, week),
@@ -3361,7 +3688,7 @@ async def set_extreme_completion(
 
 async def clear_extreme_completion(discord_id: str, raid_name: str, week_key: str | None = None) -> int:
     week = week_key or get_week_key()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM raid_completions WHERE discord_id=? AND raid_name=? AND week_key=?",
             (discord_id, raid_name, week),

@@ -20,6 +20,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
     asyncio.run(db.init_db())
     asyncio.run(db.set_user_api_key("111", "dummy-loa-key"))
+    # 완료 토글은 이제 레이드/난이도 존재와 캐릭터 소유를 서버에서 검증한다
+    asyncio.run(db.add_character("111", "발키리"))
+    import bot.data.raids as raids_module
+    asyncio.run(raids_module.reload())
 
     from bot.api.server import app
 
@@ -146,7 +150,7 @@ def test_toggle_completion_marks_then_unmarks(client):
 
     first = client.post(toggle_url, json=payload, headers={"X-Webapp-Key": "test-webapp-key"})
     assert first.status_code == 200
-    assert first.json() == {"completed": True}
+    assert first.json() == {"success": True, "completed": True}
 
     check = client.get(
         "/api/internal/completions",
@@ -156,7 +160,7 @@ def test_toggle_completion_marks_then_unmarks(client):
     assert check.json()["completions"] == ["아르모체(4막)_노말"]
 
     second = client.post(toggle_url, json=payload, headers={"X-Webapp-Key": "test-webapp-key"})
-    assert second.json() == {"completed": False}
+    assert second.json() == {"success": True, "completed": False}
 
     check_again = client.get(
         "/api/internal/completions",

@@ -9,6 +9,7 @@ from discord.ui import View, Select
 
 import bot.database.manager as db
 from bot.data.raids import RAIDS
+from bot.ui.views import PagedSelect
 
 
 def _format_difficulty(difficulty: str) -> str:
@@ -41,9 +42,7 @@ class RaidSelectView(View):
         ]
         if not options:
             return
-        sel = Select(placeholder="구독할 레이드를 선택하세요", options=options[:25])
-        sel.callback = self._on_raid_select
-        self.add_item(sel)
+        self.add_item(PagedSelect(options, self._on_raid_select, placeholder="구독할 레이드를 선택하세요"))
 
     async def _on_raid_select(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.discord_id:
@@ -72,9 +71,7 @@ class RaidSelectView(View):
             )
             for diff, info in diffs.items()
         ]
-        sel = Select(placeholder="난이도 선택", options=options)
-        sel.callback = self._on_diff_select
-        self.add_item(sel)
+        self.add_item(PagedSelect(options, self._on_diff_select, placeholder="난이도 선택"))
 
     async def _on_diff_select(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.discord_id:
@@ -111,9 +108,7 @@ class UnsubscribeView(View):
             )
             for s in subs
         ]
-        sel = Select(placeholder="취소할 구독을 선택하세요", options=options)
-        sel.callback = self._on_select
-        self.add_item(sel)
+        self.add_item(PagedSelect(options, self._on_select, placeholder="취소할 구독을 선택하세요"))
 
     async def _on_select(self, interaction: discord.Interaction) -> None:
         if str(interaction.user.id) != self.discord_id:

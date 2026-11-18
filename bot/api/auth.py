@@ -12,11 +12,15 @@ WEBAPP_KEY_NAME = "X-Webapp-Key"
 webapp_key_header = APIKeyHeader(name=WEBAPP_KEY_NAME)
 
 
-def _keys_match(a: str, b: str) -> bool:
+def _keys_match(given: str, expected: str) -> bool:
   """상수 시간 비교 — 단순 != 비교는 문자열 앞부분이 일치할수록 비교가 느리게
   끝나는 타이밍 차이가 있어(짧은 비밀키일수록 실전에서 악용 가능성), 인증 키
-  비교에는 hmac.compare_digest를 쓰는 게 안전하다."""
-  return hmac.compare_digest(a, b)
+  비교에는 hmac.compare_digest를 쓰는 게 안전하다.
+  서버 쪽 키가 비어 있으면(.env 누락) 무엇이 와도 거부한다 — 빈 헤더와 빈 키가
+  "일치"해서 열려버리지 않도록."""
+  if not expected or not given:
+    return False
+  return hmac.compare_digest(given.encode(), expected.encode())
 
 
 # verify_api_key: 요청마다 Key가 맞는지 확인하는 함수

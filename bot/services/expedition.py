@@ -22,6 +22,10 @@ async def verify_and_register_api_key(
     (성공 여부, 유저에게 보낼 메시지, 원정대 캐릭터 목록, 새로 등록된 api_key_id) 반환.
     discord.Interaction 없이 동작해서 디스코드 모달(ApiKeyModal)과 웹 POST
     /expedition/add-account가 동일하게 사용한다."""
+    # 같은 키를 두 번 등록하면 같은 원정대가 계정 두 개로 잡혀 동기화가 두 번 돈다
+    if await db.api_key_already_registered(key):
+        return False, "❌ 이미 등록된 API 키입니다. `/api확인`에서 등록된 계정을 확인해주세요.", None, None
+
     try:
         siblings = await loa.get_siblings(key, name)
     except RuntimeError as e:
@@ -66,7 +70,13 @@ async def verify_and_register_api_key(
                 "API 키는 저장되지 않았습니다."
             ), None, None
 
-    api_key_id = await db.add_user_api_key(discord_id, name, key)
+    api_key_id = await db.add_user_api_key_unique(discord_id, name, key)
+    if api_key_id is None:
+        # 검증 중(로스트아크 API 왕복 동안) 같은 키가 먼저 등록된 경우
+        return False, "❌ 이미 등록된 API 키입니다. `/api확인`에서 등록된 계정을 확인해주세요.", None, None
+    # /api삭제로 키를 지운 뒤 다시 등록하면, 그 원정대 캐릭터들은 api_key_id가 NULL로
+    # 남아 일일 동기화에서 빠졌다 — 이 원정대에 속한 NULL 캐릭터를 새 키에 다시 연결한다.
+    await db.relink_unlinked_characters(discord_id, api_key_id, sibling_names)
     return True, (
         f"✅ **API 키 등록 완료!** (원정대 캐릭터 **{len(siblings)}개** 확인)\n\n"
         f"원정대에 등록할 캐릭터를 선택하세요:"
@@ -231,6 +241,76 @@ async def sync_characters_for_discord_id(discord_id: str) -> tuple[int, int]:
             await asyncio.sleep(0.2)  # 캐릭터가 많은 유저도 분당 100건 한도 아래로 유지
 
     return updated, len(char_names)
+
+
+# discord_id → 진행 중인 동기화 태스크. 웹 재시도/중복 클릭으로 같은 유저 동기화가
+# 겹쳐 로스트아크 API를 두 배로 부르지 않게 한다.
+_sync_tasks: dict = {}
+
+
+async def sync_characters_shared(discord_id: str, wait_seconds: float = 15.0) -> tuple[int, int] | None:
+    """sync_characters_for_discord_id를 백그라운드 태스크로 돌리고 최대 wait_seconds만 기다린다.
+    끝나면 (updated, total), 시간 안에 안 끝나면 None(동기화는 계속 진행된다)."""
+    task = _sync_tasks.get(discord_id)
+    if task is None or task.done():
+        task = asyncio.get_running_loop().create_task(sync_characters_for_discord_id(discord_id))
+        _sync_tasks[discord_id] = task
+
+        def _cleanup(t: asyncio.Task, key: str = discord_id) -> None:
+            if _sync_tasks.get(key) is t:
+                _sync_tasks.pop(key, None)
+            if not t.cancelled() and t.exception() is not None:
+                print(f"[동기화] 실패 (discord_id={key}): {t.exception()}")
+
+        task.add_done_callback(_cleanup)
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), timeout=wait_seconds)
+    except asyncio.TimeoutError:
+        return None
+
+
+async def resolve_api_key_for_character(discord_id: str, char_name: str, fallback_key: str) -> str:
+    """캐릭터가 연결된 계정(api_key_id)의 키를 우선 사용 — 부계정 캐릭터도 올바른 키로 조회.
+    api_key_id가 없는(레거시) 캐릭터는 fallback_key(레거시 단일 키)를 그대로 사용.
+    /레이드체크(cogs/raid.py)와 /대시보드(cogs/dashboard.py)가 공유."""
+    key_id = await db.get_character_api_key_id(discord_id, char_name)
+    if key_id is not None:
+        resolved = await db.get_user_api_key_by_id(key_id)
+        if resolved:
+            return resolved
+    return fallback_key
+
+
+async def delete_user_and_leave_parties(bot, discord_id: str) -> None:
+    """관리자 유저 삭제 — 참여 중이던 활성 공대에서 먼저 정상 경로(_leave_party_core)로 나가게
+    한 뒤(파티장이면 다음 파티원에게 위임, 아무도 없으면 종료, 만석→모집중 복원, 임베드 갱신)
+    데이터를 지운다. 예전엔 슬롯만 지워서 4/4 공대가 3/4인데도 'full'로 남거나, 파티장이
+    지워진 공대의 leader_id가 없는 사람을 가리켰다.
+    웹(/admin/users/{id}/delete)과 관리자 API(DELETE /api/users/{id})가 공유."""
+    from bot.ui.views import (
+        _leave_party_core, _refresh_party_embed_with_reserved, _transfer_leader_core,
+        _admin_disband_party_core,
+    )
+
+    for party in await db.get_user_parties(discord_id):
+        await _leave_party_core(bot, party["message_id"], discord_id)
+
+    # 슬롯 없이 파티장만 맡고 있던(공대만 만들고 참여는 안 한) 활성 공대
+    for party in await db.get_parties_led_by(discord_id):
+        slots = await db.get_party_slots(party["message_id"])
+        if slots:
+            await _transfer_leader_core(bot, party["message_id"], "", slots[0]["discord_id"], as_admin=True)
+        else:
+            await _admin_disband_party_core(bot, party["message_id"], "", as_admin=True)
+
+    invited_parties = await db.get_user_invites(discord_id)
+    await db.delete_user(discord_id)
+    if bot:
+        # 예약(초대) 슬롯 표시도 지워지도록 임베드 갱신
+        for inv in invited_parties:
+            party = await db.get_party(inv["message_id"])
+            if party and not db.is_ended(party):
+                await _refresh_party_embed_with_reserved(bot, party)
 
 
 async def sync_all_accounts_daily() -> None:
