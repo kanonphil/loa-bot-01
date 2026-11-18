@@ -1,85 +1,116 @@
-{% extends "base.html" %}
+{% extends "admin_base.html" %}
 {% import "_ui.html" as ui %}
-{% block content %}
-<div class="page-content">
-{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
-<h1>알림·구독</h1>
-<p class="settings-desc">
-  디스코드 <code>/레이드구독</code>으로 등록된 구독 현황, 새 공대 알림 DM 발송 로그, 등록 유저 전원 공지 DM을 다룹니다.
-</p>
-
-{% call ui.toolbar() %}
+{% import "_admin_macros.html" as m %}
+{% block admin_body %}
+<div class="ad-row ad-toolbar">
   {% for key, label in tabs %}
-  {{ ui.filter_link(label, "/admin/notifications?tab=" ~ key, key == tab) }}
+  <a class="chip-btn{% if key == tab %} on{% endif %}" href="/admin/notifications?tab={{ key }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
-{% endcall %}
-
-{% if tab == "subscriptions" %}
-<div class="settings-card admin-card-wide">
-  {% if not groups %}
-  <p class="settings-desc">등록된 구독이 없습니다.</p>
-  {% else %}
-  <p class="settings-desc">총 {{ total_subscriptions }}건 &middot; 레이드별로 묶어서 보여줍니다. "전체"는 난이도 무관 구독입니다.</p>
-  {% for g in groups %}
-  <div class="admin-sub-group">
-    <p class="admin-sub-group-title">{{ g.raid_name }} {{ g.difficulty }} <span class="admin-row-sub">{{ g.subscribers | length }}명</span></p>
-    <div class="admin-sub-chips">
-      {% for s in g.subscribers %}{{ ui.chip(s.name, "", s.discord_id) }}{% endfor %}
-    </div>
-  </div>
-  {% endfor %}
-  {% endif %}
+  {% if tab == "subscriptions" and groups %}<span class="ad-spacer">{{ m.search("레이드 · 유저 검색", "#sub-list", item=".ad-sub") }}</span>
+  {% elif tab == "logs" and logs %}<span class="ad-spacer">{{ m.search("레이드 · 디스코드 ID 검색", "#log-table", item="tr[data-row]") }}</span>{% endif %}
 </div>
 
+{% if tab == "subscriptions" %}
+  {% if not groups %}
+  <div class="ad-card">{{ ui.empty("등록된 구독이 없습니다", "디스코드 /레이드구독 또는 설정 화면에서 유저가 구독하면 여기에 모입니다.", icon="bell") }}</div>
+  {% else %}
+  <div class="ad-card" id="sub-list">
+    <div class="ad-meta">총 {{ total_subscriptions }}건 · 레이드별로 묶었습니다. "전체"는 난이도와 관계없는 구독입니다.</div>
+    {% for g in groups %}
+    <div class="ad-sub" data-text="{{ g.raid_name }} {{ g.difficulty }}{% for s in g.subscribers %} {{ s.name }}{% endfor %}">
+      <div class="ad-row"><b>{{ g.raid_name }} {{ g.difficulty }}</b><span class="ad-meta">{{ g.subscribers | length }}명</span></div>
+      <div class="ad-chips">{% for s in g.subscribers %}{{ ui.chip(s.name, "", s.discord_id) }}{% endfor %}</div>
+    </div>
+    {% endfor %}
+    <p class="ad-noresult" id="sub-noresult" hidden>검색 결과가 없습니다.</p>
+  </div>
+  {% endif %}
+
 {% elif tab == "logs" %}
-<div class="settings-card admin-card-wide">
-  {% if logs %}
-  <label class="raid-search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-    <input type="search" class="js-list-filter" placeholder="레이드명 또는 디스코드 ID로 검색" aria-label="로그 검색" autocomplete="off"
-           data-filter-target="#admin-log-table" data-filter-item="tr.admin-log-row" data-filter-no-result="#admin-log-noresult">
-  </label>
-  <div class="admin-table-wrap">
-    <table class="admin-table" id="admin-log-table">
-      <thead><tr><th>발송 시각</th><th>받은 사람</th><th>레이드</th><th>난이도</th><th>공대</th></tr></thead>
+  {% if not logs %}
+  <div class="ad-card">{{ ui.empty("발송 로그가 없습니다", "새 공대 알림 DM을 보내면 여기에 기록됩니다.", icon="bell") }}</div>
+  {% else %}
+  <div class="ad-card ad-tcard">
+    <table class="ad-t" id="log-table">
+      <thead><tr><th>발송 시각</th><th>받은 사람</th><th>레이드</th><th>난이도</th><th></th></tr></thead>
       <tbody>
         {% for l in logs %}
-        <tr class="admin-log-row">
-          <td><time title="{{ l.sent_at|time_ago }}">{{ l.sent_at|kst_time }}</time></td>
-          <td>{{ l.discord_id }}</td>
-          <td>{{ l.raid_name }}</td>
-          <td>{{ l.difficulty }}</td>
-          <td><a href="/parties/{{ l.message_id }}">열기</a></td>
+        <tr data-row data-text="{{ l.raid_name }} {{ l.difficulty }} {{ l.discord_id }}">
+          <td class="num" data-label="발송 시각"><time title="{{ l.sent_at|time_ago }}">{{ l.sent_at|kst_time }}</time></td>
+          <td data-label="받은 사람">{{ l.discord_id }}</td>
+          <td data-label="레이드">{{ l.raid_name }}</td>
+          <td data-label="난이도">{{ l.difficulty }}</td>
+          <td class="r"><a class="btn sm ghost" href="/parties/{{ l.message_id }}">열기</a></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    <p class="ad-noresult" id="log-noresult" hidden>검색 결과가 없습니다.</p>
   </div>
-  <p class="raid-picker-noresult" id="admin-log-noresult" hidden>검색 결과가 없습니다.</p>
-  {% else %}
-  <p class="settings-desc">발송 로그가 없습니다.</p>
   {% endif %}
-</div>
+
+{% elif tab == "broadcast" %}
+  {% set recipients = bot_status.user_count if bot_status and bot_status.user_count is defined else none %}
+  <div class="ad-card ad-bc" id="broadcast" data-recipients="{{ recipients if recipients is not none else '' }}">
+    <div class="ad-row">
+      <h2 class="ad-h">전체 공지</h2>
+      <span class="ad-meta ad-spacer">수신 대상 <b class="ad-strong num" data-bc-count>{{ recipients if recipients is not none else "-" }}</b>명 · API 등록 유저 전원에게 디스코드 DM</span>
+    </div>
+    <div class="ad-bc-grid">
+      <form method="post" action="/admin/notifications/broadcast" id="bc-form" class="ad-bc-form">
+        <label class="ad-label" for="bc-content">공지 내용</label>
+        <textarea class="field" id="bc-content" name="content" rows="6" maxlength="1500" required placeholder="예: 이번 주 수요일 점검 이후 공대 일정이 조정됩니다."></textarea>
+        <div class="ad-row">
+          <span class="ad-meta"><span class="num" data-bc-len>0</span>/1500자 · 보낸 DM은 되돌릴 수 없습니다</span>
+          <span class="ad-spacer"><button type="submit" class="btn pri" id="bc-send" disabled>전원에게 보내기</button></span>
+        </div>
+      </form>
+      <div class="ad-bc-preview">
+        <span class="ad-label">미리보기</span>
+        <div class="ad-dm" aria-live="polite">
+          <b class="ad-dm-from">{{ get_guild_name() or "로아봇" }}</b>
+          <p class="ad-dm-body" id="bc-preview" data-empty="내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.">내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.</p>
+        </div>
+        <span class="ad-meta">DM을 막아둔 유저에게는 전달되지 않고, 같은 내용은 10분 안에 다시 보낼 수 없습니다.</span>
+      </div>
+    </div>
+    <div class="ad-progress" id="bc-progress" aria-live="polite"{% if not broadcast_running %} hidden{% endif %}
+         data-running="{{ 1 if broadcast_running else 0 }}">
+      <div class="ad-row"><b>발송 중</b><span class="ad-meta ad-spacer"><span class="num" data-bc-sent>{{ broadcast.sent or 0 }}</span> / <span class="num" data-bc-total>{{ broadcast.total or 0 }}</span>명</span></div>
+      <div class="ui-gauge" role="presentation"><i style="width: {{ ((broadcast.sent or 0) / broadcast.total * 100) | round | int if broadcast and broadcast.total else 0 }}%"></i></div>
+      <span class="ad-meta">창을 닫아도 발송은 계속됩니다. 끝나면 작업 기록에 남습니다.</span>
+    </div>
+  </div>
 
 {% else %}
-<div class="settings-card admin-card">
-  {% if sent is not none %}
-  <p class="admin-problem-banner" style="border-color: rgba(94,214,122,0.4); background: var(--ok-soft); color: var(--ok);">
-    {{ total }}명 중 {{ sent }}명에게 DM을 보냈습니다. (DM을 막아둔 유저에게는 전달되지 않습니다)
-  </p>
-  {% endif %}
-  <p class="settings-desc">API 등록 유저 <b>{{ user_count }}명</b> 전원에게 디스코드 DM으로 공지를 보냅니다. 되돌릴 수 없으니 내용을 다시 확인해주세요.</p>
-  <form method="post" action="/admin/notifications/broadcast" class="admin-form"
-        data-confirm-title="등록 유저 {{ user_count }}명 전원에게 DM을 보낼까요?" data-confirm="보낸 DM은 되돌릴 수 없습니다." data-confirm-ok="보내기">
-    <label class="admin-field">
-      <span class="admin-field-label">공지 내용</span>
-      <textarea name="content" rows="5" maxlength="1500" required class="settings-select" style="height:auto" placeholder="예: 이번 주 수요일 점검 이후 공대 일정이 조정됩니다."></textarea>
-    </label>
-    <div class="admin-form-actions">
-      <button type="submit" class="settings-toggle-btn" data-busy-text="발송 중…">전원에게 보내기</button>
+  <div class="ad-card" id="tracked" data-max="8">
+    <div class="ad-row">
+      <h2 class="ad-h">시세로 볼 아이템</h2>
+      <span class="ad-meta ad-spacer">최대 8개 · 시세 화면에 표시됩니다</span>
     </div>
-  </form>
-</div>
+    {% if not tracked_available %}
+    <div class="banner warn" role="status"><b class="banner-mark" aria-hidden="true">!</b><span>봇 서버가 아직 시세 아이템 설정을 지원하지 않아 불러오지 못했습니다.</span></div>
+    {% else %}
+    <form method="post" action="/admin/notifications/items" id="tracked-form" class="ad-tracked">
+      <div class="ad-chips" id="tracked-chips" aria-live="polite">
+        {% for n in tracked_names %}
+        <span class="ad-tchip{% if n in unresolved %} is-warn{% endif %}" data-name="{{ n }}">
+          <input type="hidden" name="names" value="{{ n }}">
+          <span>{{ n }}</span>{% if n in unresolved %}<em>시세에서 못 찾음</em>{% endif %}
+          <button type="button" aria-label="{{ n }} 빼기" data-remove>&times;</button>
+        </span>
+        {% endfor %}
+      </div>
+      <p class="ad-meta" id="tracked-empty"{% if tracked_names %} hidden{% endif %}>아직 고른 아이템이 없습니다. 아래에 거래소·경매장에서 쓰는 정확한 이름을 입력하세요.</p>
+      <div class="ad-row">
+        <input class="field ad-tracked-input" id="tracked-input" placeholder="아이템 이름 (예: 운명의 파괴석 결정)" aria-label="아이템 이름" autocomplete="off" maxlength="40">
+        <button type="button" class="btn" id="tracked-add">추가</button>
+        <span class="ad-meta" id="tracked-count"><span class="num">{{ tracked_names | length }}</span>/8</span>
+        <span class="ad-spacer"><button type="submit" class="btn pri">저장</button></span>
+      </div>
+      {% if unresolved %}<p class="ad-meta ad-warn">시세에서 찾지 못한 이름이 있습니다. 철자와 띄어쓰기가 거래소 표기와 같은지 확인하세요.</p>{% endif %}
+    </form>
+    {% endif %}
+  </div>
 {% endif %}
-</div>
 {% endblock %}

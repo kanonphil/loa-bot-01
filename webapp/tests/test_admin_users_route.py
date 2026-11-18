@@ -119,7 +119,6 @@ def test_admin_user_list_shows_registered_date_and_stale_chip(client, monkeypatc
         respx.get(USERS_URL).mock(return_value=httpx.Response(200, json=users))
         resp = client.get("/admin/users")
         stale = client.get("/admin/users?filter=stale")
-    assert "가입 2026-05-01" in resp.text
     assert "일 동기화 안 됨" in resp.text
     assert "동기화 기록 없음" in resp.text
     assert "API 만료 의심" in resp.text

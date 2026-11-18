@@ -1,65 +1,57 @@
-{% extends "base.html" %}
+{% extends "admin_base.html" %}
 {% import "_ui.html" as ui %}
-{% block content %}
-<div class="page-content">
-{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
-<h1>유저 관리</h1>
-<p class="settings-desc">
-  등록된 유저 전체를 조회하고, 행을 펼쳐 캐릭터/참여 이력을 확인하거나 데이터를 삭제할 수 있습니다.
-</p>
+{% import "_admin_macros.html" as m %}
+{% block admin_body %}
+<div class="ad-row ad-toolbar">
+  {{ m.search("닉네임 · 디스코드 ID 검색", "#users-table", item="tr[data-row]") }}
+  <a class="chip-btn{% if filter == 'all' %} on{% endif %}" href="/admin/users"{% if filter == 'all' %} aria-current="page"{% endif %}>전체 {{ total_count }}</a>
+  <a class="chip-btn{% if filter == 'stale' %} on{% endif %}" href="/admin/users?filter=stale" data-tip="캐릭터 동기화가 {{ stale_days }}일 넘게 멈춘 유저 — API 키 만료가 의심됩니다"{% if filter == 'stale' %} aria-current="page"{% endif %}>API 만료 의심 {{ stale_count }}</a>
+</div>
 
-{% call ui.toolbar() %}
-  {{ ui.filter_link("전체", "/admin/users", filter == "all", total_count) }}
-  {{ ui.filter_link("API 만료 의심", "/admin/users?filter=stale", filter == "stale", stale_count) }}
-  {% if users %}
-  <label class="raid-search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-    <input type="search" class="js-list-filter" placeholder="닉네임 또는 디스코드 ID로 검색" aria-label="유저 검색" autocomplete="off"
-           data-filter-target="#admin-users-list" data-filter-item=".admin-row" data-filter-text=".admin-row-name"
-           data-filter-no-result="#admin-users-noresult">
-  </label>
-  {% endif %}
-{% endcall %}
-
-<div class="settings-card admin-card">
 {% if not users %}
+<div class="ad-card">
 {% if filter == "stale" %}
-{{ ui.empty("동기화가 " ~ stale_days ~ "일 이상 멈춘 유저가 없습니다", icon="👤") }}
+{{ ui.empty("동기화가 " ~ stale_days ~ "일 이상 멈춘 유저가 없습니다", "모든 유저의 캐릭터 동기화가 정상입니다.", "전체 보기", "/admin/users", "user") }}
 {% else %}
-{{ ui.empty("등록된 유저가 없습니다", icon="👤") }}
-{% endif %}
-{% else %}
-<ul class="admin-list" id="admin-users-list">
-  {% for u in users %}
-  <li class="admin-row">
-    <span class="admin-row-name">
-      {{ u.representative or u.discord_nick or u.discord_id }}
-      <span class="admin-row-sub">
-        {% if u.discord_nick and u.discord_nick != u.representative %}{{ u.discord_nick }} &middot; {% endif %}{{ u.discord_id }}
-        {% if u.registered_at %} &middot; 가입 {{ u.registered_at[:10] }}{% endif %}
-      </span>
-      {% if u.sync_age_days is none %}
-      {{ ui.chip("동기화 기록 없음", "danger") }}
-      {% elif u.is_stale %}
-      {{ ui.chip(u.sync_age_days ~ "일 동기화 안 됨", "warn") }}
-      {% endif %}
-    </span>
-    <span class="admin-row-actions">
-      <button type="button" class="admin-toggle-link"
-              hx-get="/admin/users/{{ u.discord_id }}/details"
-              hx-target="#admin-user-details-{{ u.discord_id }}"
-              hx-swap="innerHTML">상세</button>
-      <form method="post" action="/admin/users/{{ u.discord_id }}/delete"
-            data-confirm-title="{{ u.representative or u.discord_id }}의 모든 데이터를 삭제할까요?" data-confirm="API 키와 캐릭터가 지워지고 되돌릴 수 없습니다." data-confirm-ok="삭제" data-confirm-danger>
-        <button type="submit" class="admin-danger-link">삭제</button>
-      </form>
-    </span>
-  </li>
-  <li class="admin-user-details" id="admin-user-details-{{ u.discord_id }}"></li>
-  {% endfor %}
-</ul>
-<p class="raid-picker-noresult" id="admin-users-noresult" hidden>검색 결과가 없습니다.</p>
+{{ ui.empty("등록된 유저가 없습니다", "디스코드 /등록 으로 API 키를 등록하면 여기에 나타납니다.", icon="user") }}
 {% endif %}
 </div>
+{% else %}
+<div class="ad-card ad-tcard">
+  <table class="ad-t" id="users-table">
+    <thead><tr><th>유저</th><th>캐릭터</th><th>마지막 활동</th><th>참여 중 공대</th><th></th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr data-row data-text="{{ u.display_name }} {{ u.discord_nick or '' }} {{ u.discord_id }}">
+        <td data-label="유저">
+          <b>{{ u.display_name }}</b>
+          {% if u.discord_nick %}<span class="ad-meta">@{{ u.discord_nick }}</span>{% elif u.display_name != u.discord_id %}<span class="ad-meta">{{ u.discord_id }}</span>{% endif %}
+          {% if u.sync_age_days is none %}{{ ui.chip("동기화 기록 없음", "danger") }}
+          {% elif u.is_stale %}{{ ui.chip(u.sync_age_days ~ "일 동기화 안 됨", "warn") }}{% endif %}
+        </td>
+        <td class="num" data-label="캐릭터">{% if u.char_count is not none %}{{ u.char_count }}{% else %}<span class="ad-muted">-</span>{% endif %}</td>
+        <td data-label="마지막 활동">{% if u.last_seen %}<time title="{{ u.last_seen_title }}">{{ u.last_seen }}</time>{% else %}<span class="ad-muted">기록 없음</span>{% endif %}</td>
+        <td class="num" data-label="참여 중 공대">{{ u.party_count }}{% if u.is_leader %} <span class="ad-muted ad-small">(파티장)</span>{% endif %}</td>
+        <td class="r">
+          <button type="button" class="btn sm ghost" data-user-details="{{ u.discord_id }}" aria-expanded="false">상세</button>
+          <button type="button" class="btn sm danger" data-user-kick="{{ u.discord_id }}" data-name="{{ u.display_name }}">내보내기</button>
+        </td>
+      </tr>
+      <tr class="ad-details-row" id="ud-{{ u.discord_id }}" hidden><td colspan="5"></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="ad-noresult" id="users-noresult" hidden>검색 결과가 없습니다.</p>
 </div>
+{% endif %}
+
+{# 내보내기 — 영향 범위를 먼저 보여주고, 확인하면 기존 삭제 경로로 보낸다 #}
+{% call m.modal("dlg-kick", "유저를 내보낼까요?", "460px") %}
+<div class="ad-impact" id="kick-impact" aria-live="polite"><span class="ad-meta">영향 범위를 불러오는 중…</span></div>
+<p class="ad-meta">로그인 중인 브라우저도 바로 로그아웃됩니다.</p>
+<form method="post" action="" id="kick-form" class="acts">
+  <button type="button" class="btn" data-dlg-close>취소</button>
+  <button type="submit" class="btn danger">내보내기</button>
+</form>
+{% endcall %}
 {% endblock %}

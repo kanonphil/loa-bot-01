@@ -3,7 +3,7 @@ import httpx
 import respx
 
 from webapp import config
-from webapp.tests.conftest import log_in
+from webapp.tests.conftest import log_in, toast_of
 
 B = "http://bot-server.internal/api/internal/admin"
 WEEKS = {"current": "2026-09-16", "weeks": ["2026-09-16", "2026-09-09"]}
@@ -104,13 +104,11 @@ def test_broadcast_posts_and_reports_count(client, monkeypatch):
         _admin(client, monkeypatch)
         route = respx.post(f"{B}/notify-all").mock(return_value=httpx.Response(200, json={"success": True, "sent": 20, "total": 22}))
         resp = client.post("/admin/notifications/broadcast", data={"content": "  점검 공지  "})
-        respx.get(f"{B}/status").mock(return_value=httpx.Response(200, json={"user_count": 22}))
-        page = client.get(resp.headers["location"])
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/admin/notifications?tab=broadcast&sent=20&total=22"
+    assert "tab=broadcast" in resp.headers["location"]
+    assert "22명 중 20명에게 DM을 보냈습니다" in toast_of(resp.headers["location"])[0]
     import json as _json
     assert _json.loads(route.calls[0].request.content) == {"discord_id": "111", "content": "점검 공지"}
-    assert "22명 중 20명에게 DM을 보냈습니다" in page.text
 
 
 def test_completions_page_flow_and_toggle(client, monkeypatch):
@@ -132,7 +130,7 @@ def test_completions_page_flow_and_toggle(client, monkeypatch):
         })
     body = page.text
     assert 'id="completion-grid"' in body
-    assert body.count("raid-card-diff-toggle done") == 1  # 노말만 완료
+    assert body.count('aria-pressed="true"') == 1  # 노말만 완료
     assert frag.status_code == 200 and 'id="completion-grid"' in frag.text
     import json as _json
     sent = _json.loads(set_route.calls[0].request.content)

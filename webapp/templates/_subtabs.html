@@ -7,7 +7,7 @@
 {%- set groups = {
   "party": ("공대 메뉴", [("목록", "/parties"), ("달력", "/calendar"), ("내 이력", "/parties/history")]),
   "exp": ("원정대 메뉴", [("내 캐릭터", "/expedition"), ("랭킹", "/ranking")]),
-  "admin": ("관리 메뉴", [("레이드", "/admin/raids"), ("직업", "/admin/classes"), ("공대", "/admin/parties"), ("유저", "/admin/users"), ("통계", "/admin/stats"), ("알림·구독", "/admin/notifications"), ("클리어", "/admin/completions")]),
+  "admin": ("관리 메뉴", [("레이드", "/admin/raids"), ("직업", "/admin/classes"), ("공대", "/admin/parties"), ("유저", "/admin/users"), ("통계", "/admin/stats"), ("알림·구독", "/admin/notifications"), ("클리어", "/admin/completions"), ("작업 기록", "/admin/actions")]),
 } -%}
 {%- set label, items = groups[group] -%}
 {%- set path = request.url.path -%}

@@ -77,13 +77,13 @@ def test_raids_page_has_no_classes_tab_or_cross_link(client, monkeypatch):
     assert resp.text.count('href="/admin/classes"') == 1  # 사이드바 메뉴 1개뿐
 
 
-def test_raid_row_links_to_difficulties_tab(client, monkeypatch):
+def test_raid_row_links_to_editor(client, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
     with respx.mock:
         log_in(client, discord_id="111")
         _mock_reads()
-        resp = client.get("/admin/raids?tab=raids")
-    assert "tab=difficulties&amp;raid=" in resp.text
+        resp = client.get("/admin/raids")
+    assert "/admin/raids?raid=" in resp.text
 
 
 def test_add_category_forwards_discord_id_and_redirects(client, monkeypatch):
@@ -98,7 +98,7 @@ def test_add_category_forwards_discord_id_and_redirects(client, monkeypatch):
             data={"name": "새카테고리", "sort_order": "1"},
         )
     assert resp.status_code == 303
-    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=categories"
+    assert without_toast(resp.headers["location"]) == "/admin/raids"
     import json as _json
 
     body = _json.loads(route.calls[0].request.content)
@@ -143,14 +143,14 @@ def test_raids_page_renders_reorder_controls(client, monkeypatch):
     with respx.mock:
         _admin(client, monkeypatch)
         _mock_reads()
-        cats = client.get("/admin/raids?tab=categories")
-        raids = client.get("/admin/raids?tab=raids")
-    assert "data-reorder-group" in cats.text
-    assert 'action="/admin/raids/categories/order"' in cats.text
-    assert 'data-key="카제로스"' in cats.text
-    assert 'action="/admin/raids/order"' in raids.text
-    assert 'action="/admin/raids/move-category"' in raids.text
+        raids = client.get("/admin/raids")
+    assert "data-reorder-group" in raids.text
+    assert 'action="/admin/raids/categories/order"' in raids.text  # 카테고리 편집 대화상자
+    assert 'data-key="카제로스"' in raids.text
+    assert 'action="/admin/raids/order-all"' in raids.text  # 왼쪽 목록의 순서 저장 바
+    assert 'action="/admin/raids/save"' in raids.text  # 기본 정보 한 번에 저장
     assert 'action="/admin/raids/period"' in raids.text
+    assert 'action="/admin/raids/difficulties/order"' in raids.text
     assert "admin-reorder.js" in raids.text
 
 
@@ -160,7 +160,7 @@ def test_reorder_categories_posts_whole_array(client, monkeypatch):
         route = respx.post(REORDER_CATEGORIES_URL).mock(return_value=httpx.Response(200, json={"success": True, "count": 2}))
         resp = client.post("/admin/raids/categories/order", data={"order": '["군단장", "카제로스"]'})
     assert resp.status_code == 303
-    assert without_toast(resp.headers["location"]) == "/admin/raids?tab=categories"
+    assert without_toast(resp.headers["location"]) == "/admin/raids"
     assert _payload(route) == {"discord_id": "111", "order": ["군단장", "카제로스"]}
 
 
@@ -179,7 +179,7 @@ def test_reorder_difficulties_redirects_back_to_raid(client, monkeypatch):
         route = respx.post(REORDER_DIFFICULTIES_URL).mock(return_value=httpx.Response(200, json={"success": True, "count": 2}))
         resp = client.post("/admin/raids/difficulties/order", data={"raid_name": "아르모체(4막)", "order": '["하드", "노말"]'})
     assert resp.status_code == 303
-    assert resp.headers["location"].startswith("/admin/raids?tab=difficulties&raid=")
+    assert resp.headers["location"].startswith("/admin/raids?raid=")
     assert _payload(route)["order"] == ["하드", "노말"]
 
 
