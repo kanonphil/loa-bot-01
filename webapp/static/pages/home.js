@@ -225,6 +225,13 @@
     if (!menu.hidden) { window.uiPopup.close(true); return; }
     function close() { menu.hidden = true; trigger.setAttribute("aria-expanded", "false"); }
     menu.hidden = false;
+    if (menu.classList.contains("hw-x-menu") && trigger.closest(".hw-scroll")) {
+      // 표 안(overflow 스크롤 칸)에서는 메뉴가 잘리므로 화면 기준으로 띄운다
+      var r = trigger.getBoundingClientRect();
+      menu.style.position = "fixed";
+      menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 220)) + "px";
+      menu.style.top = (r.bottom + 4) + "px";
+    }
     trigger.setAttribute("aria-expanded", "true");
     window.uiPopup.open({ el: menu, opener: trigger, close: close });
     var items = menuItems(menu);

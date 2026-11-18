@@ -214,7 +214,7 @@ def test_extreme_clear_failure_shows_error_toast(client):
             return_value=httpx.Response(200, json={"success": False, "reason": "해제할 수 없습니다."})
         )
         resp = client.post("/raid-check/extreme/clear", data={"raid_name": "카멘익스"})
-    assert resp.headers["X-Toast-Type"] == "error"
+    assert toast_of(resp.headers["location"]) == ("해제할 수 없습니다.", "error")
 
 
 def test_raid_select_save_failure_shows_error_toast(client):

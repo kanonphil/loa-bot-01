@@ -39,7 +39,7 @@ async def _loa_get(path: str, params: dict | None = None) -> dict:
             return _unavailable()
         data = resp.json()
         return data if isinstance(data, dict) else _unavailable()
-    except (httpx.HTTPError, ValueError) as exc:
+    except Exception as exc:  # 점검·타임아웃·없는 엔드포인트·깨진 응답 — 어떤 이유든 카드만 비운다
         logger.info("로아 데이터 호출 실패 %s: %r", path, exc)
         return _unavailable()
 

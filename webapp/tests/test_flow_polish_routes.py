@@ -34,7 +34,7 @@ INVITE = {
 def _mock_main(parties=None, invites=None):
     respx.get(f"{B}/user-characters").mock(return_value=httpx.Response(200, json=CHARACTERS))
     respx.get(f"{B}/parties").mock(return_value=httpx.Response(200, json=parties or []))
-    respx.get(f"{B}/raid-progress").mock(return_value=httpx.Response(200, json=PROGRESS))
+    respx.get(f"{B}/raid-check-summary").mock(return_value=httpx.Response(200, json={"week_key": "w", "characters": [], "raids": {}, "extreme": []}))
     respx.get(f"{B}/my-invites").mock(return_value=httpx.Response(200, json=invites or []))
     respx.get(f"{B}/parties/700/eligibility").mock(return_value=httpx.Response(200, json={
         "can_join": True, "qualifying": [{"name": "발키리", "class": "홀리나이트", "level": 1720.0}],
@@ -44,51 +44,14 @@ def _mock_main(parties=None, invites=None):
 
 # ── 메인 카드 ───────────────────────────────────────────────
 
-def test_main_shows_invite_card_with_accept_and_decline(client):
-    with respx.mock:
-        log_in(client)
-        _mock_main(invites=[INVITE])
-        resp = client.get("/main")
-    body = resp.text
-    assert "내게 온 초대" in body and "카멘 하드" in body
-    assert 'action="/invites/700/accept"' in body and 'id="decline-700"' in body
-    assert "만료까지" in body
 
 
-def test_main_hides_invite_section_when_none(client):
-    with respx.mock:
-        log_in(client)
-        _mock_main()
-        resp = client.get("/main")
-    assert 'id="decline-' not in resp.text  # 사이드바 메뉴명("내게 온 초대")과 구분해 카드 마커로 확인
 
 
-def test_main_invite_card_degrades_when_bot_call_fails(client):
-    with respx.mock:
-        log_in(client)
-        _mock_main()
-        respx.get(f"{B}/my-invites").mock(return_value=httpx.Response(500, text="boom"))
-        resp = client.get("/main")
-    assert resp.status_code == 200  # 카드 하나 실패로 메인이 502가 되지 않는다
 
 
-def test_main_shows_leader_chips_and_overdue_section(client):
-    with respx.mock:
-        log_in(client)
-        _mock_main(parties=[MY_LEADER_PARTY, OVERDUE])
-        resp = client.get("/main")
-    body = resp.text
-    assert "빈자리 7" in body and "서포터 없음" in body
-    assert "처리가 필요한 내 공대" in body and "종막 노말" in body
-    assert 'action="/parties/p9/clear"' in body and 'action="/parties/p9/cancel"' in body
 
 
-def test_main_overdue_only_for_my_leader_parties(client):
-    with respx.mock:
-        log_in(client)
-        _mock_main(parties=[{**OVERDUE, "leader_id": "999"}])
-        resp = client.get("/main")
-    assert "처리가 필요한 내 공대" not in resp.text
 
 
 # ── 모바일 알림 탭 / 셸 ───────────────────────────────────

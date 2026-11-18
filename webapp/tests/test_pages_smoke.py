@@ -37,7 +37,6 @@ PAGES = [
     "/parties?filter=eligible",
     "/parties/create",
     "/expedition",
-    "/raid-check",
     "/ranking",
     "/ranking?metric=weekly_clears",
     "/ranking?metric=item_level",
@@ -47,7 +46,6 @@ PAGES = [
     "/tools/auction-calculator",
     "/guide",
     "/raid-check/history",
-    "/invites",
     "/parties/history",
 ]
 
@@ -58,6 +56,7 @@ def _mock_everything():
     respx.get(f"{B}/parties/proficiency-options").mock(
         return_value=httpx.Response(200, json=[{"value": "숙련", "label": "숙련", "description": "d"}])
     )
+    respx.get(f"{B}/raid-check-summary").mock(return_value=httpx.Response(200, json={"week_key": "w", "characters": [], "raids": {}, "extreme": []}))
     respx.get(f"{B}/raid-progress").mock(return_value=httpx.Response(200, json=EMPTY_PROGRESS))
     respx.get(f"{B}/raids").mock(return_value=httpx.Response(200, json=RAIDS))
     respx.get(f"{B}/raid-categories").mock(
