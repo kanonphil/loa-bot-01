@@ -152,6 +152,7 @@ async def adm_refs(): return j({"parties_live": 1, "parties_all": 2, "party_hist
 @app.get("/api/internal/job-classes")
 async def jobs(): return j([{"name": "홀리나이트", "is_support": 1}, {"name": "워로드", "is_support": 0}, {"name": "바드", "is_support": 1}, {"name": "리퍼", "is_support": 0}])
 
+__import__("stub_party").install(globals())  # 공대 화면용 데이터(여러 상태의 공대·요약·이력)
 import stub_admin; stub_admin.register(app, globals())  # 관리 화면용 응답(새 파일)
 
 @app.api_route("/api/internal/{rest:path}", methods=["GET", "POST"])

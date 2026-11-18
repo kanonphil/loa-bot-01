@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="/static/pages/party.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}{% include "_party_top.html" %}{% endblock %}
 {% block content %}
 {% macro render_parties(parties) %}
 {% for p in parties %}
@@ -16,7 +18,6 @@
 {% endmacro %}
 
 <div class="page-content calendar-page">
-{% from "_subtabs.html" import subtabs with context %}{{ subtabs("party") }}
   <div class="calendar-toolbar">
     <a href="/calendar?view={{ view }}" class="calendar-today-btn">오늘</a>
     <div class="calendar-header">

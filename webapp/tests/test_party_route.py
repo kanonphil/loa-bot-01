@@ -90,22 +90,41 @@ PARTY_HIGH = {**PARTY, "message_id": "high", "raid_name": "고레벨공대", "mi
 PARTY_CLOSED = {**PARTY, "message_id": "closed", "raid_name": "마감공대", "status": "closed"}
 
 
+SUMMARY_URL = "http://bot-server.internal/api/internal/raid-check-summary"
+
+
+def _summary(characters):
+    """/raid-check-summary 응답 — characters: [(이름, 직업, 레벨, 서포터 여부, 이번 주 완료 키들)]."""
+    return {
+        "week_key": "w", "raids": {}, "categories": [], "support_classes": ["홀리나이트"], "extreme": [],
+        "characters": [
+            {"character_name": n, "character_class": c, "item_level": lv, "is_support": sup,
+             "completions": list(done), "selection": {"customized": False, "selected_raids": []},
+             "applicable_raids": [], "visible_raid_names": [], "done_count": 0, "total_slots": 0}
+            for n, c, lv, sup, done in characters
+        ],
+    }
+
+
 def _mock_list(parties, characters=None):
+    """characters를 주면 요약 API를 모킹하고, 안 주면 요약 조회가 실패하는 상황(화면은 떠야 한다)."""
     respx.get(PARTIES_URL).mock(return_value=httpx.Response(200, json=parties))
     respx.get(RAIDS_URL).mock(return_value=httpx.Response(200, json=RAIDS))
-    respx.get(CHARACTERS_URL).mock(
-        return_value=httpx.Response(200, json=characters if characters is not None else [])
-    )
+    if characters is not None:
+        respx.get(SUMMARY_URL).mock(return_value=httpx.Response(200, json=_summary(characters)))
 
 
-def test_party_list_filter_recruiting(client):
+def test_party_list_default_filter_shows_only_joinable(client):
+    """기본 필터는 "들어갈 수 있는" — 마감 공대는 빠지고 참여 select가 붙는다."""
     with respx.mock:
         log_in(client)
-        _mock_list([PARTY, PARTY_CLOSED])
-        resp = client.get("/parties?filter=recruiting")
+        _mock_list([PARTY, PARTY_CLOSED], characters=[("발키리", "홀리나이트", 1720.0, True, [])])
+        resp = client.get("/parties")
 
     assert "마감공대" not in resp.text
     assert "아르모체(4막)" in resp.text
+    assert 'action="/parties/p1/join"' in resp.text
+    assert "발키리 · 폿 (추천)" in resp.text  # 서포터가 없는 공대 → 서포터 캐릭터 추천
 
 
 def test_party_list_filter_mine(client):
@@ -122,9 +141,10 @@ def test_party_list_filter_eligible_uses_my_highest_level(client):
     """입장 가능 = 내 최고 레벨로 들어갈 수 있고, 아직 참여하지 않은 모집중 공대."""
     with respx.mock:
         log_in(client, discord_id="111")
+        later_mine = {**PARTY_MINE, "scheduled_datetime": "2026-05-25T20:00:00+09:00"}  # 같은 시간이면 같은 캐릭터가 막힌다
         _mock_list(
-            [PARTY, PARTY_HIGH, PARTY_MINE],
-            characters=[{"character_name": "발키리", "character_class": "홀리나이트", "item_level": 1720.0}],
+            [PARTY, PARTY_HIGH, later_mine],
+            characters=[("발키리", "홀리나이트", 1720.0, True, [])],
         )
         resp = client.get("/parties?filter=eligible")
 
@@ -140,8 +160,10 @@ def test_party_list_unknown_filter_falls_back_to_all(client):
         _mock_list([PARTY, PARTY_CLOSED])
         resp = client.get("/parties?filter=엉뚱한값")
 
+    # 요약 조회가 안 되면(참여 가능 여부를 모르니) 빈 화면이 아니라 전체를 보여준다
     assert "마감공대" in resp.text
     assert "아르모체(4막)" in resp.text
+    assert "불러오지 못했습니다" in resp.text
 
 
 def test_party_list_empty_state_offers_next_action(client):
@@ -179,7 +201,7 @@ def test_party_detail_shows_join_form_when_eligible(client):
 
     assert resp.status_code == 200
     body = resp.text
-    assert "party-join-form" in body
+    assert 'id="join-form"' in body
     assert "발키리" in body
     assert "1파티" in body and "2파티" in body  # party_split=4, total_slots=8 → 2개 하위 파티
 
@@ -198,7 +220,8 @@ def test_party_detail_shows_leave_when_already_joined(client):
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
-    assert "party-leave-btn" in resp.text
+    assert "나가기" in resp.text
+    assert "내 자리" in resp.text
 
 
 def test_party_detail_shows_guest_badge_for_guest_slot(client):
@@ -224,7 +247,7 @@ def test_party_detail_shows_guest_badge_for_guest_slot(client):
     assert resp.status_code == 200
     body = resp.text
     assert "게스트캐릭" in body
-    assert body.count("guest-badge") == 1  # 게스트 슬롯 1개에만 뱃지 표시
+    assert body.count(">게스트<") == 1  # 게스트 슬롯 1개에만 뱃지 표시
 
 
 def test_party_detail_shows_reason_when_cannot_join(client):
@@ -349,7 +372,7 @@ def test_party_detail_shows_waitlist_button_when_not_joined(client):
 
     assert resp.status_code == 200
     assert "빈자리 알림 받기" in resp.text
-    assert "party-waitlist-form" in resp.text
+    assert "/parties/p1/waitlist" in resp.text
 
 
 def test_party_detail_shows_cancel_waitlist_when_already_on_it(client):
@@ -380,7 +403,7 @@ def test_party_detail_hides_waitlist_button_when_already_joined(client):
         resp = client.get("/parties/p1")
 
     assert resp.status_code == 200
-    assert "party-waitlist-form" not in resp.text
+    assert "/parties/p1/waitlist" not in resp.text
 
 
 def test_split_party_groups_show_relative_numbers_per_group(monkeypatch):
@@ -423,8 +446,8 @@ def test_split_party_groups_show_relative_numbers_per_group(monkeypatch):
 
     ctx = asyncio.run(party_module._detail_context("p1", "999999"))
 
-    assert ctx["all_slots"] is None
-    groups = ctx["party_groups"]
+    assert ctx["multi_group"] is True
+    groups = ctx["groups"]
     assert [g["group_number"] for g in groups] == [1, 2]
 
     group1, group2 = groups
@@ -487,8 +510,9 @@ def test_non_split_party_still_uses_flat_slot_list(monkeypatch):
 
     ctx = asyncio.run(party_module._detail_context("p1", "999999"))
 
-    assert ctx["party_groups"] is None
-    numbers = [s["slot_number"] for s in ctx["all_slots"]]
-    assert numbers == [1, 2, 3, 4]
-    assert ctx["all_slots"][1]["filled"] is True
-    assert ctx["all_slots"][1]["character_name"] == "워로드캐릭"
+    assert ctx["multi_group"] is False
+    assert len(ctx["groups"]) == 1
+    only = ctx["groups"][0]["slots"]
+    assert [x["slot_number"] for x in only] == [1, 2, 3, 4]
+    assert only[1]["filled"] is True
+    assert only[1]["character_name"] == "워로드캐릭"

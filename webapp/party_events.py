@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 
 from webapp import config, notification_store
 from webapp.clients import bot_client
@@ -44,13 +45,14 @@ _seen_ids: dict[str, None] = {}
 _pending_vanished: dict[str, int] = {}
 # 저장에 실패해 다음 폴링에서 다시 저장할 알림 이벤트(저장 성공한 것은 빠진다 → 중복 없음)
 _pending_events: list[dict] = []
-# 웹에서 관리자가 한 동작 힌트 — 클리어와 "파티 종료(스레드 유지)"는 둘 다 status='disbanded'라 상태만으로는
-# 구분되지 않는다. message_id → (종류, 시각)
+# 웹에서 관리자가 한 동작 힌트. 클리어 여부는 이제 봇이 주는 cleared_at으로 판정하므로 'disband'는 쓰지 않지만
+# (관리자 종료는 cleared_at이 없다), 'revert'(되돌리기)는 되살아난 공대를 구분하는 보조 신호로 남아 있다.
+# message_id → (종류, 시각)
 _admin_hints: dict[str, tuple[str, float]] = {}
 
 
 def note_admin_action(message_id: str, kind: str) -> None:
-    """kind: 'disband'(관리자 파티 종료 — 클리어 알림을 내지 않는다) | 'revert'(클리어 되돌리기 — 모집 시작 알림을 내지 않는다)."""
+    """kind: 'disband'(관리자 파티 종료) | 'revert'(클리어 되돌리기 — 모집 시작 알림을 내지 않는다)."""
     _admin_hints[message_id] = (kind, time.monotonic())
 
 
@@ -109,6 +111,28 @@ def _detect_change_events(prev: dict[str, dict], current: dict[str, dict]) -> li
     return events
 
 
+# 목록에 처음 보인 공대라도 만든 지 이만큼 지났으면 "새로 모집 시작"이 아니라 되살아난 것으로 본다
+# (클리어 되돌리기·재개 뒤 웹이 재시작돼 _seen_ids가 비어 있는 경우까지 덮는다).
+FRESH_PARTY_AGE = timedelta(minutes=10)
+
+
+def _is_freshly_created(party: dict, now: datetime | None = None) -> bool:
+    """공대가 방금 만들어진 것인지. 종료 흔적(ended_at/cleared_at)이 있으면 되살아난 공대, created_at을
+    못 읽으면 예전 동작대로 새 공대로 본다."""
+    if party.get("ended_at") or party.get("cleared_at"):
+        return False
+    raw = party.get("created_at")
+    if not raw:
+        return True
+    try:
+        created = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return True
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)  # 봇 DB의 CURRENT_TIMESTAMP는 UTC
+    return (now or datetime.now(timezone.utc)) - created < FRESH_PARTY_AGE
+
+
 def _detect_notification_events(
     prev: dict[str, dict], current: dict[str, dict], reopened: set[str] | frozenset = frozenset(),
 ) -> list[dict]:
@@ -119,7 +143,7 @@ def _detect_notification_events(
 
     for message_id, party in current.items():
         if message_id not in prev:
-            if message_id in reopened:
+            if message_id in reopened or not _is_freshly_created(party):
                 continue
             events.append({
                 "type": "created",
@@ -170,8 +194,9 @@ async def _resolve_vanished(ids: set[str]) -> tuple[list[dict], list[dict]]:
                 sse_events.append({"type": "removed", "message_id": message_id})
             continue
         _pending_vanished.pop(message_id, None)
-        hint = _take_hint(message_id)
-        if party and party.get("status") == "disbanded" and hint != "disband":
+        _take_hint(message_id)  # 힌트는 비우기만 — 판정은 아래 cleared_at으로 한다
+        # "클리어했습니다"는 봇이 클리어를 기록(cleared_at)한 공대만. 관리자 종료(cleared_at 없음)·기한 만료는 조용히 사라진다.
+        if party and party.get("status") == "disbanded" and party.get("cleared_at"):
             sse_events.append({"type": "cleared", "message_id": message_id})
             notif_events.append({
                 "type": "cleared",

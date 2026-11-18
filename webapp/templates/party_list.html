@@ -1,76 +1,88 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
+{% block head %}<link rel="stylesheet" href="/static/pages/party.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}{% include "_party_top.html" %}{% endblock %}
 {% block content %}
-<div class="page-content">
-{% from "_subtabs.html" import subtabs with context %}{{ subtabs("party") }}
-<div class="party-list-header">
-  <h1>공대 모집</h1>
-  <div class="party-list-header-actions">
-    <a href="/parties/history" class="party-switch-btn">내 이력</a>
-    <a href="/parties/create" class="party-create-link">+ 공대 개설</a>
+<div class="page-content page-wide pt-page" data-pt="list">
+  <div class="pt-filterbar" role="group" aria-label="공대 필터">
+    {% for key, label in filters %}
+    <a class="chip-btn{% if key == active_filter %} on{% endif %}" href="/parties{% if key != 'eligible' %}?filter={{ key }}{% endif %}"{% if key == active_filter %} aria-current="true"{% endif %}>{{ label }}<b>{{ counts[key] }}</b></a>
+    {% endfor %}
+    {% if parties %}
+    <input type="search" id="party-search" class="field pt-search js-list-filter" placeholder="레이드 · 파티장 검색" aria-label="공대 검색" autocomplete="off"
+           data-filter-target="#party-list" data-filter-item="tr.pt-rowitem" data-filter-no-result="#party-search-noresult">
+    {% endif %}
   </div>
-</div>
 
-{% call ui.toolbar() %}
-  {% for key, label in filters %}
-  {{ ui.filter_link(label, "/parties?filter=" ~ key, key == active_filter, counts[key]) }}
-  {% endfor %}
-  {% if parties %}
-  <label class="raid-search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-    <input type="search" id="party-search" class="js-list-filter" placeholder="레이드명으로 검색" aria-label="공대 검색" autocomplete="off"
-           data-filter-target="#party-list" data-filter-item=".ui-card" data-filter-text=".ui-card-title"
-           data-filter-no-result="#party-search-noresult">
-  </label>
+  {% if has_any and not summary_ok %}
+  {{ ui.banner("참여 가능 여부를 불러오지 못했습니다. 공대를 열어 직접 참여해 주세요.", "warn") }}
   {% endif %}
-{% endcall %}
 
-{% if not parties %}
-  {% if not has_any %}
-  {{ ui.empty(
-      "진행 중인 공대가 없습니다",
-      "개설하면 디스코드 포럼에도 같이 올라갑니다.",
-      "공대 개설", "/parties/create", "⚔️") }}
-  {% elif active_filter == "eligible" %}
-  {{ ui.empty(
-      "지금 들어갈 수 있는 공대가 없습니다",
-      "내 캐릭터 레벨로 입장 가능하고 자리가 남은 공대만 추립니다. 직접 열어보세요.",
-      "공대 개설", "/parties/create", "🔍") }}
-  {% elif active_filter == "mine" %}
-  {{ ui.empty(
-      "참여 중인 공대가 없습니다",
-      "전체 목록에서 자리가 남은 공대를 찾아보세요.",
-      "전체 보기", "/parties", "🙋") }}
+  {% if not parties %}
+    {% if not has_any %}
+    {{ ui.empty("진행 중인 공대가 없습니다", "공대를 열면 디스코드 포럼에도 같이 올라갑니다.", "공대 열기", "/parties/create", "party") }}
+    {% elif active_filter == "eligible" %}
+    {{ ui.empty("지금 들어갈 수 있는 공대가 없습니다", "전체 목록에서 자리가 남은 공대와 못 들어가는 이유를 볼 수 있습니다.", "전체 보기", "/parties?filter=all", "party") }}
+    {% elif active_filter == "mine" %}
+    {{ ui.empty("참여 중인 공대가 없습니다", "들어갈 수 있는 공대를 찾아보거나 직접 열어 보세요.", "들어갈 수 있는 공대", "/parties", "user") }}
+    {% else %}
+    {{ ui.empty("조건에 맞는 공대가 없습니다", "다른 필터를 눌러 보세요.", "전체 보기", "/parties?filter=all", "party") }}
+    {% endif %}
   {% else %}
-  {{ ui.empty(
-      "조건에 맞는 공대가 없습니다",
-      "다른 필터를 눌러보세요.",
-      "전체 보기", "/parties", "🔍") }}
+  <div class="ui-card pt-tablecard">
+    <table class="pt-table" id="party-list">
+      <thead><tr><th scope="col">레이드</th><th scope="col">일정</th><th scope="col">구성</th><th scope="col">인원</th><th scope="col">참여</th></tr></thead>
+      <tbody>
+      {% for p in parties %}
+      {% set j = p.join %}
+      <tr class="pt-rowitem" data-state="{{ j.state }}">
+        <td class="pt-cell-raid">
+          <div class="pt-line">
+            <a class="pt-name" href="/parties/{{ p.message_id }}">{{ p.raid_name }} {{ p.difficulty }}</a>
+            {{ ui.chip(p.proficiency) }}
+            {% if p.status != "recruiting" %}{{ ui.chip(p.status_label, p.status_tone) }}{% endif %}
+            {% if p.period %}{{ ui.chip(p.period.label, p.period.tone) }}{% endif %}
+          </div>
+          <span class="pt-sub">{% if p.leader_name %}파티장 {{ p.leader_name }}{% endif %}{% if p.memo %}{% if p.leader_name %} · {% endif %}{{ p.memo }}{% endif %}{% if p.is_extreme and j.state in ("can", "blocked") %}{% if p.leader_name or p.memo %} · {% endif %}원정대 주 1회{% endif %}</span>
+        </td>
+        <td class="pt-cell-when">
+          <span class="num">{{ p.schedule.when }}</span>
+          {% if p.overdue %}{{ ui.chip("일정 지남", "danger") }}
+          {% elif p.schedule.countdown %}{{ ui.chip(p.schedule.countdown, p.schedule.tone) }}{% endif %}
+        </td>
+        <td class="pt-cell-comp">딜 <span class="num">{{ p.comp.dps }}/{{ p.comp.dps_total }}</span> · <span class="{% if p.comp.lacks_support and p.status == 'recruiting' %}pt-warn{% endif %}">폿 <span class="num">{{ p.comp.sup }}/{{ p.comp.sup_total }}</span></span></td>
+        <td class="pt-cell-count">{{ p.comp.filled }}/{{ p.comp.total }}</td>
+        <td class="pt-cell-join">
+          {% if j.state == "can" %}
+          <form method="post" action="/parties/{{ p.message_id }}/join" class="pt-join" data-pt-join>
+            <select class="js-themed-select" name="character_name" aria-label="{{ p.raid_name }} {{ p.difficulty }} 참여 캐릭터">
+              {% for o in j.options %}
+              <option value="{{ o.name }}" data-role="{{ o.role }}"{% if o.group %} data-group="{{ o.group }}"{% endif %}>{{ o.name }} · {{ "폿" if o.role == "support" else "딜" }}{% if o.recommended %} (추천){% endif %}</option>
+              {% endfor %}
+            </select>
+            <input type="hidden" name="role" value="{{ j.options[0].role }}">
+            <input type="hidden" name="party_group" value="{{ j.options[0].group or '' }}"{% if not j.options[0].group %} disabled{% endif %}>
+            <button type="submit" class="btn pri" data-busy-text="참여 중">참여</button>
+          </form>
+          {% elif j.state == "joined" %}
+          <span class="pt-why">{{ "내가 연 공대" if p.leader_id == user.discord_id else "참여 중" }}</span> <a class="lnk pt-reason-lnk" href="/parties/{{ p.message_id }}">상세</a>
+          {% elif j.state == "blocked" %}
+          <span class="pt-why">{{ j.reason }}</span> <a class="lnk pt-reason-lnk" href="/parties/{{ p.message_id }}#join">빈자리 알림</a>
+          {% elif j.state == "full" %}
+          <span class="pt-why">파티완성</span> <a class="lnk pt-reason-lnk" href="/parties/{{ p.message_id }}#join">빈자리 알림</a>
+          {% elif j.state == "closed" %}
+          <span class="pt-why">모집 마감</span> <a class="lnk pt-reason-lnk" href="/parties/{{ p.message_id }}#join">빈자리 알림</a>
+          {% else %}
+          <a class="lnk pt-reason-lnk" href="/parties/{{ p.message_id }}">상세에서 참여</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="pt-why" id="party-search-noresult" hidden>검색 결과가 없습니다.</p>
   {% endif %}
-{% else %}
-<div class="ui-list" id="party-list">
-  {% for p in parties %}
-  {% call ui.card(href="/parties/" ~ p.message_id, stripe=p.status_tone) %}
-    <div class="ui-row">
-      <span class="ui-card-title">{{ p.raid_name }} {{ p.difficulty }}</span>
-      {{ ui.chip(p.proficiency) }}
-      <span class="ui-spacer"></span>
-      {{ ui.chip(p.status_label, p.status_tone) }}
-    </div>
-    <div class="ui-row">
-      <span class="ui-card-meta">{{ p.schedule.when }}</span>
-      {% if p.schedule.countdown %}{{ ui.chip(p.schedule.countdown, p.schedule.tone) }}
-      {% elif p.schedule.is_past %}{{ ui.chip("지난 일정", "past") }}{% endif %}
-      {% if p.period %}{{ ui.chip(p.period.label, p.period.tone) }}{% endif %}
-      <span class="ui-spacer"></span>
-      <span class="ui-card-meta">최소 {{ p.min_level }}</span>
-    </div>
-    {{ ui.slotbar(p.slots, p.total_slots, p.pct) }}
-    {% if p.memo %}<p class="party-card-memo">{{ p.memo }}</p>{% endif %}
-  {% endcall %}
-  {% endfor %}
-</div>
-<p class="raid-picker-noresult" id="party-search-noresult" hidden>검색 결과가 없습니다.</p>
-{% endif %}
+  <script src="/static/pages/party.js?v={{ static_version }}"></script>
 </div>
 {% endblock %}

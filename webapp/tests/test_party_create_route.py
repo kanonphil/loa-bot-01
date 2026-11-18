@@ -59,21 +59,18 @@ def test_create_form_shows_only_active_raids_and_own_characters(client):
 
     assert resp.status_code == 200
     assert "4막" in resp.text
-    assert "/static/themed-select.js" in resp.text
-    assert resp.text.count('class="js-themed-select"') == 3  # 숙련도/캐릭터/역할 select 전부
-    assert 'id="character-name-select" class="js-themed-select"' in resp.text
-    assert 'id="role-select" class="js-themed-select"' in resp.text
+    assert "/static/pages/party.css" in resp.text
     assert "💤 비활성" not in resp.text
+    assert "비활성레이드" not in resp.text  # 비활성 레이드는 고를 수 없다
     assert "숙련" in resp.text
     assert "트라이" in resp.text
     assert "발키리" in resp.text
     assert "워로드둘째" in resp.text
-    assert "선택 안 함" in resp.text
-    # 홀리나이트(서포터)는 true, 워로드(딜러 전용)는 false로 JS에 전달돼야 한다
-    # (tojson은 비ASCII를 \uXXXX로 이스케이프하므로 원문 그대로 매칭하지 않고 파싱해서 비교한다)
-    match = re.search(r"const characterIsSupport = (\{.*?\});", resp.text)
-    assert match is not None
-    assert json.loads(match.group(1)) == {"발키리": True, "워로드둘째": False}
+    assert "나중에 직접 참여" in resp.text
+    assert 'id="party-create-submit"' in resp.text
+    # 홀리나이트(서포터)는 support, 워로드(딜러 전용)는 dps — 라디오의 data-role로 JS에 전달된다
+    assert re.search(r'value="발키리" data-role="support"', resp.text)
+    assert re.search(r'value="워로드둘째" data-role="dps"', resp.text)
 
 
 def _post_create(client, **overrides):

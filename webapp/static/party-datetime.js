@@ -23,6 +23,7 @@ function initPartyDatetimePicker(selector, options) {
     // 파티를 재조정할 때는 그 값을 그대로 보여줘야 하므로(서버가 실제 저장은
     // 여전히 막는다) 리스케줄 쪽에서 minDate: null을 넘겨 끌 수 있게 한다.
     minDate: options.minDate !== undefined ? options.minDate : "today",
+    static: !!options.static, // 팝오버 안에서 쓸 때 — 달력이 body가 아니라 입력 옆에 붙어 바깥 클릭으로 취급되지 않는다
     hourIncrement: 1,
     minuteIncrement: 10,
     locale: KOREAN_LOCALE,

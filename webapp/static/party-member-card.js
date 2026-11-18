@@ -58,7 +58,7 @@
     currentSlot = null;
   }
 
-  document.querySelectorAll(".party-slot.filled[data-character-name]").forEach(function (slot) {
+  document.querySelectorAll(".pt-slot.filled[data-character-name]").forEach(function (slot) {
     slot.addEventListener("mouseenter", function () {
       clearTimeout(hideTimer);
       currentSlot = slot;
