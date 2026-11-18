@@ -102,7 +102,7 @@ try:
         # 4) 유저: 내보내기 영향 범위
         page.goto(BASE + "/admin/users", wait_until="networkidle")
         btn = page.locator("[data-user-kick='333']")
-        btn.click(); page.wait_for_selector("#kick-impact .num", timeout=3000)
+        btn.click(); page.wait_for_selector("#kick-impact .ad-end", timeout=3000)
         txt = page.inner_text(".dlg-back")
         check("내보내기 대화상자에 영향 범위(캐릭터 3개·공대 2개·새 파티장)", "캐릭터 3개" in txt and "2개" in txt and "바드님" in txt, txt.replace("\n", " | ")[:200])
         check("대화상자 제목에 이름", "버서커" in page.inner_text("#dlg-kick-t"))
