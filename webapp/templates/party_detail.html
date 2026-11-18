@@ -65,7 +65,7 @@
     {% if viewing_as_admin %}<span class="pt-meta">관리자 권한으로 보는 중</span>{% endif %}
     {% endif %}
     {% if joined %}
-    <span class="pt-meta{% if is_leader %} pt-end{% endif %}">내 자리: <b>{% if my_seat.multi %}{{ my_seat.group }}파티 {% endif %}{{ my_seat.number }}번 · {{ my_slot.character_name }}</b></span>
+    <span class="pt-meta pt-seat{% if is_leader %} pt-end{% endif %}">내 자리: <b>{% if my_seat.multi %}{{ my_seat.group }}파티 {% endif %}{{ my_seat.number }}번 · {{ my_slot.character_name }}</b></span>
     <div class="pt-menu-wrap">
       <button type="button" class="btn" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="seat-menu">캐릭터·역할 변경</button>
       <div class="menu" id="seat-menu" role="menu" aria-label="캐릭터·역할 변경" hidden>

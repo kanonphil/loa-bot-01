@@ -55,6 +55,7 @@ try:
         trigger = page.locator('button[aria-label="리퍼짱 메뉴"]')
         trigger.click()
         check("메뉴(⋯)가 열린다", page.locator("#mm-2").is_visible())
+        page.screenshot(path=str(HERE / "out" / "party" / "interact-menu.jpg"), type="jpeg", quality=70)
         check("메뉴를 열면 첫 항목에 포커스", "파티장 위임" in page.evaluate(FOCUS), page.evaluate(FOCUS))
         page.keyboard.press("ArrowDown")
         page.get_by_role("menuitem", name="강제 퇴장").click()
@@ -74,6 +75,7 @@ try:
         page.get_by_role("button", name="일정 변경").first.click()
         page.wait_for_timeout(200)
         check("일정 변경 팝오버가 열리고 날짜가 채워진다", page.locator("#reschedule-pop").is_visible() and page.locator("#reschedule-pop label").first.locator("input[type=text]").input_value() != "")
+        page.screenshot(path=str(HERE / "out" / "party" / "interact-reschedule.jpg"), type="jpeg", quality=70)
         page.locator("#reschedule-pop label").first.locator("input[type=text]").click()
         page.wait_for_timeout(200)
         check("날짜 선택기를 열어도 팝오버가 유지된다", page.locator("#reschedule-pop").is_visible())
@@ -88,6 +90,7 @@ try:
         page.wait_for_timeout(200)
         title = page.locator("#invite-title").inner_text()
         check("초대 팝오버가 열리고 5번 자리가 선택돼 있다", page.locator("#invite-slot").input_value() == "5" and "2파티 1번" in title, title)
+        page.screenshot(path=str(HERE / "out" / "party" / "interact-invite.jpg"), type="jpeg", quality=70)
         page.keyboard.press("Escape"); page.wait_for_timeout(150)
         check("Esc로 초대 팝오버 닫힘", not page.locator("#invite-pop").is_visible())
 

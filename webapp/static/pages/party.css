@@ -5,11 +5,16 @@
 /* ── 머리줄: 제목 · 탭 · 공대 열기 ─────────────────────────── */
 .page-top-title .pt-title-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-width: 0; }
 .pt-title-row h1 { flex: none; }
-.pt-title-row .subtabs { border-bottom: 0; flex: 0 1 auto; min-width: 0; }
+.pt-title-row .subtabs { border-bottom: 0; margin-bottom: 0; flex: 0 1 auto; min-width: 0; }
+.pt-title-row .subtabs a { height: var(--ctrl-h); margin-bottom: 0; }
 .pt-title-row .pt-open { margin-left: auto; }
 .pt-back { flex: none; }
 .pt-crumb { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; }
 .pt-crumb h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 목록·달력·이력은 같은 머리줄을 쓰므로 본문 폭도 맞춘다 — 탭을 옮겨도 제목·탭 위치가 흔들리지 않게 */
+.page-content.calendar-page { max-width: 1320px; }
+.main:has(.page-content.calendar-page) .page-top { max-width: 1320px; }
 
 .pt-page { display: flex; flex-direction: column; gap: var(--sp-3); font-size: var(--fs-body); }
 .pt-page > .banner { margin-bottom: 0; }
@@ -26,7 +31,7 @@
 /* ── 목록 ───────────────────────────────────────────────── */
 .pt-filterbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .pt-filterbar .chip-btn b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; margin-left: 4px; }
-.pt-filterbar .pt-search { margin-left: auto; width: 240px; }
+.pt-filterbar .pt-search { margin-left: auto; width: 240px; height: 30px; border-radius: var(--r-pill); }
 .pt-tablecard { padding: var(--sp-2) var(--sp-4); }
 .pt-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
 .pt-table th { padding: var(--sp-2) var(--sp-2) var(--sp-2); font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); text-align: left; white-space: nowrap; }
@@ -49,7 +54,7 @@
 
 /* 좁은 화면 — 표를 카드로 */
 @media (max-width: 760px) {
-  .pt-filterbar .pt-search { margin-left: 0; width: 100%; order: 9; }
+  .pt-filterbar .pt-search { margin-left: 0; width: 100%; order: 9; height: var(--ctrl-h); border-radius: var(--r-md); }
   .pt-tablecard { padding: 0; border: 0; background: transparent; }
   .pt-table, .pt-table tbody { display: block; }
   .pt-table thead { display: none; }
@@ -225,6 +230,9 @@
   .pt-groups { grid-template-columns: minmax(0, 1fr); }
   .pt-bar .btn:not(.sm), .pt-statusline .btn { height: 44px; }
   .pt-bar .pt-end { margin-left: 0; }
+  .pt-bar .pt-seat { flex: 1 0 100%; margin-top: var(--sp-1); }
+  .pt-crumb { flex-wrap: wrap; row-gap: var(--sp-1); }
+  .pt-crumb h1 { white-space: normal; font-size: var(--fs-section); }
   .pt-bar-join .themed-select, .pt-bar-join select { flex: 1 1 140px; width: auto; }
   .pt-slot { height: 48px; }
   .pt-slot .pt-dots { width: 36px; height: 36px; }
