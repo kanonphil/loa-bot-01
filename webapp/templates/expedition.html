@@ -1,93 +1,124 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
+{% from "_subtabs.html" import subtabs with context %}
+{% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}<h1>원정대</h1>{% if characters %}<span class="ui-chip">캐릭터 {{ characters|length }}</span>{% endif %}{% endblock %}
 {% block content %}
-<div class="page-content">
-{% from "_subtabs.html" import subtabs with context %}{{ subtabs("exp") }}
-<h1>원정대 관리</h1>
+<div class="page-content exp-page">
+{{ subtabs("exp") }}
 
-<form method="post" action="/expedition/add" class="expedition-add-form">
-  <input type="text" name="character_name" placeholder="캐릭터 이름 (정확히 입력)" maxlength="12" required aria-label="캐릭터 이름">
-  <button type="submit" data-busy-text="확인 중…">캐릭터 추가</button>
-</form>
-
-{% if accounts %}
-<div class="expedition-account-add">
-  <h2 class="expedition-section-title">내 계정</h2>
-  <ul class="expedition-list">
-    {% for acc in accounts %}
-    <li class="expedition-item">
-      <span class="expedition-item-main">
-        <span class="dash-char-name">{{ acc.label }}</span>
-        <span class="expedition-item-meta"><code>{{ acc.masked_key }}</code></span>
-      </span>
-      <form method="post" action="/expedition/remove-account" class="expedition-remove-form"
-            data-confirm-title="이 계정을 삭제할까요?" data-confirm="이 계정으로 등록된 캐릭터는 삭제되지 않고 계정 연결만 해제됩니다." data-confirm-ok="삭제" data-confirm-danger>
-        <input type="hidden" name="key_id" value="{{ acc.id }}">
-        <button type="submit" class="party-leave-btn">삭제</button>
-      </form>
-    </li>
-    {% endfor %}
-  </ul>
-</div>
-{% endif %}
-
-<div class="expedition-account-add">
-  <h2 class="expedition-section-title">부계정 추가</h2>
-  <p class="expedition-section-desc">다른 로스트아크 계정의 API 키를 등록하면, 그 계정의 원정대 캐릭터가 전부 자동으로 추가됩니다.</p>
-  <form method="post" action="/expedition/add-account" class="expedition-account-form">
-    <input type="password" name="api_key" placeholder="로스트아크 API 키" required autocomplete="off" aria-label="로스트아크 API 키">
-    <input type="text" name="character_name" placeholder="검증용 캐릭터 이름" maxlength="12" required aria-label="검증용 캐릭터 이름">
-    <button type="submit" data-busy-text="확인 중…">계정 추가</button>
+<section class="ui-card exp-card" aria-labelledby="exp-add-title">
+  <h2 class="exp-h" id="exp-add-title">캐릭터 추가</h2>
+  <form method="post" action="/expedition/add" class="exp-form-row" data-inline>
+    <input type="text" name="character_name" class="field exp-grow" placeholder="캐릭터 이름 (정확히 입력)" maxlength="12" required
+           aria-label="캐릭터 이름" aria-describedby="exp-add-help" autocomplete="off" data-field="character_name">
+    <button type="submit" class="btn pri" data-busy-text="확인 중">캐릭터 추가</button>
   </form>
-</div>
+  <p class="field-help" id="exp-add-help" data-help>로스트아크에 표시되는 캐릭터 이름을 정확히 입력하세요.</p>
+</section>
 
 {% if not characters %}
 {{ ui.empty(
     "등록된 캐릭터가 없습니다",
-    "위에 캐릭터 이름을 넣거나, API 키로 계정을 추가하면 원정대가 통째로 들어옵니다.",
-    icon="🧭") }}
+    "위에 캐릭터 이름을 넣거나, 아래에서 API 키로 계정을 추가하면 원정대가 통째로 들어옵니다.",
+    icon="👤") }}
 {% else %}
-<form method="post" action="/expedition/sync" class="expedition-sync-form">
-  {# 동기화는 캐릭터 수만큼 API를 도느라 오래 걸린다 — 눌린 티가 안 나면 계속 다시 누른다 #}
-  <button type="submit" data-busy-text="동기화 중...">전체 동기화</button>
-  <span class="expedition-sync-note">아이템 레벨은 매일 04시에 자동으로 갱신됩니다.</span>
-</form>
+
+<div class="exp-listhead">
+  <h2 class="exp-h">내 캐릭터</h2><span class="ui-chip">{{ characters|length }}</span>
+  {% if character_groups|length == 1 and character_groups[0].last_sync %}<span class="exp-meta">마지막 동기화 {{ character_groups[0].last_sync }}</span>{% endif %}
+  <form method="post" action="/expedition/sync" class="exp-sync" data-sync-form>
+    <span class="exp-meta" data-sync-note role="status" aria-live="polite">아이템 레벨은 매일 04시에 자동으로 갱신됩니다.</span>
+    <button type="submit" class="btn" data-busy-text="동기화 중">전체 동기화</button>
+  </form>
+</div>
 
 {% if characters|length > 5 %}
-<label class="raid-search expedition-search">
+<label class="raid-search exp-search">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
   <input type="search" class="js-list-filter" placeholder="캐릭터명 또는 직업으로 검색" aria-label="캐릭터 검색" autocomplete="off"
-         data-filter-target="#expedition-groups" data-filter-item=".expedition-item" data-filter-text=".expedition-item-main"
+         data-filter-target="#expedition-groups" data-filter-item=".exp-char" data-filter-text=".exp-char-main"
          data-filter-no-result="#expedition-search-noresult">
 </label>
 {% endif %}
 
-<div id="expedition-groups">
+<div id="expedition-groups" class="exp-groups">
 {% for group in character_groups %}
-<div class="expedition-account-group">
-  {% if character_groups|length > 1 or group.last_sync %}
-  <h2 class="expedition-account-title">{% if character_groups|length > 1 %}{{ group.label }}{% else %}내 캐릭터{% endif %}
-    {% if group.last_sync %}<span class="expedition-last-sync">마지막 동기화 {{ group.last_sync }}</span>{% endif %}</h2>
+<section class="exp-group" aria-label="{{ group.label }}">
+  {% if character_groups|length > 1 %}
+  <div class="exp-group-head">
+    <h3 class="exp-sub expedition-account-title">{{ group.label }}</h3>
+    <span class="ui-chip">{{ group.characters|length }}</span>
+    {% if group.last_sync %}<span class="exp-meta exp-push">마지막 동기화 {{ group.last_sync }}</span>{% endif %}
+  </div>
   {% endif %}
-  <ul class="expedition-list">
+  <ul class="exp-grid">
     {% for c in group.characters %}
-    <li class="expedition-item">
-      <a class="expedition-item-main" href="/characters/{{ c.character_name }}">
-        <span class="dash-char-name">{{ c.character_name }}</span>
-        <span class="expedition-item-meta">{{ c.character_class }} &middot; {{ c.item_level }}</span>
+    <li class="ui-card exp-char">
+      <a class="exp-char-main" href="/characters/{{ c.character_name | urlencode }}">
+        <span class="exp-char-name trunc">{{ c.character_name }}</span>
+        <span class="exp-meta">{{ c.character_class or "—" }} &middot; <span class="num">{% if c.item_level is not none %}{{ "%.2f"|format(c.item_level|float) }}{% else %}—{% endif %}</span></span>
       </a>
-      <form method="post" action="/expedition/remove" class="expedition-remove-form"
-            data-confirm-title="{{ c.character_name }} 캐릭터를 원정대에서 삭제할까요?" data-confirm="레이드 체크 기록은 남고, 공대 참여 목록에서만 빠집니다." data-confirm-ok="삭제" data-confirm-danger>
-        <input type="hidden" name="character_name" value="{{ c.character_name }}">
-        <button type="submit" class="party-leave-btn">삭제</button>
-      </form>
+      <dl class="exp-char-stats">
+        <div><dt>전투력</dt><dd class="num">{% if c.combat_power is not none %}{{ "{:,.2f}".format(c.combat_power|float) }}{% else %}—{% endif %}</dd></div>
+        <div><dt>7일 변화</dt>
+          <dd class="num">{% if c.cp_growth_7d is not none %}{% set g = c.cp_growth_7d|float -%}
+            {%- if g > 0 %}<span class="exp-up">▲ +{{ "{:,.2f}".format(g) }}</span>{% elif g < 0 %}<span class="exp-down">▼ −{{ "{:,.2f}".format(g|abs) }}</span>{% else %}<span class="exp-meta">변화 없음</span>{% endif %}
+          {%- else %}—{% endif %}</dd></div>
+      </dl>
+      <div class="exp-char-foot">
+        <span class="exp-meta">{% if c.synced_ago %}동기화 {{ c.synced_ago }}{% else %}동기화 기록 없음{% endif %}</span>
+        <form method="post" action="/expedition/remove" class="exp-push"
+              data-confirm-title="{{ c.character_name }} 캐릭터를 원정대에서 삭제할까요?" data-confirm="레이드 체크 기록은 남고, 공대 참여 목록에서만 빠집니다." data-confirm-ok="삭제" data-confirm-danger>
+          <input type="hidden" name="character_name" value="{{ c.character_name }}">
+          <button type="submit" class="btn sm ghost exp-del" aria-label="{{ c.character_name }} 삭제">삭제</button>
+        </form>
+      </div>
     </li>
     {% endfor %}
   </ul>
-</div>
+</section>
 {% endfor %}
 </div>
 <p class="raid-picker-noresult" id="expedition-search-noresult" hidden>검색 결과가 없습니다.</p>
 {% endif %}
+
+<section class="ui-card exp-card" aria-labelledby="exp-acc-title">
+  <h2 class="exp-h" id="exp-acc-title">계정 · API 키</h2>
+  {% if accounts %}
+  <ul class="exp-rows">
+    {% for acc in accounts %}
+    <li class="exp-rowline">
+      <span class="exp-rowline-main"><b class="trunc">{{ acc.label }}</b><code class="exp-meta">{{ acc.masked_key }}</code></span>
+      <form method="post" action="/expedition/remove-account" class="exp-push"
+            data-confirm-title="이 계정을 삭제할까요?" data-confirm="이 계정으로 등록된 캐릭터는 삭제되지 않고 계정 연결만 해제됩니다." data-confirm-ok="삭제" data-confirm-danger>
+        <input type="hidden" name="key_id" value="{{ acc.id }}">
+        <button type="submit" class="btn sm ghost exp-del" aria-label="{{ acc.label }} 계정 삭제">삭제</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="exp-meta">등록된 계정이 없습니다. 디스코드 <code>/api등록</code>으로 키를 등록하면 여기에 나타납니다.</p>
+  {% endif %}
+
+  <form method="post" action="/expedition/add-account" class="exp-acc-form" data-inline>
+    <h3 class="exp-sub">부계정 추가</h3>
+    <p class="exp-meta">다른 로스트아크 계정의 API 키를 등록하면 그 계정의 원정대 캐릭터가 전부 자동으로 추가됩니다.</p>
+    <div class="exp-acc-grid">
+      <label class="exp-label">
+        <span>로스트아크 API 키</span>
+        <input type="password" name="api_key" class="field" required autocomplete="off" aria-describedby="exp-acc-help" data-field="api_key">
+      </label>
+      <label class="exp-label">
+        <span>검증용 캐릭터 이름</span>
+        <input type="text" name="character_name" class="field" maxlength="12" required autocomplete="off" aria-describedby="exp-acc-help" data-field="character_name">
+      </label>
+      <button type="submit" class="btn pri" data-busy-text="확인 중">계정 추가</button>
+    </div>
+    <p class="field-help" id="exp-acc-help" data-help>검증용 캐릭터는 그 계정에 있는 캐릭터 아무거나 하나면 됩니다.</p>
+  </form>
+</section>
 </div>
+<script src="/static/pages/exp.js?v={{ static_version }}"></script>
 {% endblock %}

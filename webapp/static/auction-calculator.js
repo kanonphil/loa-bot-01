@@ -55,6 +55,17 @@
     sellProfitEl.textContent = formatGold(sellProfit);
   }
 
+  // 시세에서 가져오기 — 고른 아이템의 현재가를 가격 칸에 채우고 바로 다시 계산한다.
+  // (직접 입력하던 값을 지우고 채우므로, 고른 뒤 가격 칸을 고치면 그 값이 우선한다)
+  var marketSelect = document.getElementById("calc-market");
+  if (marketSelect) {
+    marketSelect.addEventListener("change", function () {
+      if (!marketSelect.value) return;
+      priceInput.value = marketSelect.value;
+      recalculate();
+    });
+  }
+
   priceInput.addEventListener("input", recalculate);
   customInput.addEventListener("input", recalculate);
   partySizeRadios.forEach(function (r) {

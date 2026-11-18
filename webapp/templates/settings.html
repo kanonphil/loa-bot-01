@@ -1,194 +1,170 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}<a class="btn sm ghost" href="/more">← 더보기</a><h1>알림 설정</h1>{% endblock %}
 {% block content %}
-<div class="page-content">
-<h1>알림 설정</h1>
+{# 모든 스위치는 같은 모양: 오른쪽 끝에 "켜짐/꺼짐" 글자 + 스위치. 색만으로 구분하지 않는다. #}
+{% macro switch(label_id, on, action, json=false, field=false) %}
+<form method="post" action="{{ action }}" class="exp-switchform"{% if json %} data-switch-json{% endif %}>
+  {% if field %}<input type="hidden" name="enabled" value="{{ '0' if on else '1' }}">{% endif %}
+  <span class="exp-meta exp-switch-state" data-switch-state>{{ "켜짐" if on else "꺼짐" }}</span>
+  <button type="submit" class="exp-switch" role="switch" aria-checked="{{ 'true' if on else 'false' }}" aria-labelledby="{{ label_id }}"><i aria-hidden="true"></i></button>
+</form>
+{% endmacro %}
+<div class="page-content exp-page exp-settings">
 
-<div class="settings-card">
-  <h2 class="leader-panel-title">공대 알림 구독</h2>
-  <p class="settings-desc">
-    구독하면 공대 모집 생성/클리어/게스트 합류 소식이 종 아이콘 이력에 쌓여 나중에 다시 볼 수 있어요.
-    구독하지 않으면 발생하는 순간 화면에 뜨는 toast로만 확인할 수 있고, 이력에는 남지 않습니다.
-  </p>
-  <form method="post" action="/notifications/subscribe">
-    {% if subscribed %}
-    <button type="submit" class="settings-toggle-btn settings-toggle-on">구독 중 (해제하기)</button>
-    {% else %}
-    <button type="submit" class="settings-toggle-btn">구독하기</button>
-    {% endif %}
+<h2 class="exp-group-title">웹 알림</h2>
+<section class="ui-card exp-card exp-rows-card" aria-label="웹 알림">
+  <div class="exp-setrow">
+    <div class="exp-setrow-text">
+      <b id="set-subscribe">알림 이력 구독</b>
+      <span class="exp-meta">켜면 공대 모집·클리어·게스트 합류 소식이 종 아이콘 이력에 남아 나중에 다시 볼 수 있습니다. 끄면 발생하는 순간 화면에 뜨는 토스트로만 알 수 있고 이력에는 남지 않습니다.</span>
+    </div>
+    {{ switch("set-subscribe", subscribed, "/notifications/subscribe") }}
+  </div>
+
+  <form method="post" action="/notifications/preferences" class="exp-setrow exp-setrow-stack">
+    <div class="exp-setrow-text">
+      <b>받을 알림 종류</b>
+      <span class="exp-meta">화면 토스트와 종 아이콘 이력에 모두 적용됩니다.</span>
+    </div>
+    <div class="exp-checks">
+      <label class="settings-check exp-check"><input type="checkbox" name="created" {% if prefs.notify_created %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span><span>공대 모집 시작</span></label>
+      <label class="settings-check exp-check"><input type="checkbox" name="cleared" {% if prefs.notify_cleared %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span><span>공대 클리어</span></label>
+      <label class="settings-check exp-check"><input type="checkbox" name="guest_joined" {% if prefs.notify_guest_joined %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span><span>게스트 합류</span></label>
+      <label class="settings-check exp-check"><input type="checkbox" name="personal" {% if prefs.notify_personal %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span><span>내게 온 알림 <small class="exp-meta">초대 · 강제 퇴장 · 파티장 위임 · 일정/난이도 변경 · 빈자리 · 파티 완성 · 시작 시간</small></span></label>
+    </div>
+    <div class="exp-setrow-foot"><button type="submit" class="btn pri">저장</button></div>
   </form>
-</div>
 
-<div class="settings-card">
-  <h2 class="leader-panel-title">알림 종류</h2>
-  <p class="settings-desc">받고 싶은 알림 종류만 선택하세요. 화면 toast와 종 아이콘 이력에 모두 적용됩니다.</p>
-  <form method="post" action="/notifications/preferences" class="settings-check-form">
-    <label class="settings-check"><input type="checkbox" name="created" {% if prefs.notify_created %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 공대 모집 시작</label>
-    <label class="settings-check"><input type="checkbox" name="cleared" {% if prefs.notify_cleared %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 공대 클리어</label>
-    <label class="settings-check"><input type="checkbox" name="guest_joined" {% if prefs.notify_guest_joined %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 게스트 합류</label>
-    <label class="settings-check"><input type="checkbox" name="personal" {% if prefs.notify_personal %}checked{% endif %}><span class="ui-checkbox" aria-hidden="true"></span> 내게 온 알림 (초대·강제 퇴장·파티장 위임·일정/난이도 변경·빈자리·파티 완성·시작 시간)</label>
-    <button type="submit" class="settings-toggle-btn">저장</button>
-  </form>
-</div>
+  <div class="exp-setrow">
+    <div class="exp-setrow-text">
+      <b id="set-sound">알림 소리</b>
+      <span class="exp-meta">토스트가 뜰 때 짧은 알림음을 재생합니다. 지금 쓰는 브라우저에만 저장됩니다.</span>
+    </div>
+    <div class="exp-switchform">
+      <button type="button" class="btn sm ghost" id="notif-sound-test">미리 듣기</button>
+      <span class="exp-meta exp-switch-state" id="notif-sound-state">켜짐</span>
+      <button type="button" class="exp-switch" role="switch" aria-checked="true" aria-labelledby="set-sound" id="notif-sound-toggle"><i aria-hidden="true"></i></button>
+    </div>
+  </div>
+</section>
 
-<div class="settings-card">
-  <h2 class="leader-panel-title">레이드 필터</h2>
-  <p class="settings-desc">
-    봇의 <code>/레이드구독</code>처럼 특정 레이드만 골라서 알림을 받을 수 있어요.
-    아무것도 추가하지 않으면 전체 레이드의 알림을 받습니다.
-  </p>
+<section class="ui-card exp-card" aria-labelledby="set-filter">
+  <h2 class="exp-h" id="set-filter">레이드 필터</h2>
+  <p class="exp-meta">특정 레이드만 골라 웹 알림을 받습니다. 아무것도 추가하지 않으면 전체 레이드의 알림을 받습니다. 디스코드 DM에는 적용되지 않습니다.</p>
   {% if prefs.raid_filters %}
-  <ul class="settings-filter-list">
+  <ul class="exp-rows">
     {% for f in prefs.raid_filters %}
-    <li class="settings-filter-row">
-      <span class="settings-filter-name">{{ f.raid_name }} <em>{{ f.difficulty or "모든 난이도" }}</em></span>
-      <form method="post" action="/notifications/raid-filters/remove">
+    <li class="exp-rowline">
+      <span class="exp-rowline-main"><b class="trunc">{{ f.raid_name }}</b><span class="ui-chip">{{ f.difficulty or "모든 난이도" }}</span></span>
+      <form method="post" action="/notifications/raid-filters/remove" class="exp-push">
         <input type="hidden" name="raid_name" value="{{ f.raid_name }}">
         <input type="hidden" name="difficulty" value="{{ f.difficulty or '' }}">
-        <button type="submit" class="settings-filter-remove">삭제</button>
+        <button type="submit" class="btn sm ghost exp-del" aria-label="{{ f.raid_name }} 필터 삭제">삭제</button>
       </form>
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="settings-desc">현재 <strong>전체 레이드</strong>의 알림을 받고 있어요.</p>
-  {% endif %}
-  {% if not raids %}
-  <p class="settings-desc">봇 서버에서 레이드 목록을 불러오지 못해 필터 추가는 잠시 쓸 수 없습니다. 새로고침 후 다시 시도해주세요.</p>
+  <p class="exp-state"><span class="ui-chip is-accent">전체</span> 지금은 전체 레이드의 알림을 받고 있습니다.</p>
   {% endif %}
   {% if raids %}
-  <form method="post" action="/notifications/raid-filters/add" class="settings-filter-add">
-    <select name="raid_name" id="filter-raid-select" class="settings-select js-themed-select" required aria-label="레이드">
+  <form method="post" action="/notifications/raid-filters/add" class="exp-addrow">
+    <select name="raid_name" id="filter-raid-select" class="js-themed-select" required aria-label="레이드"
+            data-diff-target="#filter-diff-select" data-diff-all-label="모든 난이도" data-diff-all-value="">
       <option value="" disabled selected>레이드 선택</option>
       {% for name, info in raids.items() %}{% if info.get("is_active", True) %}
       <option value="{{ name }}" data-difficulties="{{ (info.get('difficulties') or {}).keys() | list | join(',') }}">{{ name }}</option>
       {% endif %}{% endfor %}
     </select>
-    <select name="difficulty" id="filter-diff-select" class="settings-select js-themed-select" aria-label="난이도">
+    <select name="difficulty" id="filter-diff-select" class="js-themed-select" aria-label="난이도">
       <option value="">모든 난이도</option>
     </select>
-    <button type="submit" class="settings-toggle-btn">추가</button>
+    <button type="submit" class="btn pri">추가</button>
   </form>
-  <script>
-    (function () {
-      var raidSelect = document.getElementById("filter-raid-select");
-      var diffSelect = document.getElementById("filter-diff-select");
-      raidSelect.addEventListener("change", function () {
-        var opt = raidSelect.options[raidSelect.selectedIndex];
-        var diffs = (opt.getAttribute("data-difficulties") || "").split(",").filter(Boolean);
-        diffSelect.innerHTML = '<option value="">모든 난이도</option>';
-        diffs.forEach(function (d) {
-          var o = document.createElement("option");
-          o.value = d;
-          o.textContent = d;
-          diffSelect.appendChild(o);
-        });
-        diffSelect.dispatchEvent(new Event("change"));
-      });
-    })();
-  </script>
+  {% else %}
+  {{ ui.banner("봇 서버에서 레이드 목록을 불러오지 못해 필터 추가는 잠시 쓸 수 없습니다. 새로고침 후 다시 시도해주세요.", "warn") }}
   {% endif %}
-</div>
+</section>
 
-<div class="settings-card">
-  <h2 class="leader-panel-title">디스코드 DM 구독</h2>
-  <p class="settings-desc">
-    디스코드 <code>/레이드구독</code>과 같은 설정입니다. 구독한 레이드의 새 공대가 열리면 디스코드 DM으로 알려줘요
-    (이미 그 레이드 공대에 참여 중이면 오지 않습니다). 위의 "레이드 필터"는 웹 알림만, 여기는 디스코드 DM만 다룹니다.
-  </p>
+<h2 class="exp-group-title">디스코드 DM</h2>
+<section class="ui-card exp-card exp-rows-card" aria-label="디스코드 알림">
+  <div class="exp-setrow">
+    <div class="exp-setrow-text">
+      <b id="set-gold">골드섬 10분 전 디스코드 알림</b>
+      <span class="exp-meta">그날 첫 골드 모험섬이 시작되기 10분 전에 디스코드 DM으로 알려줍니다. 하루에 한 번만 갑니다.
+        {% if gold.known and gold.available is false %}<br><span class="exp-warn-text">지금은 로스트아크 일정을 가져오지 못하고 있어 알림이 가지 않을 수 있습니다.</span>{% endif %}</span>
+    </div>
+    {% if gold.known %}
+    {{ switch("set-gold", gold.subscribed, "/settings/gold-island", json=true, field=true) }}
+    {% else %}
+    <div class="exp-switchform"><span class="exp-meta exp-switch-state">불러오지 못함</span>
+      <button type="button" class="exp-switch" role="switch" aria-checked="false" aria-labelledby="set-gold" disabled data-tip="봇 서버에서 구독 상태를 가져오지 못했습니다"><i aria-hidden="true"></i></button></div>
+    {% endif %}
+  </div>
+
+  <div class="exp-setrow">
+    <div class="exp-setrow-text">
+      <b id="set-pre">공대 시작 사전 알림</b>
+      <span class="exp-meta">참여 중인 공대의 시작이 다가오면 정한 시간만큼 미리 디스코드 DM과 웹 알림으로 알려줍니다. 시작 시각 자체의 알림(스레드 멘션)은 이 설정과 상관없이 항상 갑니다.</span>
+    </div>
+    {% if pre_notify is none %}
+    <span class="exp-meta">봇 서버에 연결하지 못해 표시할 수 없습니다.</span>
+    {% else %}
+    <form method="post" action="/settings/pre-notify" class="exp-addrow exp-addrow-end">
+      <select name="pre_notify_hours" class="js-themed-select" aria-label="사전 알림 시간">
+        {% for h in pre_notify.choices %}
+        <option value="{{ h }}" {% if h == pre_notify.pre_notify_hours %}selected{% endif %}>
+          {%- if h == 0 %}받지 않음{% elif h < 1 %}{{ (h * 60) | int }}분 전{% else %}{{ h | int }}시간 전{% endif -%}
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn pri">저장</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+<section class="ui-card exp-card" aria-labelledby="set-dm">
+  <h2 class="exp-h" id="set-dm">레이드 구독</h2>
+  <p class="exp-meta">디스코드 <code>/레이드구독</code>과 같은 설정입니다. 구독한 레이드의 새 공대가 열리면 디스코드 DM으로 알려줍니다(이미 그 레이드 공대에 참여 중이면 오지 않습니다).</p>
   {% if discord_subscriptions is none %}
-  <p class="settings-desc">봇 서버에 연결하지 못해 지금은 표시할 수 없습니다.</p>
+  {{ ui.banner("봇 서버에 연결하지 못해 지금은 표시할 수 없습니다.", "err") }}
   {% else %}
   {% if discord_subscriptions %}
-  <ul class="settings-filter-list">
+  <ul class="exp-rows">
     {% for s in discord_subscriptions %}
-    <li class="settings-filter-row">
-      <span class="settings-filter-name">{{ s.raid_name }} <em>{{ "전체 난이도" if s.difficulty == "전체" else s.difficulty }}</em></span>
-      <form method="post" action="/settings/discord-subscriptions/remove">
+    <li class="exp-rowline">
+      <span class="exp-rowline-main"><b class="trunc">{{ s.raid_name }}</b><span class="ui-chip">{{ "전체 난이도" if s.difficulty == "전체" else s.difficulty }}</span></span>
+      <form method="post" action="/settings/discord-subscriptions/remove" class="exp-push">
         <input type="hidden" name="raid_name" value="{{ s.raid_name }}">
         <input type="hidden" name="difficulty" value="{{ s.difficulty }}">
-        <button type="submit" class="settings-filter-remove">구독 취소</button>
+        <button type="submit" class="btn sm ghost exp-del" aria-label="{{ s.raid_name }} 구독 취소">구독 취소</button>
       </form>
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="settings-desc">구독 중인 레이드가 없습니다.</p>
+  <p class="exp-state"><span class="ui-chip">없음</span> 구독 중인 레이드가 없습니다.</p>
   {% endif %}
   {% if raids %}
-  <form method="post" action="/settings/discord-subscriptions/add" class="settings-filter-add">
-    <select name="raid_name" id="dm-raid-select" class="settings-select js-themed-select" required aria-label="레이드">
+  <form method="post" action="/settings/discord-subscriptions/add" class="exp-addrow">
+    <select name="raid_name" id="dm-raid-select" class="js-themed-select" required aria-label="레이드"
+            data-diff-target="#dm-diff-select" data-diff-all-label="전체 난이도" data-diff-all-value="전체">
       <option value="" disabled selected>레이드 선택</option>
       {% for name, info in raids.items() %}{% if info.get("is_active", True) %}
       <option value="{{ name }}" data-difficulties="{{ (info.get('difficulties') or {}).keys() | list | join(',') }}">{{ name }}</option>
       {% endif %}{% endfor %}
     </select>
-    <select name="difficulty" id="dm-diff-select" class="settings-select js-themed-select" aria-label="난이도">
+    <select name="difficulty" id="dm-diff-select" class="js-themed-select" aria-label="난이도">
       <option value="전체">전체 난이도</option>
     </select>
-    <button type="submit" class="settings-toggle-btn">구독</button>
-  </form>
-  <script>
-    (function () {
-      var raidSelect = document.getElementById("dm-raid-select");
-      var diffSelect = document.getElementById("dm-diff-select");
-      raidSelect.addEventListener("change", function () {
-        var opt = raidSelect.options[raidSelect.selectedIndex];
-        var diffs = (opt.getAttribute("data-difficulties") || "").split(",").filter(Boolean);
-        diffSelect.innerHTML = '<option value="전체">전체 난이도</option>';
-        diffs.forEach(function (d) {
-          var o = document.createElement("option");
-          o.value = d;
-          o.textContent = d;
-          diffSelect.appendChild(o);
-        });
-        diffSelect.dispatchEvent(new Event("change"));
-      });
-    })();
-  </script>
-  {% endif %}
-  {% endif %}
-</div>
-
-<div class="settings-card">
-  <h2 class="leader-panel-title">공대 시작 사전 알림</h2>
-  <p class="settings-desc">
-    참여 중인 공대의 시작 시각이 다가오면 정한 시간만큼 미리 디스코드 DM과 웹 알림으로 알려줘요.
-    시작 시각 자체의 알림(스레드 멘션)은 이 설정과 무관하게 항상 갑니다.
-  </p>
-  {% if pre_notify is none %}
-  <p class="settings-desc">봇 서버에 연결하지 못해 지금은 표시할 수 없습니다.</p>
-  {% else %}
-  <form method="post" action="/settings/pre-notify" class="settings-filter-add">
-    <select name="pre_notify_hours" class="settings-select js-themed-select" aria-label="사전 알림 시간">
-      {% for h in pre_notify.choices %}
-      <option value="{{ h }}" {% if h == pre_notify.pre_notify_hours %}selected{% endif %}>
-        {%- if h == 0 %}받지 않음{% elif h < 1 %}{{ (h * 60) | int }}분 전{% else %}{{ h | int }}시간 전{% endif -%}
-      </option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="settings-toggle-btn">저장</button>
+    <button type="submit" class="btn pri">구독</button>
   </form>
   {% endif %}
+  {% endif %}
+</section>
 </div>
-
-<div class="settings-card">
-  <h2 class="leader-panel-title">알림 소리</h2>
-  <p class="settings-desc">알림 toast가 뜰 때 짧은 알림음을 재생합니다. 이 설정은 지금 쓰는 브라우저에만 저장돼요.</p>
-  <label class="settings-check"><input type="checkbox" id="notif-sound-toggle"><span class="ui-checkbox" aria-hidden="true"></span> 소리 켜기</label>
-  <button type="button" class="settings-toggle-btn" id="notif-sound-test">미리 듣기</button>
-  <script>
-    (function () {
-      var toggle = document.getElementById("notif-sound-toggle");
-      toggle.checked = localStorage.getItem("notifSoundOff") !== "1";
-      toggle.addEventListener("change", function () {
-        if (toggle.checked) localStorage.removeItem("notifSoundOff");
-        else localStorage.setItem("notifSoundOff", "1");
-      });
-      document.getElementById("notif-sound-test").addEventListener("click", function () {
-        if (window.playNotifSound) window.playNotifSound(true);
-      });
-    })();
-  </script>
-</div>
-</div>
+<script src="/static/pages/exp.js?v={{ static_version }}"></script>
 {% endblock %}

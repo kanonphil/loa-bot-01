@@ -1,0 +1,172 @@
+/* 원정대 · 더보기 묶음 — 원정대, 랭킹, 알림 설정, 더보기, 경매 계산기, 이용 가이드, 캐릭터 상세의 전투력 기록 카드.
+   기반은 style.css의 공용 프리미티브(.ui-card .btn .field .ui-chip .ui-empty .utabs …)이고, 여기에는 그 위에 얹는
+   화면 배치만 둔다. 값은 전부 토큰(--sp-* --r-* --fs-* --ctrl-h)만 쓴다. 클래스는 exp- 접두어. */
+
+/* ── 공통 배치 ─────────────────────────────────────────── */
+.exp-page { display: flex; flex-direction: column; gap: var(--sp-3); }
+.exp-page .subtabs { margin-bottom: var(--sp-1); }
+.exp-caption { margin: 0; line-height: 1.6; }
+.exp-meta { font-size: var(--fs-meta); line-height: 1.5; color: var(--text-muted); }
+.exp-meta code, .exp-page code { font-family: var(--font-mono); font-size: var(--fs-meta); }
+.exp-push { margin-left: auto; }
+.exp-warn-text { color: var(--warn); }
+
+.exp-card { gap: var(--sp-3); padding: var(--sp-4); }
+.exp-card > p { margin: 0; }
+.exp-h { margin: 0; font-size: var(--fs-card); font-weight: 650; letter-spacing: -0.01em; }
+.exp-sub { margin: 0; font-size: var(--fs-body); font-weight: 650; }
+.exp-group-title, .exp-page .more-section {
+  margin: var(--sp-3) 0 calc(-1 * var(--sp-2));
+  font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted);
+}
+.exp-state { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-body); color: var(--text-muted); }
+
+.exp-label { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); }
+.exp-label .field-help { font-weight: 400; }
+.exp-page .more-profile { margin-bottom: 0; }
+.exp-form-row, .exp-addrow { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin: 0; }
+.exp-grow { flex: 1 1 160px; max-width: 360px; }
+.exp-page .ui-toolbar { margin-bottom: 0; }
+.exp-search { flex: none; width: 100%; max-width: 360px; height: var(--ctrl-h); padding-top: 0; padding-bottom: 0; }
+
+/* 삭제류 버튼 — 평소엔 조용하고 올리면 빨강(목록마다 빨간 버튼이 반복되지 않게) */
+@media (hover: hover) {
+  .exp-del:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+}
+
+/* ── 원정대: 캐릭터 ────────────────────────────────────── */
+.exp-listhead { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-1); }
+.exp-sync { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-3); margin: 0 0 0 auto; }
+.exp-groups { display: flex; flex-direction: column; gap: var(--sp-4); }
+.exp-group { display: flex; flex-direction: column; gap: var(--sp-2); }
+.exp-group-head { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--ctrl-h-sm); }
+.exp-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.exp-char { gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); }
+.exp-char-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: inherit; text-decoration: none; }
+.exp-char-name { font-size: var(--fs-card); font-weight: 650; letter-spacing: -0.01em; }
+@media (hover: hover) { .exp-char-main:hover .exp-char-name { color: var(--accent); } }
+.exp-char-stats { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+.exp-char-stats dt { font-size: var(--fs-label); color: var(--text-muted); }
+.exp-char-stats dd { margin: 2px 0 0; font-size: var(--fs-body); font-weight: 600; }
+.exp-char-foot { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--ctrl-h-sm); }
+.exp-char-foot form { margin: 0; }
+.exp-up { color: var(--ok); }
+.exp-down { color: var(--danger); }
+
+.exp-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.exp-rowline { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-1) 0; border-top: 1px solid var(--border-soft); }
+.exp-rowline:first-child { border-top: 0; }
+.exp-rowline-main { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; }
+.exp-rowline form { margin: 0; }
+.exp-acc-form { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding-top: var(--sp-3); border-top: 1px solid var(--border-soft); }
+.exp-acc-form > p { margin: 0; }
+.exp-acc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--sp-3); align-items: end; }
+.exp-card > .field-help, .exp-acc-form > .field-help { margin: 0; min-height: 1.5em; }
+
+/* ── 랭킹 표 ───────────────────────────────────────────── */
+.exp-tablecard { padding: 0; gap: 0; }
+.exp-tablewrap { overflow-x: auto; }
+.exp-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.exp-table th { height: var(--ctrl-h); padding: 0 var(--sp-3); text-align: left; font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); white-space: nowrap; border-bottom: 1px solid var(--border); }
+.exp-table td { height: 44px; padding: 0 var(--sp-3); border-top: 1px solid var(--border-soft); vertical-align: middle; }
+.exp-table tbody tr:first-child td { border-top: 0; }
+@media (hover: hover) { .exp-table tbody tr:hover { background: var(--hover); } }
+.exp-table .exp-c-rank { width: 56px; text-align: center; }
+.exp-table .exp-c-num { text-align: right; white-space: nowrap; }
+.exp-table .exp-c-class { color: var(--text-muted); white-space: nowrap; }
+.exp-table .exp-value { font-weight: 600; }
+.exp-table td.exp-c-rank { color: var(--text-muted); }
+.exp-table td.exp-rank-1 { color: var(--gold); font-weight: 700; }
+.exp-table td.exp-rank-2, .exp-table td.exp-rank-3 { color: var(--text); font-weight: 700; }
+.exp-namecell { display: flex; flex-direction: column; min-width: 0; }
+.exp-name-link { color: var(--text); font-weight: 600; max-width: 260px; }
+@media (hover: hover) { .exp-name-link:hover { color: var(--accent); } }
+.exp-class-inline { display: none; }
+.exp-sort { display: inline-flex; align-items: center; gap: var(--sp-1); height: var(--ctrl-h-sm); padding: 0 var(--sp-2); margin: 0 calc(-1 * var(--sp-2)); border-radius: var(--r-sm); color: inherit; text-decoration: none; }
+.exp-sort.is-on { color: var(--text); }
+.exp-sort-mark { font-size: var(--fs-label); }
+@media (hover: hover) { .exp-sort:hover { background: var(--hover); color: var(--text); } }
+
+/* ── 알림 설정 ─────────────────────────────────────────── */
+.exp-rows-card { padding: 0; gap: 0; }
+.exp-setrow { display: flex; align-items: center; gap: var(--sp-4); margin: 0; padding: var(--sp-4); border-top: 1px solid var(--border-soft); }
+.exp-setrow:first-child { border-top: 0; }
+.exp-setrow-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.exp-setrow-text b { font-size: var(--fs-body); }
+.exp-setrow-stack { flex-direction: column; align-items: stretch; gap: var(--sp-3); }
+.exp-setrow-foot { display: flex; justify-content: flex-end; }
+.exp-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sp-2); }
+.exp-check.settings-check { height: auto; min-height: var(--ctrl-h); padding: var(--sp-1) var(--sp-3); }
+.exp-check:last-child { grid-column: 1 / -1; }
+.exp-check small { margin-left: var(--sp-1); }
+.exp-addrow .themed-select { flex: 1 1 150px; min-width: 0; max-width: 240px; }
+.exp-addrow-end { flex: none; flex-wrap: nowrap; }
+.exp-addrow-end .themed-select { flex: none; width: 140px; }
+
+.exp-switchform { display: flex; align-items: center; gap: var(--sp-2); flex: none; margin: 0; }
+.exp-switch-state { min-width: 3.6em; text-align: right; }
+.exp-switch { position: relative; flex: none; width: 40px; height: 22px; padding: 0; border: 1px solid var(--line-in); border-radius: var(--r-pill); background: var(--sunken); cursor: pointer; }
+.exp-switch::before { content: ""; position: absolute; inset: -8px -4px; }
+.exp-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-muted); transition: transform var(--t), background-color var(--t); }
+.exp-switch[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.exp-switch[aria-checked="true"] i { transform: translateX(18px); background: var(--accent); }
+@media (hover: hover) { .exp-switch:hover:not(:disabled) { border-color: var(--line-in-hover); } .exp-switch[aria-checked="true"]:hover:not(:disabled) { border-color: var(--accent); } }
+
+/* ── 경매 계산기 ───────────────────────────────────────── */
+.exp-calc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-3); align-items: start; }
+.exp-fieldset { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; margin: 0; padding: 0; border: 0; }
+.exp-fieldset legend { padding: 0; margin-bottom: var(--sp-1); }
+.exp-segrow { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.exp-seg { position: relative; height: var(--ctrl-h); cursor: pointer; }
+.exp-seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.exp-seg:has(input:checked) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.exp-seg:has(input:focus-visible) { box-shadow: var(--ring); }
+.exp-custom-size { width: 84px; }
+.exp-result { display: flex; flex-direction: column; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--border-soft); }
+.exp-card > h2 + .exp-result { padding-top: 0; border-top: 0; }
+.exp-result-hero { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.exp-result-hero strong { font-size: var(--fs-section); font-weight: 700; color: var(--accent); }
+.exp-result-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); font-size: var(--fs-body); color: var(--text-muted); }
+.exp-result-row strong { font-weight: 600; color: var(--text); }
+
+/* ── 이용 가이드 ───────────────────────────────────────── */
+.guide-page.exp-page .guide-steps { margin-top: 0; }
+.guide-page .guide-step { padding: var(--sp-4) var(--sp-5); }
+.guide-page .guide-step-num { color: #06211f; }
+.guide-page .guide-step p, .guide-page .guide-step ul { font-size: var(--fs-body); }
+.guide-page .guide-step-head h2 { font-size: var(--fs-card); }
+
+/* ── 캐릭터 상세: 전투력 기록 카드(왼쪽 정보 카드 맨 아래) ──── */
+.exp-cp { align-self: stretch; display: flex; flex-direction: column; gap: var(--sp-2); width: 100%; margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--border-soft); text-align: left; }
+.exp-cp-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.exp-cp-head h2 { margin: 0; font-size: var(--fs-body); font-weight: 650; }
+.exp-cp-now { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
+.exp-cp-now b { font-size: var(--fs-card); font-weight: 700; }
+.exp-cp-now .num { font-size: var(--fs-meta); }
+.exp-cp-plot { position: relative; height: 72px; }
+.exp-cp-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.exp-cp-line { stroke: var(--accent); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+.exp-cp-area { fill: var(--accent-soft); stroke: none; }
+.exp-cp-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--panel); }
+.exp-cp-axis { display: flex; justify-content: space-between; font-size: var(--fs-label); color: var(--text-muted); }
+.exp-cp-range { margin: 0; }
+.exp-cp-empty { margin: 0; }
+
+/* ── 모바일(640px 이하) ────────────────────────────────── */
+@media (max-width: 640px) {
+  .exp-calc { grid-template-columns: 1fr; }
+  .exp-acc-grid { grid-template-columns: 1fr; align-items: stretch; }
+  .exp-acc-grid .btn { width: 100%; }
+  .exp-sync { flex-direction: row-reverse; justify-content: space-between; width: 100%; margin-left: 0; }
+  .exp-sync .exp-meta { flex: 1; min-width: 0; }
+  .exp-setrow:has(.exp-addrow) { flex-direction: column; align-items: stretch; }
+  .exp-addrow-end { flex-wrap: wrap; }
+  .exp-addrow-end .themed-select { flex: 1 1 140px; width: auto; }
+  .exp-name-link { max-width: 150px; }
+  .exp-table .exp-c-class { display: none; }
+  .exp-class-inline { display: block; }
+  .exp-table th, .exp-table td { padding: 0 var(--sp-2); }
+  .exp-table .exp-c-rank { width: 40px; }
+  .exp-grow { max-width: none; }
+  .guide-page .guide-step { padding: var(--sp-4); }
+}

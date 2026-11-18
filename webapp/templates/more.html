@@ -1,7 +1,15 @@
 {% extends "base.html" %}
+{% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
+{% block page_top %}<h1>더보기</h1>{% endblock %}
 {% block content %}
-<div class="page-content">
-<h1>더보기</h1>
+{% macro row(href, title, desc, icon_path) %}
+<a class="more-row" href="{{ href }}">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ icon_path | safe }}</svg>
+  <span class="more-txt"><b>{{ title }}</b><small>{{ desc }}</small></span>
+  <span class="more-chev" aria-hidden="true">›</span>
+</a>
+{% endmacro %}
+<div class="page-content exp-page">
 
 {% set display_name = user.global_name or user.username or "나" %}
 <div class="more-profile">
@@ -17,29 +25,30 @@
   </form>
 </div>
 
-<nav class="more-list" aria-label="더보기 메뉴">
-  <a class="more-row" href="/settings">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-    <span class="more-txt"><b>알림 설정</b><small>웹 알림 구독 · 디스코드 DM 구독 · 사전 알림</small></span>
-    <span class="more-chev" aria-hidden="true">›</span>
-  </a>
-  <a class="more-row" href="/tools/auction-calculator">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v4H4zM4 12h10v8H4zM17 12h3v8h-3z"/></svg>
-    <span class="more-txt"><b>경매 분배금 계산기</b><small>입찰 손익분기점 계산</small></span>
-    <span class="more-chev" aria-hidden="true">›</span>
-  </a>
-  <a class="more-row" href="/guide">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-    <span class="more-txt"><b>이용 가이드</b><small>디스코드 명령어와 웹 사용법</small></span>
-    <span class="more-chev" aria-hidden="true">›</span>
-  </a>
-  {% if user.is_admin %}
-  <a class="more-row" href="/admin/raids">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/></svg>
-    <span class="more-txt"><b>관리</b><small>레이드 · 직업 · 공대 · 유저 · 통계 · 알림 · 클리어</small></span>
-    <span class="more-chev" aria-hidden="true">›</span>
-  </a>
-  {% endif %}
+<h2 class="more-section">설정</h2>
+<nav class="more-list" aria-label="설정">
+  {{ row("/settings", "알림 설정", "웹 알림 · 디스코드 DM 구독 · 골드섬 알림 · 사전 알림",
+         '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>') }}
 </nav>
+
+<h2 class="more-section">도구</h2>
+<nav class="more-list" aria-label="도구">
+  {{ row("/tools/auction-calculator", "경매 분배금 계산기", "입찰 손익분기점 계산 · 시세 불러오기",
+         '<path d="M4 4h16v4H4zM4 12h10v8H4zM17 12h3v8h-3z"/>') }}
+</nav>
+
+<h2 class="more-section">도움말</h2>
+<nav class="more-list" aria-label="도움말">
+  {{ row("/guide", "이용 가이드", "디스코드 명령어와 웹 사용법",
+         '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>') }}
+</nav>
+
+{% if user.is_admin %}
+<h2 class="more-section">관리</h2>
+<nav class="more-list" aria-label="관리">
+  {{ row("/admin/raids", "관리", "레이드 · 직업 · 공대 · 유저 · 통계 · 알림 · 클리어",
+         '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/>') }}
+</nav>
+{% endif %}
 </div>
 {% endblock %}
