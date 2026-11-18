@@ -5,8 +5,10 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 HERE = Path(__file__).parent
 ROOT = str(Path(__file__).resolve().parents[2])
 SECRET = "shot-secret"
-ENV = {**os.environ, "DISCORD_CLIENT_ID": "x", "DISCORD_CLIENT_SECRET": "x", "DISCORD_REDIRECT_URI": "http://127.0.0.1:8766/callback",
-       "BOT_API_BASE_URL": "http://127.0.0.1:8765", "BOT_API_WEBAPP_KEY": "k", "DISCORD_GUILD_ID": "1", "SESSION_SECRET": SECRET,
+BOT_PORT = os.environ.get("SHOT_BOT_PORT", "8765")  # 다른 워크트리와 동시에 돌릴 때 포트 분리
+WEB_PORT = os.environ.get("SHOT_WEB_PORT", "8766")
+ENV = {**os.environ, "SHOT_BOT_PORT": BOT_PORT, "DISCORD_CLIENT_ID": "x", "DISCORD_CLIENT_SECRET": "x", "DISCORD_REDIRECT_URI": f"http://127.0.0.1:{WEB_PORT}/callback",
+       "BOT_API_BASE_URL": f"http://127.0.0.1:{BOT_PORT}", "BOT_API_WEBAPP_KEY": "k", "DISCORD_GUILD_ID": "1", "SESSION_SECRET": SECRET,
        "SESSION_HTTPS_ONLY": "false", "ADMIN_DISCORD_IDS": "111", "NOTIFICATION_DB_PATH": str(HERE / "out" / "notif.db"), "PYTHONIOENCODING": "utf-8"}
 
 def wait(url, tries=60):
@@ -62,15 +64,15 @@ JS = r"""
 """
 
 stub = subprocess.Popen([sys.executable, str(HERE / "stub_bot.py")], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-web = subprocess.Popen([sys.executable, "-m", "uvicorn", "webapp.main:app", "--host", "127.0.0.1", "--port", "8766", "--log-level", "warning"], cwd=ROOT, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+web = subprocess.Popen([sys.executable, "-m", "uvicorn", "webapp.main:app", "--host", "127.0.0.1", "--port", WEB_PORT, "--log-level", "warning"], cwd=ROOT, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
-    assert wait("http://127.0.0.1:8765/api/internal/raids") and wait("http://127.0.0.1:8766/health")
+    assert wait(f"http://127.0.0.1:{BOT_PORT}/api/internal/raids") and wait(f"http://127.0.0.1:{WEB_PORT}/health")
     from itsdangerous import TimestampSigner
     cookie = TimestampSigner(SECRET).sign(base64.b64encode(json.dumps({"user": {"discord_id": "111", "username": "발키리", "is_admin": True, "avatar_url": None, "admin_mode": True}}).encode())).decode()
     from playwright.sync_api import sync_playwright
     PAGES = ["/main", "/parties", "/parties/p1", "/parties/p2", "/parties/create", "/parties/history", "/expedition", "/raid-check", "/raid-check/select/발키리",
              "/raid-check/history", "/invites", "/ranking", "/calendar", "/characters/발키리", "/settings", "/parties/p1/switch",
-             "/admin/raids?tab=raids", "/admin/raids?tab=categories", "/admin/raids?tab=difficulties&raid=종막", "/admin/parties", "/admin/classes", "/admin/users", "/admin/notifications", "/tools/auction-calculator"]
+             "/admin/raids?tab=raids", "/admin/raids?tab=categories", "/admin/raids?tab=difficulties&raid=종막", "/admin/parties", "/admin/classes", "/admin/users", "/admin/notifications", "/tools/auction-calculator", "/more", "/guide"]
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for vpname, vp in (("desktop", {"width": 1280, "height": 900}), ("mobile", {"width": 390, "height": 844})):
@@ -78,7 +80,7 @@ try:
             page = ctx.new_page()
             for path in PAGES:
                 if vpname == "mobile" and path.startswith("/admin"): continue
-                page.goto("http://127.0.0.1:8766" + path, wait_until="networkidle"); page.wait_for_timeout(200)
+                page.goto(f"http://127.0.0.1:{WEB_PORT}" + path, wait_until="networkidle"); page.wait_for_timeout(200)
                 if path.startswith("/admin/raids"):
                     page.evaluate("document.querySelectorAll('details.admin-row-extra').forEach((d,i)=>{ if(i<2) d.open=true; })"); page.wait_for_timeout(150)
                 if path == "/parties/p1":

@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
 <h1>공대 관리</h1>
 <p class="settings-desc">
   길드 전체 공대를 파티장 없이도 관리할 수 있습니다. 목록에서 공대를 눌러 상세 페이지로
@@ -118,7 +119,7 @@
         {% if p.is_live %}
         {{ ui.chip("되돌리기 가능", "accent") }}
         <form method="post" action="/parties/{{ p.message_id }}/admin-unlock">
-          <button type="submit" class="admin-toggle-link" title="클리어로 잠긴 디스코드 스레드를 다시 엽니다">스레드 잠금 해제</button>
+          <button type="submit" class="admin-toggle-link" data-tip="클리어로 잠긴 디스코드 스레드를 다시 엽니다">스레드 잠금 해제</button>
         </form>
         {% else %}{{ ui.chip("기록만 남음", "") }}{% endif %}
       </span>

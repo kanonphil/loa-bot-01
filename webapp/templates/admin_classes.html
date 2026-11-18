@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
 <h1>직업 관리</h1>
 <p class="settings-desc">
   캐릭터가 딜러인지 서포터인지 판단하는 기준입니다. 공대 참여 시 역할 선택,
@@ -16,10 +17,10 @@
   </label>
   <div class="admin-chip-grid" id="class-chip-grid">
     {% for jc in job_classes %}
-    <form method="post" action="/admin/classes/delete" class="admin-chip-item{% if jc.is_support %} is-support{% endif %}" onsubmit="return confirm('{{ jc.name }}을(를) 삭제할까요?');">
+    <form method="post" action="/admin/classes/delete" class="admin-chip-item{% if jc.is_support %} is-support{% endif %}" data-confirm-title="{{ jc.name }} 직업을 삭제할까요?" data-confirm="이 직업으로 등록된 캐릭터 정보는 그대로 남습니다." data-confirm-ok="삭제" data-confirm-danger>
       <input type="hidden" name="name" value="{{ jc.name }}">
       <span class="admin-chip-label">{{ jc.name }}{% if jc.is_support %} <em>서포터</em>{% endif %}</span>
-      <button type="submit" class="admin-chip-delete" title="삭제" aria-label="{{ jc.name }} 삭제">&times;</button>
+      <button type="submit" class="admin-chip-delete" data-tip="삭제" aria-label="{{ jc.name }} 삭제">&times;</button>
     </form>
     {% endfor %}
   </div>

@@ -156,4 +156,4 @@ async def catch_all(rest: str, request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=int(__import__("os").environ.get("SHOT_BOT_PORT", "8765")), log_level="warning")

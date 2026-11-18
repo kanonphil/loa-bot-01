@@ -2,6 +2,11 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{# 홈 개편 전까지 홈에서 레이드 체크·초대로 가는 길(왼쪽 메뉴에서 빠졌다) #}
+<nav class="home-links" aria-label="홈 바로가기">
+  <a class="btn" href="/raid-check">레이드 체크<span class="nav-badge" data-badge="raid_check" hidden></span></a>
+  <a class="btn" href="/invites">내게 온 초대<span class="nav-badge" data-badge="invites" hidden></span></a>
+</nav>
 <h1>메인</h1>
 
 {% if not characters %}
@@ -74,7 +79,7 @@
         </div>
         {% endif %}
         <form id="decline-{{ inv.message_id }}" method="post" action="/invites/{{ inv.message_id }}/decline" hidden
-              onsubmit="return confirm('{{ inv.raid_name }} {{ inv.difficulty }} 초대를 거절할까요? 거절한 초대는 되돌릴 수 없습니다.');"></form>
+              data-confirm-title="{{ inv.raid_name }} {{ inv.difficulty }} 초대를 거절할까요?" data-confirm="거절한 초대는 되돌릴 수 없습니다." data-confirm-ok="거절" data-confirm-danger></form>
       {% endcall %}
       {% endfor %}
     </div>
@@ -101,11 +106,11 @@
         <div class="ui-row dash-overdue-actions">
           <a class="ui-btn is-ghost" href="/parties/{{ p.message_id }}">상세 보기</a>
           <form method="post" action="/parties/{{ p.message_id }}/clear"
-                onsubmit="return confirm('{{ p.raid_name }} {{ p.difficulty }} 공대를 클리어 처리할까요? 참여자 전원의 이번 주 완료가 자동 체크됩니다.');">
+                data-confirm-title="{{ p.raid_name }} {{ p.difficulty }} 공대를 클리어 처리할까요?" data-confirm="참여자 전원의 이번 주 완료가 자동으로 체크됩니다." data-confirm-ok="클리어 처리">
             <button type="submit" class="leader-btn leader-btn-success" data-busy-text="처리 중…">클리어</button>
           </form>
           <form method="post" action="/parties/{{ p.message_id }}/cancel"
-                onsubmit="return confirm('{{ p.raid_name }} {{ p.difficulty }} 공대를 취소할까요? 디스코드 스레드가 삭제되고 파티원에게 안내가 갑니다.');">
+                data-confirm-title="{{ p.raid_name }} {{ p.difficulty }} 공대를 취소할까요?" data-confirm="디스코드 스레드가 삭제되고 파티원에게 안내가 갑니다." data-confirm-ok="공대 취소" data-confirm-danger>
             <input type="hidden" name="reason" value="일정 경과">
             <button type="submit" class="leader-btn leader-btn-danger" data-busy-text="취소 중…">취소</button>
           </form>

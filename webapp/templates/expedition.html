@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("exp") }}
 <h1>원정대 관리</h1>
 
 <form method="post" action="/expedition/add" class="expedition-add-form">
@@ -20,7 +21,7 @@
         <span class="expedition-item-meta"><code>{{ acc.masked_key }}</code></span>
       </span>
       <form method="post" action="/expedition/remove-account" class="expedition-remove-form"
-            onsubmit="return confirm('이 계정을 삭제할까요? 이 계정으로 등록된 캐릭터는 삭제되지 않고 계정 연결만 해제됩니다.');">
+            data-confirm-title="이 계정을 삭제할까요?" data-confirm="이 계정으로 등록된 캐릭터는 삭제되지 않고 계정 연결만 해제됩니다." data-confirm-ok="삭제" data-confirm-danger>
         <input type="hidden" name="key_id" value="{{ acc.id }}">
         <button type="submit" class="party-leave-btn">삭제</button>
       </form>
@@ -76,7 +77,7 @@
         <span class="expedition-item-meta">{{ c.character_class }} &middot; {{ c.item_level }}</span>
       </a>
       <form method="post" action="/expedition/remove" class="expedition-remove-form"
-            onsubmit="return confirm('{{ c.character_name }} 캐릭터를 원정대에서 삭제할까요? 레이드 체크 기록은 남고, 공대 참여 목록에서만 빠집니다.');">
+            data-confirm-title="{{ c.character_name }} 캐릭터를 원정대에서 삭제할까요?" data-confirm="레이드 체크 기록은 남고, 공대 참여 목록에서만 빠집니다." data-confirm-ok="삭제" data-confirm-danger>
         <input type="hidden" name="character_name" value="{{ c.character_name }}">
         <button type="submit" class="party-leave-btn">삭제</button>
       </form>

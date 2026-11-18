@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
 <h1>알림·구독</h1>
 <p class="settings-desc">
   디스코드 <code>/레이드구독</code>으로 등록된 구독 현황, 새 공대 알림 DM 발송 로그, 등록 유저 전원 공지 DM을 다룹니다.
@@ -69,7 +70,7 @@
   {% endif %}
   <p class="settings-desc">API 등록 유저 <b>{{ user_count }}명</b> 전원에게 디스코드 DM으로 공지를 보냅니다. 되돌릴 수 없으니 내용을 다시 확인해주세요.</p>
   <form method="post" action="/admin/notifications/broadcast" class="admin-form"
-        onsubmit="return confirm('등록 유저 {{ user_count }}명 전원에게 DM을 보낼까요? 되돌릴 수 없습니다.');">
+        data-confirm-title="등록 유저 {{ user_count }}명 전원에게 DM을 보낼까요?" data-confirm="보낸 DM은 되돌릴 수 없습니다." data-confirm-ok="보내기">
     <label class="admin-field">
       <span class="admin-field-label">공지 내용</span>
       <textarea name="content" rows="5" maxlength="1500" required class="settings-select" style="height:auto" placeholder="예: 이번 주 수요일 점검 이후 공대 일정이 조정됩니다."></textarea>

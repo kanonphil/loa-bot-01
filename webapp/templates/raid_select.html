@@ -48,8 +48,8 @@
       });
     });
     boxes.forEach(function (b) { b.addEventListener("change", refresh); });
-    form.addEventListener("submit", function (e) {
-      if (!hint.hidden && !confirm("선택한 레이드가 없습니다. 카드가 비어 보이게 되는데 저장할까요?")) e.preventDefault();
+    window.uiConfirm.guardForm(form, function () {
+      return hint.hidden ? null : { title: "선택한 레이드가 없습니다", message: "이대로 저장하면 이 캐릭터 카드가 비어 보입니다.", ok: "그대로 저장" };
     });
     refresh();
   })();

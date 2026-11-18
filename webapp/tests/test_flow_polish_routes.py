@@ -93,17 +93,20 @@ def test_main_overdue_only_for_my_leader_parties(client):
 
 # ── 모바일 알림 탭 / 셸 ───────────────────────────────────
 
-def test_bottom_tabs_have_five_entries_with_notification_button(client):
+def test_bottom_tabs_have_four_entries_and_bell_in_top_bar(client):
     with respx.mock:
         log_in(client)
         _mock_main()
         resp = client.get("/main")
-    tabs = resp.text.split('class="bottom-tabs"')[1].split("</nav>")[0]
-    assert 'id="notif-bell-mobile"' in tabs and 'data-notif-badge' in tabs
-    assert 'href="/ranking"' not in tabs and 'href="/calendar"' not in tabs
+    tabs = resp.text.split('class="tabbar"')[1].split("</nav>")[0]
     assert tabs.count("<a ") == 4
-    # 패널은 사이드바 밖에서 시트/드롭다운으로 공유
-    assert 'id="notif-panel" role="dialog"' in resp.text and 'id="notif-overlay"' in resp.text
+    for href in ('href="/main"', 'href="/parties"', 'href="/expedition"', 'href="/more"'):
+        assert href in tabs
+    assert "notif-bell" not in tabs  # 종은 탭 한 칸을 차지하지 않고 위 줄로
+    top = resp.text.split('class="m-top"')[1].split("</header>")[0]
+    assert 'id="notif-bell-mobile"' in top and "data-notif-badge" in top
+    # 팝오버 하나를 데스크톱 종·모바일 종이 같이 쓴다
+    assert 'id="notif-panel" role="dialog"' in resp.text and 'id="notif-bell"' in resp.text
     assert 'aria-live="polite"' in resp.text
 
 

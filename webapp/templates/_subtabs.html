@@ -1,0 +1,19 @@
+{#
+  화면 묶음 탭 — 왼쪽 메뉴는 4개(홈·공대·원정대·더보기)+관리로 줄이고, 묶음 안의 화면은 위쪽 탭으로 고른다.
+  사용: {% from "_subtabs.html" import subtabs with context %}{{ subtabs("party") }}
+  현재 화면은 주소(request.url.path)로 판단한다(공대 이력처럼 active 값이 묶음과 같은 화면이 있어서).
+#}
+{% macro subtabs(group) -%}
+{%- set groups = {
+  "party": ("공대 메뉴", [("목록", "/parties"), ("달력", "/calendar"), ("내 이력", "/parties/history")]),
+  "exp": ("원정대 메뉴", [("내 캐릭터", "/expedition"), ("랭킹", "/ranking")]),
+  "admin": ("관리 메뉴", [("레이드", "/admin/raids"), ("직업", "/admin/classes"), ("공대", "/admin/parties"), ("유저", "/admin/users"), ("통계", "/admin/stats"), ("알림·구독", "/admin/notifications"), ("클리어", "/admin/completions")]),
+} -%}
+{%- set label, items = groups[group] -%}
+{%- set path = request.url.path -%}
+<nav class="utabs subtabs" aria-label="{{ label }}">
+  {%- for name, href in items %}
+  <a href="{{ href }}"{% if path == href %} class="on" aria-current="page"{% endif %}>{{ name }}</a>
+  {%- endfor %}
+</nav>
+{%- endmacro %}

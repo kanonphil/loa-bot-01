@@ -3,6 +3,8 @@
 // 배지 하나 때문에 모든 페이지가 봇 서버 응답을 기다리면 안 된다.
 (function () {
   function paint(counts) {
+    // 홈 = 할 일(받은 초대). 사이드바·하단 탭 숫자는 홈·공대 두 곳만 둔다(개편안).
+    if (counts.home == null) counts.home = counts.invites || 0;
     document.querySelectorAll(".nav-badge[data-badge]").forEach(function (el) {
       var value = counts[el.dataset.badge];
       if (!value) {

@@ -2,6 +2,7 @@
 {% import "_ui.html" as ui %}
 {% block content %}
 <div class="page-content">
+{% from "_subtabs.html" import subtabs with context %}{{ subtabs("admin") }}
 <h1>통계</h1>
 <p class="settings-desc">주차별 클리어 현황과 서버 활동을 봅니다. 주차는 수요일 06:00 리셋 기준 시작일입니다.</p>
 

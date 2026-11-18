@@ -240,8 +240,8 @@ def test_ranking_has_search_and_bottom_tabs_include_invites(client):
         resp = client.get("/ranking")
     body = resp.text
     assert 'data-filter-target="#rank-table"' in body
-    assert 'data-badge="invites"' in body.split('class="bottom-tabs"')[1]
-    assert 'href="/guide"' in body
+    assert 'data-badge="home"' in body.split('class="tabbar"')[1]
+    assert 'href="/more"' in body  # 가이드는 더보기 안으로
 
 
 # ── 댓글 htmx 부분 갱신 ──────────────────────────────────────
