@@ -72,12 +72,17 @@ async def _server_key() -> tuple[str | None, str | None]:
 
 # ── 파싱 (전부 순수 함수 — 테스트 대상) ─────────────────────
 
+_FRACTION = re.compile(r"(?<=T\d\d:\d\d:\d\d)\.\d+")
+
+
 def to_kst_iso(raw) -> str | None:
     """API 시각("2026-11-19T21:00:00", 오프셋 없음 = KST) → "2026-11-19T21:00:00+09:00"."""
     if not raw or not isinstance(raw, str):
         return None
+    # Python 3.10의 fromisoformat은 소수 초 자릿수(3/6자리만)와 'Z'를 못 읽는다 — 소수 초는 버린다
+    text = _FRACTION.sub("", raw.strip().replace("Z", "+00:00"))
     try:
-        dt = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(text)
     except ValueError:
         return None
     if dt.tzinfo is None:

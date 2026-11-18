@@ -481,3 +481,11 @@ def test_prices_503_keeps_previous(env, monkeypatch):
     assert len(session.calls) == 1
     pr = asyncio.run(loa_content.prices())
     assert pr["fetched_at"] == NOW.isoformat() and len(pr["items"]) == 1
+
+
+def test_to_kst_iso_tolerates_fractions_and_offsets():
+    assert loa_content.to_kst_iso("2026-11-19T21:00:00") == "2026-11-19T21:00:00+09:00"
+    assert loa_content.to_kst_iso("2026-11-19T21:00:00.12") == "2026-11-19T21:00:00+09:00"
+    assert loa_content.to_kst_iso("2026-11-19T12:00:00Z") == "2026-11-19T21:00:00+09:00"
+    assert loa_content.to_kst_iso("어제") is None
+    assert loa_content.to_kst_iso(None) is None
