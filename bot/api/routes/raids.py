@@ -25,6 +25,7 @@ class DifficultyBody(BaseModel):
   total_slots: int
   party_split: int | None = None
   gates: int = 1
+  clear_gold: int | None = None
 
 class PeriodBody(BaseModel):
   available_from: str | None = None
@@ -168,6 +169,7 @@ async def add_difficulty(raid_name: str, body: DifficultyBody):
   added = await db.add_difficulty(
     raid_name, body.difficulty, body.min_level,
     body.total_slots, body.party_split, body.gates, next_sort,
+    body.clear_gold if body.clear_gold is None or body.clear_gold >= 0 else None,
   )
   await raids_module.reload()
   return {"success": added}

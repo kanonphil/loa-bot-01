@@ -272,8 +272,10 @@ async def raid_check_summary(discord_id: str):
         "icon": info.get("icon"),
         "category": info.get("category"),
         "difficulties": [],
+        "difficulty_gold": {},
       })
       entry["difficulties"].append(diff_name)
+      entry["difficulty_gold"][diff_name] = _info.get("clear_gold")
     applicable = list(by_raid.values())
 
     selected = selections.get(name)
@@ -285,6 +287,7 @@ async def raid_check_summary(discord_id: str):
     done = completions_by_char.get(name, set())
     done_raids = {key.rsplit("_", 1)[0] for key in done}
     done_count = sum(1 for r in visible if r in done_raids)
+    gold_earned, gold_total = _character_gold(by_raid, visible, done)
     out.append({
       **char,
       "is_support": char.get("character_class") in SUPPORT_CLASSES,
@@ -294,16 +297,43 @@ async def raid_check_summary(discord_id: str):
       "visible_raid_names": visible,
       "done_count": done_count,
       "total_slots": len(visible),
+      "gold_earned": gold_earned,
+      "gold_total": gold_total,
     })
 
   return {
     "week_key": week_key,
     "characters": out,
+    "gold": {"earned": sum(c["gold_earned"] for c in out), "total": sum(c["gold_total"] for c in out)},
     "raids": await db.get_raids_dict(),
     "categories": await db.get_categories(),
     "support_classes": sorted(SUPPORT_CLASSES),
     "extreme": await _extreme_status_payload(discord_id, week_key),
   }
+
+
+def _character_gold(by_raid: dict[str, dict], visible: list[str], done_keys: set[str]) -> tuple[int, int]:
+  """캐릭터의 이번 주 골드 (획득, 총합). 카드에 보이는 레이드마다 — 끝낸 레이드는 끝낸
+  난이도의 골드(같은 레이드를 여러 난이도로 체크했으면 큰 쪽), 아직이면 입장 가능한 난이도 중
+  가장 큰 골드. 골드 미입력(None)은 0. 주 3회 골드 제한은 반영하지 않는다(요청사항)."""
+  from bot.data.raids import RAIDS
+
+  done_by_raid: dict[str, list[str]] = {}
+  for key in done_keys:
+    raid_name, _, diff = key.rpartition("_")
+    done_by_raid.setdefault(raid_name, []).append(diff)
+
+  earned = total = 0
+  for raid_name in visible:
+    if raid_name in done_by_raid:
+      gold_map = (RAIDS.get(raid_name) or {}).get("difficulty_gold") or {}
+      gold = max((gold_map.get(d) or 0) for d in done_by_raid[raid_name])
+      earned += gold
+      total += gold
+    else:
+      applicable_gold = (by_raid.get(raid_name) or {}).get("difficulty_gold") or {}
+      total += max((g or 0 for g in applicable_gold.values()), default=0)
+  return earned, total
 
 
 class SetRaidSelectionBody(BaseModel):
@@ -1101,6 +1131,13 @@ class AdminDifficultyBody(BaseModel):
   total_slots: int
   party_split: int | None = None
   gates: int = 1
+  clear_gold: int | None = None
+
+
+def _clear_gold_error(clear_gold: int | None) -> str | None:
+  if clear_gold is not None and clear_gold < 0:
+    return "클리어 골드는 0 이상이어야 합니다."
+  return None
 
 
 @router.post("/admin/difficulties/add")
@@ -1109,12 +1146,13 @@ async def admin_add_difficulty(body: AdminDifficultyBody):
   if err:
     return {"success": False, "reason": err}
   err = _difficulty_validation_error(body.min_level, body.total_slots, body.party_split, body.gates)
+  err = err or _clear_gold_error(body.clear_gold)
   if err:
     return {"success": False, "reason": err}
   next_sort = await db.get_next_difficulty_sort_order(body.raid_name)
   added = await db.add_difficulty(
     body.raid_name, body.difficulty, body.min_level,
-    body.total_slots, body.party_split, body.gates, next_sort,
+    body.total_slots, body.party_split, body.gates, next_sort, body.clear_gold,
   )
   await raids_module.reload()
   return {"success": added}
@@ -1732,6 +1770,8 @@ class AdminDifficultyUpdateBody(BaseModel):
   total_slots: int
   party_split: int | None = None
   gates: int = 1
+  # 안 보내면 기존 값 유지, null을 보내면 비움
+  clear_gold: int | None = None
 
 
 @router.post("/admin/difficulties/update")
@@ -1740,10 +1780,13 @@ async def admin_update_difficulty(body: AdminDifficultyUpdateBody):
   if err:
     return {"success": False, "reason": err}
   err = _difficulty_validation_error(body.min_level, body.total_slots, body.party_split, body.gates)
+  err = err or _clear_gold_error(body.clear_gold)
   if err:
     return {"success": False, "reason": err}
+  gold_kwargs = {"clear_gold": body.clear_gold} if "clear_gold" in body.model_fields_set else {}
   updated = await db.update_difficulty(
     body.raid_name, body.difficulty, body.min_level, body.total_slots, body.party_split, body.gates,
+    **gold_kwargs,
   )
   if not updated:
     return {"success": False, "reason": "난이도를 찾을 수 없습니다."}

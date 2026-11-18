@@ -2970,7 +2970,7 @@ async def get_raids_dict() -> dict:
             "SELECT r.name, r.short_name, r.icon, r.category, "
             "r.is_active, r.available_from, r.available_until, "
             "r.sort_order AS raid_sort_order, r.is_pinned, c.is_extreme, "
-            "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates, d.sort_order "
+            "d.difficulty, d.min_level, d.total_slots, d.party_split, d.gates, d.sort_order, d.clear_gold "
             "FROM raids_data r "
             "JOIN raid_categories c ON r.category = c.name "
             "LEFT JOIN raid_difficulties d ON r.name = d.raid_name "
@@ -2994,6 +2994,8 @@ async def get_raids_dict() -> dict:
                 "sort_order":     r["raid_sort_order"],
                 "is_pinned":      bool(r["is_pinned"]),
                 "difficulties":   {},
+                # 난이도명 → 클리어 골드(미입력이면 None) — difficulties와 같은 순서
+                "difficulty_gold": {},
             }
         if r["difficulty"]:
             result[name]["difficulties"][r["difficulty"]] = {
@@ -3002,7 +3004,9 @@ async def get_raids_dict() -> dict:
                 "party_split":r["party_split"],
                 "gates":      r["gates"],
                 "sort_order": r["sort_order"],
+                "clear_gold": r["clear_gold"],
             }
+            result[name]["difficulty_gold"][r["difficulty"]] = r["clear_gold"]
     return result
 
 
@@ -3233,14 +3237,15 @@ async def get_next_difficulty_sort_order(raid_name: str) -> int:
 async def add_difficulty(
     raid_name: str, difficulty: str, min_level: int,
     total_slots: int, party_split: int | None, gates: int, sort_order: int,
+    clear_gold: int | None = None,
 ) -> bool:
     try:
         async with _connect() as db:
             await db.execute(
                 "INSERT INTO raid_difficulties "
-                "(raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order),
+                "(raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order, clear_gold) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (raid_name, difficulty, min_level, total_slots, party_split, gates, sort_order, clear_gold),
             )
             await db.commit()
         return True
@@ -3578,18 +3583,26 @@ async def update_raid(name: str, short_name: str, icon: str) -> bool:
         return cur.rowcount > 0
 
 
+_KEEP = object()
+
+
 async def update_difficulty(
     raid_name: str, difficulty: str, min_level: int, total_slots: int,
-    party_split: int | None, gates: int,
+    party_split: int | None, gates: int, clear_gold=_KEEP,
 ) -> bool:
     """난이도 수치 변경. parties.total_slots/min_level은 개설 시점 스냅샷이라 여기서
     건드리지 않는다 — 이미 올라간 공대는 자기 값을 유지하고, 개별 공대는
-    update_party_difficulty로 따로 바꾼다."""
+    update_party_difficulty로 따로 바꾼다. clear_gold를 안 넘기면 기존 값을 유지한다
+    (골드 칸이 없는 예전 호출부가 값을 지우지 않게)."""
+    sets = "min_level=?, total_slots=?, party_split=?, gates=?"
+    params: list = [min_level, total_slots, party_split, gates]
+    if clear_gold is not _KEEP:
+        sets += ", clear_gold=?"
+        params.append(clear_gold)
     async with _connect() as db:
         cur = await db.execute(
-            "UPDATE raid_difficulties SET min_level=?, total_slots=?, party_split=?, gates=? "
-            "WHERE raid_name=? AND difficulty=?",
-            (min_level, total_slots, party_split, gates, raid_name, difficulty),
+            f"UPDATE raid_difficulties SET {sets} WHERE raid_name=? AND difficulty=?",
+            (*params, raid_name, difficulty),
         )
         await db.commit()
         return cur.rowcount > 0
