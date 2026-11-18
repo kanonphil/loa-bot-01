@@ -116,7 +116,15 @@ async def cancel_party(message_id: str):
 
 @router.patch("/{message_id}/schedule")
 async def update_schedule(message_id: str, body: ScheduleBody):
+  before = await db.get_party(message_id)
   await db.update_party_schedule(message_id, body.scheduled_time, body.scheduled_datetime)
+  if before:
+    from bot.ui.views import _log_party_admin_action
+
+    await _log_party_admin_action(
+      before, _ADMIN_ACTOR, "party.reschedule",
+      f"일정 변경 ({before.get('scheduled_time')} → {body.scheduled_time})", as_admin=True,
+    )
 
   from bot.ui.views import _refresh_party_embed_with_reserved
 

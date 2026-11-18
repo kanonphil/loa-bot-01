@@ -526,8 +526,29 @@ def _require_leader_or_admin(party: dict | None, discord_id: str, *, as_admin: b
     return "파티장만 사용할 수 있습니다."
 
 
+async def _log_party_admin_action(
+    party: dict, discord_id: str, action: str, verb: str, *,
+    as_admin: bool = False, source: str | None = None, log_admin: bool = True,
+    admin_only: bool = False, undo: dict | None = None, detail: dict | None = None,
+) -> None:
+    """파티 코어가 "관리자로서" 한 일을 관리자 활동 기록에 남긴다. 파티장이 자기 공대에 한
+    일은 관리자 활동이 아니라 남기지 않는다(admin_only 액션 — 클리어 되돌리기·파티 종료 — 은 항상)."""
+    if not log_admin or not party:
+        return
+    if not admin_only and not as_admin and party.get("leader_id") == discord_id:
+        return
+    from bot.services.admin_log import record_admin_action, resolve_source
+
+    await record_admin_action(
+        discord_id, resolve_source(as_admin, source), action,
+        f"{party.get('raid_name')} {party.get('difficulty')} 공대 {verb}",
+        target=party.get("message_id"), detail=detail, undo=undo,
+    )
+
+
 async def _close_party_core(
     bot: discord.Client, message_id: str, discord_id: str, *, as_admin: bool = False,
+    source: str | None = None, log_admin: bool = True,
 ) -> dict:
     """모집 마감 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도
     가능(파티장 없이 개입해야 하는 경우 대응)."""
@@ -539,6 +560,10 @@ async def _close_party_core(
         return {"success": False, "reason": "처리할 수 없는 상태입니다."}
 
     await db.close_party(message_id)
+    await _log_party_admin_action(
+        party, discord_id, "party.close", "강제 마감", as_admin=as_admin, source=source, log_admin=log_admin,
+        undo={"type": "party_reopen", "message_id": message_id},
+    )
     updated = await db.get_party(message_id)
     if bot and updated:
         await _refresh_party_embed_with_reserved(bot, updated)
@@ -547,6 +572,7 @@ async def _close_party_core(
 
 async def _reopen_party_core(
     bot: discord.Client, message_id: str, discord_id: str, *, as_admin: bool = False,
+    source: str | None = None, log_admin: bool = True,
 ) -> dict:
     """모집 재개 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
@@ -557,6 +583,10 @@ async def _reopen_party_core(
         return {"success": False, "reason": "처리할 수 없는 상태입니다."}
 
     await db.reopen_party(message_id)
+    await _log_party_admin_action(
+        party, discord_id, "party.reopen", "모집 재개", as_admin=as_admin, source=source, log_admin=log_admin,
+        undo={"type": "party_close", "message_id": message_id},
+    )
     updated = await db.get_party(message_id)
     if bot and updated:
         await _refresh_party_embed_with_reserved(bot, updated)
@@ -633,6 +663,7 @@ async def _unlock_party_thread_core(bot: discord.Client, message_id: str, discor
 
 async def _admin_disband_party_core(
     bot: discord.Client, message_id: str, discord_id: str, *, as_admin: bool = False,
+    source: str | None = None, log_admin: bool = True,
 ) -> dict:
     """파티 종료(스레드 유지) — 관리자 전용(관리자 앱의 ⚫ 파티 종료). 취소(purge,
     스레드 삭제)와 달리 상태만 '종료됨'으로 바꾸고 기록과 스레드는 남긴다."""
@@ -646,6 +677,10 @@ async def _admin_disband_party_core(
         return {"success": False, "reason": "이미 종료된 파티입니다."}
 
     await db.disband_party(message_id)
+    await _log_party_admin_action(
+        party, discord_id, "party.disband", "관리자 종료", as_admin=as_admin, source=source,
+        log_admin=log_admin, admin_only=True,
+    )
     updated = await db.get_party(message_id)
     if bot and updated:
         await _refresh_party_embed_with_reserved(bot, updated)
@@ -680,7 +715,9 @@ async def _admin_notify_party_core(
     return {"success": True, "sent": sent, "total": total}
 
 
-async def _admin_revert_clear_core(bot: discord.Client, message_id: str, discord_id: str) -> dict:
+async def _admin_revert_clear_core(
+    bot: discord.Client, message_id: str, discord_id: str, *, source: str | None = None,
+) -> dict:
     """클리어 취소(되돌리기) — 관리자 전용. 실수로 클리어를 눌렀을 때 상태를 파티완성/
     모집중으로 되돌리고, 같이 기록된 파티원 전체의 레이드 완료 체크도 취소한다
     (상태만 되돌리면 "모집중"인데 이번 주 완료로 체크된 모순 상태가 남는다).
@@ -709,7 +746,11 @@ async def _admin_revert_clear_core(bot: discord.Client, message_id: str, discord
     new_status = await db.revert_disbanded_party(message_id)
     if not new_status:
         return {"success": False, "reason": "되돌리지 못했습니다."}
-    await db.revert_party_clear_completions(message_id)
+    reverted = await db.revert_party_clear_completions(message_id)
+    await _log_party_admin_action(
+        party, discord_id, "party.revert_clear", "클리어 되돌리기", source=source, admin_only=True,
+        detail={"new_status": new_status, "reverted_completions": reverted},
+    )
 
     updated = await db.get_party(message_id)
     if bot and updated:
@@ -766,7 +807,7 @@ async def _cancel_party_core(
 
 async def _kick_member_core(
     bot: discord.Client, message_id: str, discord_id: str, target_discord_id: str,
-    *, as_admin: bool = False,
+    *, as_admin: bool = False, source: str | None = None,
 ) -> dict:
     """강제 퇴장 — 디스코드 관리 패널과 웹 API가 공유.
 
@@ -789,9 +830,11 @@ async def _kick_member_core(
     if target_discord_id == party["leader_id"]:
         # 관리자가 파티장을 내보내는 경우 — 나가기와 같은 경로로 다음 파티원에게 위임
         # (아무도 없으면 종료)해서 leader_id가 파티에 없는 사람을 가리키지 않게 한다.
+        leader_slot = next((x for x in await db.get_party_slots(message_id) if x["discord_id"] == target_discord_id), None)
         ok, reason = await _leave_party_core(bot, message_id, target_discord_id)
         if not ok:
             return {"success": False, "reason": "파티원을 찾을 수 없습니다."}
+        await _log_kick(party, discord_id, target_discord_id, as_admin, source, leader_slot)
         if bot:
             await _send_dm(
                 bot, target_discord_id,
@@ -801,9 +844,11 @@ async def _kick_member_core(
         return {"success": True, "reason": None}
 
     was_full = party["status"] == "full"
+    kicked_slot = next((x for x in await db.get_party_slots(message_id) if x["discord_id"] == target_discord_id), None)
     removed = await db.leave_slot(message_id, target_discord_id)
     if not removed:
         return {"success": False, "reason": "파티원을 찾을 수 없습니다."}
+    await _log_kick(party, discord_id, target_discord_id, as_admin, source, kicked_slot)
 
     if bot:
         await _send_dm(
@@ -818,8 +863,23 @@ async def _kick_member_core(
     return {"success": True, "reason": None}
 
 
+async def _log_kick(
+    party: dict, discord_id: str, target_discord_id: str, as_admin: bool, source: str | None,
+    slot: dict | None = None,
+) -> None:
+    who = (slot or {}).get("character_name")
+    if not who:
+        from bot.services.admin_log import actor_name
+        who = await actor_name(target_discord_id)
+    await _log_party_admin_action(
+        party, discord_id, "party.kick", f"{who} 강퇴", as_admin=as_admin, source=source,
+        detail={"target_discord_id": target_discord_id},
+    )
+
+
 async def _reschedule_party_core(
     bot: discord.Client, message_id: str, discord_id: str, dt_kst: datetime, memo: str | None,
+    *, source: str | None = None,
 ) -> dict:
     """일정/메모 변경 — 디스코드 관리 패널과 웹 API가 공유. 날짜 입력 파싱(디스코드는
     한글 축약 표기, 웹은 ISO 문자열)은 각자 호출부에서 끝내고, 이미 KST datetime으로
@@ -840,6 +900,10 @@ async def _reschedule_party_core(
     scheduled_time = _format_schedule(dt_kst)
     await db.update_party_schedule(message_id, scheduled_time, dt_kst.isoformat())
     await db.update_party_memo(message_id, memo)
+    await _log_party_admin_action(
+        party, discord_id, "party.reschedule", f"일정 변경 ({party.get('scheduled_time')} → {scheduled_time})",
+        source=source, detail={"from": party.get("scheduled_datetime"), "to": dt_kst.isoformat()},
+    )
     updated = await db.get_party(message_id)
 
     if bot and updated:
@@ -870,6 +934,7 @@ async def _reschedule_party_core(
 
 async def _edit_party_difficulty_core(
     bot: discord.Client, message_id: str, discord_id: str, difficulty: str, proficiency: str,
+    *, source: str | None = None,
 ) -> dict:
     """난이도/숙련도 변경 — 디스코드 관리 패널과 웹 API가 공유. 파티장뿐 아니라
     관리자도 가능(reschedule과 동일). 숙련도는 정원/레벨에 영향이 없어 항상 바꿀 수
@@ -919,6 +984,11 @@ async def _edit_party_difficulty_core(
         }
 
     await db.update_party_difficulty(message_id, difficulty, proficiency, new_total_slots, new_min_level)
+    await _log_party_admin_action(
+        party, discord_id, "party.difficulty",
+        f"난이도 변경 ({party.get('difficulty')} {party.get('proficiency')} → {difficulty} {proficiency})",
+        source=source,
+    )
     updated = await db.get_party(message_id)
 
     if bot and updated:
@@ -986,7 +1056,7 @@ def _rename_party_thread_later(bot: discord.Client, party: dict):
 
 async def _transfer_leader_core(
     bot: discord.Client, message_id: str, discord_id: str, new_leader_discord_id: str,
-    *, as_admin: bool = False,
+    *, as_admin: bool = False, source: str | None = None, log_admin: bool = True,
 ) -> dict:
     """파티장 위임 — 디스코드 관리 패널과 웹 API가 공유. 관리자는 파티장이 아니어도 가능."""
     party = await db.get_party(message_id)
@@ -999,6 +1069,12 @@ async def _transfer_leader_core(
         return {"success": False, "reason": "파티에 참여 중인 인원만 파티장으로 위임할 수 있습니다."}
 
     await db.transfer_leader(message_id, new_leader_discord_id)
+    new_leader = next((x.get("character_name") for x in slots if x["discord_id"] == new_leader_discord_id), None)
+    await _log_party_admin_action(
+        party, discord_id, "party.transfer", f"파티장 위임 → {new_leader or new_leader_discord_id}",
+        as_admin=as_admin, source=source, log_admin=log_admin,
+        detail={"from": party.get("leader_id"), "to": new_leader_discord_id},
+    )
     updated = await db.get_party(message_id)
 
     if bot and updated:
@@ -2165,6 +2241,7 @@ class ScheduleChangeModal(Modal, title="일정 및 메모 변경"):
         memo = self.memo_input.value.strip() or None
         result = await _reschedule_party_core(
             interaction.client, self.party["message_id"], str(interaction.user.id), dt_kst, memo,
+            source="discord",
         )
         if not result["success"]:
             await interaction.followup.send(f"❌ {result['reason']}", ephemeral=True)
@@ -3090,7 +3167,7 @@ class DifficultyEditView(View):
         await interaction.response.defer()
         result = await _edit_party_difficulty_core(
             interaction.client, self.party["message_id"], str(interaction.user.id),
-            self.selected_difficulty, self.selected_proficiency,
+            self.selected_difficulty, self.selected_proficiency, source="discord",
         )
         if not result["success"]:
             await interaction.edit_original_response(content=f"❌ {result['reason']}", view=None)
@@ -3142,7 +3219,7 @@ class KickSelectView(View):
         char_name = self.char_map.get(target_id, "알 수 없음")
         await interaction.response.defer()
         result = await _kick_member_core(
-            interaction.client, self.message_id, str(interaction.user.id), target_id
+            interaction.client, self.message_id, str(interaction.user.id), target_id, source="discord",
         )
         if not result["success"]:
             await interaction.edit_original_response(content=f"❌ {result['reason']}", view=None)
@@ -3252,7 +3329,7 @@ class ManageView(View):
         # defer()로 응답부터 확보해야 한다.
         await interaction.response.defer()
         result = await _close_party_core(
-            interaction.client, self.party["message_id"], str(interaction.user.id)
+            interaction.client, self.party["message_id"], str(interaction.user.id), source="discord",
         )
         if not result["success"]:
             await interaction.edit_original_response(content=result["reason"], view=None)
@@ -3268,7 +3345,7 @@ class ManageView(View):
     async def _handle_reopen(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         result = await _reopen_party_core(
-            interaction.client, self.party["message_id"], str(interaction.user.id)
+            interaction.client, self.party["message_id"], str(interaction.user.id), source="discord",
         )
         if not result["success"]:
             await interaction.edit_original_response(content=result["reason"], view=None)
@@ -3424,7 +3501,8 @@ class DelegateSelectView(View):
 
         await interaction.response.defer()
         result = await _transfer_leader_core(
-            interaction.client, self.party["message_id"], str(interaction.user.id), new_leader_id
+            interaction.client, self.party["message_id"], str(interaction.user.id), new_leader_id,
+            source="discord",
         )
         if not result["success"]:
             await interaction.edit_original_response(content=f"❌ {result['reason']}", view=None)

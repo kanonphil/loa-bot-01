@@ -3936,3 +3936,58 @@ async def mark_gold_island_dm_sent(discord_id: str, date: str) -> None:
             "INSERT OR IGNORE INTO loa_gold_island_dm (discord_id, date) VALUES (?, ?)", (discord_id, date)
         )
         await db.commit()
+
+
+# ──────────────────────────────────────────────
+# 관리자 활동 기록 (bot/services/admin_log.py)
+# ──────────────────────────────────────────────
+
+async def insert_admin_action(
+    at: str, actor_discord_id: str | None, actor_name: str, source: str, action: str,
+    target: str | None, summary: str, detail_json: str | None, undo_json: str | None,
+) -> int:
+    async with _connect() as db:
+        cur = await db.execute(
+            "INSERT INTO admin_actions (at, actor_discord_id, actor_name, source, action, target, "
+            "summary, detail_json, undo_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (at, actor_discord_id, actor_name, source, action, target, summary, detail_json, undo_json),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def list_admin_actions(prefixes: tuple[str, ...] | None, limit: int = 100) -> list[dict]:
+    """최신순. prefixes가 있으면 action이 그 접두어 중 하나로 시작하는 것만."""
+    where = ""
+    params: list = []
+    if prefixes:
+        where = "WHERE " + " OR ".join("substr(action, 1, ?) = ?" for _ in prefixes)
+        for p in prefixes:
+            params += [len(p), p]
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            f"SELECT * FROM admin_actions {where} ORDER BY id DESC LIMIT ?", (*params, limit)
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_admin_action(action_id: int) -> dict | None:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM admin_actions WHERE id=?", (action_id,))
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def set_admin_action_undone(action_id: int, undone_at: str | None) -> bool:
+    """undone_at을 채우거나(되돌리기 선점 — 이미 되돌린 건이면 False) 비운다(되돌리기 실패 시 복구)."""
+    async with _connect() as db:
+        if undone_at is None:
+            cur = await db.execute("UPDATE admin_actions SET undone_at=NULL WHERE id=?", (action_id,))
+        else:
+            cur = await db.execute(
+                "UPDATE admin_actions SET undone_at=? WHERE id=? AND undone_at IS NULL", (undone_at, action_id)
+            )
+        await db.commit()
+        return cur.rowcount > 0
