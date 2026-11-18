@@ -528,7 +528,9 @@ def test_party_live_js_contract():
     assert 'banner.className = "banner info"' in js
     assert "바뀐 내용이 있습니다" in js and "지금 반영" in js and '"btn sm pri"' in js
     assert "JSON.parse(e.data)" in js and "isRelevant" in js
-    assert 'event.type === "cleared"' in js  # 레이드 체크는 클리어에만 반응
+    # 레이드 체크·초대 화면은 홈으로 합쳐져(옛 주소는 리다이렉트) 따로 지켜볼 경로가 아니다
+    assert 'path === "/raid-check"' not in js and 'path === "/invites"' not in js
+    assert 'path === "/main"' in js
     assert "String(event.message_id) === detailId" in js  # 상세는 자기 공대에만 반응
     assert "form[data-live-dirty]" in js
 

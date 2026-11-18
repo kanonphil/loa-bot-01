@@ -33,7 +33,7 @@
       {% elif view.schedule.countdown %}{{ ui.chip(view.schedule.countdown, view.schedule.tone) }}{% endif %}
     {% endif %}
     {% if period %}{{ ui.chip(period.label, period.tone) }}{% endif %}
-    <span class="pt-meta">최소 {{ party.min_level }}{% if party.memo %} · {{ party.memo }}{% endif %}{% if party.waitlist_count %} · 빈자리 알림 대기 {{ party.waitlist_count }}명{% endif %}</span>
+    <span class="pt-meta">최소 {{ party.min_level }}{% if party.memo %} · {{ party.memo }}{% endif %}{% if party.waitlist_count and not ended %} · 빈자리 알림 대기 {{ party.waitlist_count }}명{% endif %}</span>
   </div>
 
   {% if ended %}

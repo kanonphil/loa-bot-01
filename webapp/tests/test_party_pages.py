@@ -319,6 +319,16 @@ def test_expired_party_shows_status_line_and_no_controls(client):
         assert forbidden not in body
 
 
+def test_ended_party_hides_recruiting_only_info(client):
+    """끝난 공대에는 모집 중일 때만 의미 있는 빈자리 알림 대기 수를 보이지 않는다."""
+    for status, cleared in (("expired", None), ("disbanded", NOW.isoformat()), ("disbanded", None)):
+        p = party("p1", status=status, cleared_at=cleared, waitlist_count=3, slots=[slot(1, "222", "파티장")])
+        body = _detail(client, p).text
+        assert "빈자리 알림 대기" not in body
+    live = party("p1", waitlist_count=3, slots=[slot(1, "222", "파티장")])
+    assert "빈자리 알림 대기 3명" in _detail(client, live).text
+
+
 def test_cleared_party_status_line_and_admin_revert_only_when_cleared(client):
     cleared = party("p1", status="disbanded", cleared_at=NOW.isoformat(), slots=[slot(1, "222", "파티장")])
     body = _detail(client, cleared).text
