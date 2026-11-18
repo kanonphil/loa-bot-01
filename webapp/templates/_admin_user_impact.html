@@ -5,8 +5,8 @@
 {% else %}
 {% set parties = impact.active_parties or [] %}
 {% set led = parties | selectattr("is_leader") | list %}
-<div><span>등록된 캐릭터·API 키 삭제</span><span class="num">{{ impact.characters or 0 }}개 · 키 {{ impact.api_keys or 0 }}개</span></div>
-<div><span>참여 중 공대에서 자동으로 나감</span><span class="num">{{ parties | length }}개</span></div>
+<div><span>등록된 캐릭터·API 키 삭제</span><span class="ad-end">캐릭터 {{ impact.characters or 0 }}개 · API 키 {{ impact.api_keys or 0 }}개</span></div>
+<div><span>참여 중 공대에서 자동으로 나감</span><span class="ad-end">{{ parties | length }}개</span></div>
 {% for p in led %}
 <div class="ad-impact-led">
   <span class="ad-warn">파티장인 공대</span>

@@ -89,7 +89,7 @@
       <span class="ad-meta ad-spacer">최대 8개 · 시세 화면에 표시됩니다</span>
     </div>
     {% if not tracked_available %}
-    <div class="banner warn" role="status"><b class="banner-mark" aria-hidden="true">!</b><span>봇 서버가 아직 시세 아이템 설정을 지원하지 않아 불러오지 못했습니다.</span></div>
+    <p class="ad-note" role="status">봇 서버가 아직 시세 아이템 설정을 지원하지 않아 불러오지 못했습니다.</p>
     {% else %}
     <form method="post" action="/admin/notifications/items" id="tracked-form" class="ad-tracked">
       <div class="ad-chips" id="tracked-chips" aria-live="polite">
