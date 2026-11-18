@@ -196,3 +196,10 @@ a.tl:focus-visible { box-shadow: var(--ring); border-radius: var(--r-sm); }
   .hw-head .hw-menu-wrap > .menu { right: auto; left: 0; }
   .sw { min-height: 44px; }
 }
+
+/* 골드 표 — 사이트 공통 표 규격(본문 13px, 머리글 12px 회색, 줄 구분선)에 맞춘다.
+   .t는 공통 스타일이 없어 브라우저 기본 16px로 나오던 것을 바로잡음. */
+.hc-gold .t { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.hc-gold .t th { font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); text-align: left; padding: 0 8px 8px; white-space: nowrap; }
+.hc-gold .t td { padding: 8px; border-top: 1px solid var(--border-soft); white-space: nowrap; }
+.hc-gold .t .r { text-align: right; }
