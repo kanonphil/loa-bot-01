@@ -8,8 +8,10 @@ TAG = sys.argv[1] if len(sys.argv) > 1 else "before"
 OUT = HERE / "out" / TAG
 OUT.mkdir(parents=True, exist_ok=True)
 SECRET = "shot-secret"
-ENV = {**os.environ, "DISCORD_CLIENT_ID": "x", "DISCORD_CLIENT_SECRET": "x", "DISCORD_REDIRECT_URI": "http://127.0.0.1:8766/callback",
-       "BOT_API_BASE_URL": "http://127.0.0.1:8765", "BOT_API_WEBAPP_KEY": "k", "DISCORD_GUILD_ID": "1", "SESSION_SECRET": SECRET,
+BOT_PORT = os.environ.get("SHOT_BOT_PORT", "8765")  # 다른 워크트리와 동시에 돌릴 때 포트 분리
+WEB_PORT = os.environ.get("SHOT_WEB_PORT", "8766")
+ENV = {**os.environ, "SHOT_BOT_PORT": BOT_PORT, "DISCORD_CLIENT_ID": "x", "DISCORD_CLIENT_SECRET": "x", "DISCORD_REDIRECT_URI": f"http://127.0.0.1:{WEB_PORT}/callback",
+       "BOT_API_BASE_URL": f"http://127.0.0.1:{BOT_PORT}", "BOT_API_WEBAPP_KEY": "k", "DISCORD_GUILD_ID": "1", "SESSION_SECRET": SECRET,
        "SESSION_HTTPS_ONLY": "false", "ADMIN_DISCORD_IDS": "111", "NOTIFICATION_DB_PATH": str(HERE / "out" / "notif.db"), "PYTHONIOENCODING": "utf-8"}
 
 def wait(url, tries=60):
@@ -21,11 +23,11 @@ def wait(url, tries=60):
     return False
 
 stub = subprocess.Popen([sys.executable, str(HERE / "stub_bot.py")], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-web = subprocess.Popen([sys.executable, "-m", "uvicorn", "webapp.main:app", "--host", "127.0.0.1", "--port", "8766", "--log-level", "warning"],
+web = subprocess.Popen([sys.executable, "-m", "uvicorn", "webapp.main:app", "--host", "127.0.0.1", "--port", WEB_PORT, "--log-level", "warning"],
                        cwd=ROOT, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
-    assert wait("http://127.0.0.1:8765/api/internal/raids"), "stub down"
-    assert wait("http://127.0.0.1:8766/health"), "web down"
+    assert wait(f"http://127.0.0.1:{BOT_PORT}/api/internal/raids"), "stub down"
+    assert wait(f"http://127.0.0.1:{WEB_PORT}/health"), "web down"
     from itsdangerous import TimestampSigner
     session = {"user": {"discord_id": "111", "username": "발키리", "is_admin": True, "avatar_url": None, "admin_mode": True}}
     data = base64.b64encode(json.dumps(session).encode())
@@ -40,8 +42,9 @@ try:
         ("settings", "/settings"), ("switch", "/parties/p1/switch"),
         ("admin-raids", "/admin/raids?tab=raids"), ("admin-diffs", "/admin/raids?tab=difficulties&raid=종막"),
         ("admin-parties", "/admin/parties"), ("admin-classes", "/admin/classes"),
+        ("more", "/more"), ("admin-users", "/admin/users"), ("guide", "/guide"), ("auction", "/tools/auction-calculator"),
     ]
-    MOBILE = {"main", "parties", "party-detail", "expedition", "raid-check", "invites", "ranking", "calendar", "settings", "raid-select"}
+    MOBILE = {"more", "history", "main", "parties", "party-detail", "expedition", "raid-check", "invites", "ranking", "calendar", "settings", "raid-select"}
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for name, vp in (("desktop", {"width": 1280, "height": 900}), ("mobile", {"width": 390, "height": 844})):
@@ -51,7 +54,7 @@ try:
             for tag, path in PAGES:
                 if name == "mobile" and tag not in MOBILE:
                     continue
-                page.goto("http://127.0.0.1:8766" + path, wait_until="networkidle")
+                page.goto(f"http://127.0.0.1:{WEB_PORT}" + path, wait_until="networkidle")
                 page.wait_for_timeout(300)
                 # 관리자 수정 폼·상세 펼침
                 if tag.startswith("admin-raids") or tag == "admin-diffs":
