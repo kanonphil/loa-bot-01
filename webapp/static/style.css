@@ -160,216 +160,38 @@ select {
 
 /* 넓은 화면(page-wide)·중간(page-mid)·좁은(page-narrow) 폭은 아래 "공용 컴포넌트"의 --page-w 한 곳에서 정한다 */
 
-.welcome-banner {
-  font-size: 18px;
-  font-weight: 500;
-  margin-bottom: 20px;
-}
 
-/* ── 새 채팅 빈 상태 (참고 화면과 동일하게 가운데 정렬) ───── */
 
-.empty-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 28px;
-}
 
-.empty-state-greeting {
-  font-size: 30px;
-  font-weight: 500;
-  max-width: 640px;
-}
 
-.ai-notice {
-  font-size: 13px;
-  color: var(--text-muted);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 16px;
-  max-width: 640px;
-  margin: 0;
-}
 
-/* ── 레이드 체크 (캐릭터 카드 그리드) ───────────────────── */
 
-.raid-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-}
 
-.raid-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px 18px;
-}
 
-.raid-card-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 10px;
-  min-width: 0;
-}
 
-.raid-card-header-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
 
-.raid-card-select-link {
-  flex-shrink: 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  text-decoration: none;
-}
 
-@media (hover: hover) { .raid-card-select-link:hover {
-  color: var(--accent);
-} }
 
-.raid-card-name {
-  font-size: 15px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-.raid-card-meta {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-/* 계정(부계정) 필터 탭 */
-.account-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
 
-.account-tab {
-  padding: 6px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
-}
 
-@media (hover: hover) { .account-tab:hover {
-  border-color: var(--accent);
-  color: var(--text);
-} }
 
-.account-tab.active {
-  background: var(--accent-soft);
-  border-color: rgba(53, 214, 196, 0.4);
-  color: var(--accent);
-  font-weight: 600;
-}
 
-.raid-card-progress {
-  margin-bottom: 14px;
-}
 
-.raid-card-progress-count {
-  display: block;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
 
-.raid-progress-bar {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--sidebar-bg);
-  overflow: hidden;
-}
 
-.raid-progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), #8ff2e6);
-  transition: width 0.3s ease;
-}
 
-.raid-card-row {
-  padding: 6px 0;
-}
 
-.raid-card-row + .raid-card-row {
-  border-top: 1px solid var(--border);
-}
 
-.raid-card-row-top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-}
 
-.raid-card-icon {
-  font-size: 13px;
-}
 
-.raid-card-raid-name {
-  font-size: 13px;
-  font-weight: 500;
-}
 
-.raid-card-diffs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 
-.diff-toggle-form {
-  display: inline-block;
-}
 
-.raid-card-diff-toggle {
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, filter 0.15s ease;
-}
 
-@media (hover: hover) { .raid-card-diff-toggle:hover {
-  border-color: var(--accent);
-  color: var(--text);
-} }
 
-.raid-card-diff-toggle.done {
-  background: var(--accent-soft);
-  border-color: rgba(53, 214, 196, 0.4);
-  color: var(--accent);
-  font-weight: 600;
-}
 
-@media (hover: hover) { .raid-card-diff-toggle.done:hover {
-  filter: brightness(1.1);
-} }
 
 /* ── 레이드 체크 — 레이드 선택 화면 ─────────────────────── */
 
@@ -461,66 +283,15 @@ select {
 
 /* ── 공대 모집 ─────────────────────────────────────────── */
 
-.party-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  text-decoration: none;
-  color: var(--text);
-  position: relative;
-  transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
-}
 
-@media (hover: hover) { .party-card:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-} }
 
-.party-card-title {
-  font-size: 15px;
-  font-weight: 600;
-}
 
-.party-card-meta {
-  font-size: 13px;
-  color: var(--text-muted);
-}
 
-.party-status {
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--sidebar-bg);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
 
 /* 목록 카드에서만 우측 상단에 절대 배치 — 상세 페이지에서는 헤더 안에서 자연스럽게 흐름 */
-.party-card .party-status {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-}
 
-.party-status.status-recruiting {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
 
-.party-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 
-.party-detail-header h1 {
-  margin: 0;
-}
 
 .party-back-link {
   display: inline-flex;
@@ -543,170 +314,33 @@ select {
   color: var(--text);
 } }
 
-.party-meta {
-  color: var(--text-muted);
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
-.party-memo {
-  font-size: 14px;
-  margin-bottom: 16px;
-}
-
-.party-action-error {
-  color: var(--danger);
-  font-size: 14px;
-  margin-bottom: 12px;
-}
-
-.party-slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px;
-  max-width: 700px;
-  margin-bottom: 24px;
-}
-
-/* 분할 파티 — "1파티 | 2파티" 처럼 나란히 */
-.party-groups {
-  display: flex;
-  gap: 32px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-
-.party-group {
-  flex: 1;
-  min-width: 260px;
-  max-width: 340px;
-}
-
-.party-group-header {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.party-group-count {
-  font-weight: 400;
-}
-
-.party-slots-column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.party-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  font-size: 13px;
-}
-
-.party-slot.empty {
-  color: var(--text-muted);
-  border-style: dashed;
-}
-
-.slot-number {
-  font-weight: 600;
-  color: var(--text-muted);
-  min-width: 18px;
-  flex-shrink: 0;
-}
-
-.slot-char {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.slot-class {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--sidebar-bg);
-  color: var(--text-muted);
-  margin-left: auto; /* 캐릭터명은 왼쪽 고정, 직업 태그부터는 역할 배지와 함께 오른쪽으로 정렬 */
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* 딜러/서포터 배지 — 아이콘+긴 텍스트 대신 색으로만 구분 */
-.role-badge {
-  font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.role-badge.role-dps {
-  background: rgba(224, 92, 92, 0.18);
-  color: var(--danger);
-}
-
-.role-badge.role-support {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.guest-badge {
-  font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-weight: 600;
-  white-space: nowrap;
-  background: rgba(201, 168, 108, 0.18);
-  color: #c9a86c;
-}
-
-.party-join-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.party-join-form select {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-  transition: border-color 0.15s ease;
-}
-
-.party-join-form select:focus {
-  border-color: var(--accent);
-}
 
 
 
 
-.party-no-qualifying,
-.party-cannot-join {
-  color: var(--text-muted);
-  font-size: 14px;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ── 참여 캐릭터 변경 ──────────────────────────────────── */
 
-.party-member-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
 
 
 
@@ -764,11 +398,6 @@ select {
   margin: 0;
 }
 
-.party-list-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 
 
@@ -780,89 +409,18 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 /* ── 파티장 관리 패널 ──────────────────────────────────── */
 
-.leader-panel {
-  margin-top: 24px;
-  padding: 18px 20px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 640px;
-}
-
-.leader-panel-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--text-muted);
-}
-
-.leader-actions-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* 관리 폼들이 라벨 없이 나열돼 있어 각 줄이 뭘 하는 폼인지 한눈에 안
-   들어온다는 피드백 반영 — 기능 단위로 묶고 작은 라벨을 붙인다. */
-.leader-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-soft);
-}
-
-.leader-group:first-child {
-  padding-top: 0;
-  border-top: none;
-}
-
-.leader-group-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-
-.leader-group-danger .leader-group-label {
-  color: var(--danger);
-}
-
-/* 일정 변경 — 달력을 다시 열지 않고 소폭 조정할 수 있는 버튼 */
-.leader-quick-adjust {
-  display: flex;
-  gap: 6px;
-}
 
 
 
-.leader-form {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
 
-.leader-form select,
-.leader-form input {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-  flex: 1;
-  min-width: 140px;
-}
 
-.leader-form select:focus,
-.leader-form input:focus {
-  border-color: var(--accent);
-}
+
+
+
+
+
+
+
 
 
 
@@ -877,273 +435,52 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   margin-bottom: 4px;
 }
 
-.party-comment {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-}
 
-.party-comment-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
 
-.party-comment-author {
-  font-size: 13px;
-  font-weight: 600;
-}
 
-.party-comment-time {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-left: auto;
-}
 
-.party-comment-delete-form {
-  margin: 0;
-}
 
-.party-comment-delete-btn {
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  cursor: pointer;
-}
 
-@media (hover: hover) { .party-comment-delete-btn:hover {
-  color: var(--danger);
-} }
 
-.party-comment-body {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 
-.party-comment-form {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-}
 
-.party-comment-form textarea {
-  flex: 1;
-  min-height: 60px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-  font-family: inherit;
-  resize: vertical;
-}
 
-.party-comment-form textarea:focus {
-  border-color: var(--accent);
-}
 
 /* ── 메인 대시보드 ─────────────────────────────────────── */
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 16px;
-}
 
-.dash-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-}
 
-.dash-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 12px;
-}
 
 .dash-empty {
   color: var(--text-muted);
   font-size: 13px;
 }
 
-.dash-overall-progress {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin: 0 0 12px;
-}
 
-.dash-overall-progress strong {
-  color: var(--accent);
-  font-weight: 700;
-}
 
-.dash-char-progress-list,
-.dash-party-list,
-.dash-character-list {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 
-/* 캐릭터명 길이가 제각각이라 flex로는 직업/수치 컬럼이 행마다 어긋난다 —
-   고정 폭 그리드로 모든 행의 컬럼을 세로로 맞춘다. */
-.dash-char-progress-list li,
-.dash-character-list li {
-  display: grid;
-  grid-template-columns: minmax(90px, 150px) minmax(70px, 100px) 1fr;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--sidebar-bg);
-}
 
-.dash-char-name {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.dash-char-class {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--panel);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  justify-self: start;
-}
 
-.dash-char-count,
-.dash-char-level {
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  justify-self: end;
-}
 
-.dash-party-list a {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px 8px 12px;
-  border-radius: 8px;
-  border-left: 3px solid var(--accent);
-  background: var(--sidebar-bg);
-  text-decoration: none;
-  color: var(--text);
-  transition: background-color 0.15s ease;
-}
 
-@media (hover: hover) { .dash-party-list a:hover {
-  background: var(--accent-dim);
-} }
 
-.dash-party-title {
-  font-size: 13px;
-  font-weight: 500;
-}
 
-.dash-party-meta {
-  font-size: 12px;
-  color: var(--text-muted);
-}
 
-.dash-card-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 12px;
-  padding: 5px 12px;
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--r-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 600;
-  align-self: flex-start;
-  transition: filter 0.15s ease;
-}
 
-@media (hover: hover) { .dash-card-link:hover {
-  filter: brightness(1.1);
-} }
 
 /* ── 원정대 관리 ───────────────────────────────────────── */
 
-.expedition-success {
-  color: var(--ok);
-  font-size: 14px;
-  margin-bottom: 12px;
-}
-
-.expedition-add-form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.expedition-add-form input {
-  flex: 1;
-  max-width: 260px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 14px;
-  transition: border-color 0.15s ease;
-}
-
-.expedition-add-form input:focus {
-  border-color: var(--accent);
-}
 
 
 
-.expedition-sync-form {
-  margin-bottom: 16px;
-}
 
 
 
-.expedition-account-add {
-  margin-bottom: 24px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-}
 
-.expedition-section-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px;
-}
+
+
+
 
 .expedition-section-desc {
   font-size: 12px;
@@ -1151,31 +488,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   margin: 0 0 10px;
 }
 
-.expedition-account-form {
-  display: flex;
-  gap: 8px;
-}
-
-.expedition-account-form input {
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-  transition: border-color 0.15s ease;
-}
-
-.expedition-account-form input:focus {
-  border-color: var(--accent);
-}
 
 
 
-.expedition-account-group {
-  margin-bottom: 20px;
-}
+
+
 
 .expedition-account-title {
   font-size: 14px;
@@ -1185,53 +502,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   padding-left: 2px;
 }
 
-.expedition-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
 
-.expedition-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  font-size: 13px;
-}
 
-.expedition-item-main {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-  text-decoration: none;
-  color: inherit;
-}
 
-@media (hover: hover) { .expedition-item-main:hover .dash-char-name {
-  color: var(--accent);
-} }
 
-.expedition-item-meta {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-.expedition-remove-form .party-leave-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-}
 
 /* ── 공대 없음/취소됨 안내 카드 ────────────────────────── */
 
@@ -1261,21 +536,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   margin: 0 0 24px;
 }
 
-.party-empty-link {
-  display: inline-block;
-  padding: 10px 22px;
-  border-radius: 8px;
-  border: 1px solid rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 500;
-  transition: filter 0.15s ease;
-}
 
-@media (hover: hover) { .party-empty-link:hover {
-  filter: brightness(1.1);
-} }
 
 /* ── 로그인 랜딩 페이지 ────────────────────────────────── */
 
@@ -1741,100 +1002,18 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   color: var(--ok);
 }
 
-/* ── 경매 분배금 계산기 ───────────────────────────────────── */
 
-.calc-card {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 420px;
-  margin-top: 16px;
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-}
 
-.calc-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 
-.calc-field input,
-.calc-field select {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-}
 
-.calc-field input:focus,
-.calc-field select:focus {
-  border-color: var(--accent);
-}
 
-.calc-party-size-field {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0;
-  border: none;
-  margin: 0;
-}
 
-.calc-party-size-field legend {
-  padding: 0;
-  margin-right: 4px;
-}
 
-.calc-radio {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  color: var(--text-muted);
-  cursor: pointer;
-}
 
-.calc-radio input[type="number"] {
-  width: 90px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-}
 
-.calc-result-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
 
-.calc-result-heading {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px;
-}
 
-.calc-result-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  color: var(--text-muted);
-}
 
-.calc-result-row strong {
-  color: var(--text);
-  font-size: 16px;
-}
 
 /* ── 캐릭터 상세 정보 ─────────────────────────────────────── */
 
@@ -2004,99 +1183,23 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   margin: 0 0 12px;
 }
 
-.char-arkpassive-points {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
 
-.char-arkpassive-point-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-}
 
-.char-arkpassive-point-name {
-  font-size: 12px;
-  color: var(--text-muted);
-}
 
-.char-arkpassive-point-desc {
-  font-size: 15px;
-  font-weight: 600;
-}
 
-.char-arkpassive-categories {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
 
-.char-arkpassive-category {
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-}
 
-.char-arkpassive-category-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin: 0 0 4px;
-}
 
-.char-arkpassive-effect-list {
-  margin: 0;
-  padding-left: 16px;
-  font-size: 12px;
-  color: var(--text);
-  line-height: 1.5;
-}
 
-@media (max-width: 640px) {
-  .char-arkpassive-categories {
-    grid-template-columns: 1fr;
-  }
-}
 
-.char-skill-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px;
-}
 
-.char-skill-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-}
 
-.char-skill-header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 
 .char-skill-name {
   font-weight: 600;
   font-size: 13px;
 }
 
-.char-skill-level {
-  font-size: 11px;
-  color: var(--text-muted);
-}
 
 .char-skill-tripods {
   display: flex;
@@ -2112,15 +1215,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   color: var(--text-muted);
 }
 
-.char-skill-rune {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-  font-size: 11px;
-  padding-top: 5px;
-  border-top: 1px solid var(--border);
-}
 
 .char-rune-badge {
   padding: 1px 7px;
@@ -2130,20 +1224,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   font-size: 10px;
 }
 
-.char-rune-name {
-  font-weight: 600;
-}
 
-.char-rune-effect {
-  color: var(--text-muted);
-}
 
-.char-honing-list {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 13px;
-  line-height: 1.6;
-}
 
 /* ── 장비 탭: 레퍼런스(loawa.com)와 동일한 3열 구성 —
    1열: 무기/방어구+아크그리드, 2열: 장신구+각인, 3열: 효과영수증+카드.
@@ -2437,7 +1519,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   color: var(--text-muted);
 }
 
-.char-skill-icon,
 .char-tripod-icon {
   width: 18px;
   height: 18px;
@@ -2551,12 +1632,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   color: var(--text-muted);
 }
 
-.char-arkgrid-core-flavor {
-  margin: 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  font-style: italic;
-}
 
 .char-arkgrid-core-options {
   margin: 0;
@@ -3327,63 +2402,13 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 /* ── 원정대 랭킹 ──────────────────────────────────────────── */
 
-.rank-caption {
-  color: var(--text-muted);
-  font-size: 13px;
-  margin: 0 0 16px;
-}
 
-.rank-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
 
-.rank-tab {
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-}
 
-.rank-tab.is-active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
 
-.rank-role-toggle {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 9px;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  width: fit-content;
-  margin-bottom: 16px;
-}
 
-.rank-role-btn {
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease;
-}
 
-@media (hover: hover) { .rank-role-btn:hover {
-  color: var(--text);
-} }
 
-.rank-role-btn.is-active {
-  box-shadow: inset 0 0 0 1px rgba(53, 214, 196, 0.4);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
 
 .rank-table {
   display: flex;
@@ -3392,84 +2417,19 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   max-width: 720px;
 }
 
-.rank-row {
-  display: grid;
-  grid-template-columns: 52px 1fr 120px 130px;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  text-decoration: none;
-}
 
 @media (hover: hover) { a.rank-row:hover {
   border-color: var(--accent);
 } }
 
-.rank-head {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 4px 14px;
-}
 
-.rank-col-rank {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  text-align: center;
-}
 
-.rank-col-name {
-  font-weight: 600;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.rank-col-class {
-  color: var(--text-muted);
-  font-size: 13px;
-}
 
-.rank-col-value {
-  text-align: right;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  color: var(--accent);
-}
 
-/* 1~3위 강조 (금/은/동) — 이모지 메달 대신 순위 숫자 자체를 등급색으로 */
-.rank-medal-1 { border-color: #ffcf40; background: rgba(255, 207, 64, 0.08); }
-.rank-medal-2 { border-color: #c7ccd6; background: rgba(199, 204, 214, 0.08); }
-.rank-medal-3 { border-color: #d98a54; background: rgba(217, 138, 84, 0.08); }
-.rank-medal-1 .rank-col-rank { color: #ffcf40; font-size: 18px; }
-.rank-medal-2 .rank-col-rank { color: #c7ccd6; font-size: 18px; }
-.rank-medal-3 .rank-col-rank { color: #d98a54; font-size: 18px; }
 
-@media (max-width: 640px) {
-  .rank-row {
-    grid-template-columns: 40px 1fr 100px;
-  }
-  .rank-col-class { display: none; }
-}
 
-/* 목록에서 캐릭터 이름을 상세로 잇는 링크 */
-.char-link {
-  color: var(--text);
-  text-decoration: none;
-}
 
-@media (hover: hover) { .char-link:hover {
-  color: var(--accent);
-  text-decoration: underline;
-} }
 
 
 /* ── 공대 모집 파티원 hover 카드 ──────────────────────────── */
@@ -3566,9 +2526,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   max-width: 240px;
 }
 
-.party-slot.filled[data-character-name] {
-  cursor: pointer;
-}
 
 /* ── 모바일 대응 ───────────────────────────────────────── */
 
@@ -3580,20 +2537,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     font-size: 16px;
   }
 
-  .expedition-list {
-    grid-template-columns: 1fr;
-  }
-
-  .expedition-add-form,
-  .expedition-account-form {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .expedition-add-form input {
-    max-width: none;
-  }
-
+  
+  
+  
   .calendar-cell {
     min-height: 72px;
     padding: 4px;
@@ -3619,14 +2565,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 /* ── 설정 페이지 ───────────────────────────────────────── */
 
-.settings-card {
-  margin-top: 16px;
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  max-width: 560px;
-}
 
 .settings-desc {
   color: var(--text-muted);
@@ -3635,12 +2573,6 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   margin: 8px 0 16px;
 }
 
-.settings-check-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: flex-start;
-}
 
 .settings-check {
   display: inline-flex;
@@ -3659,42 +2591,11 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 @media (hover: hover) { .settings-check:hover { border-color: var(--accent-dim); } }
 .settings-check:has(input:checked) { border-color: var(--accent-dim); background: var(--accent-soft); }
 
-.settings-filter-list {
-  list-style: none;
-  margin: 0 0 14px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.settings-filter-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  font-size: 13px;
-}
-
-.settings-filter-name em {
-  font-style: normal;
-  color: var(--text-muted);
-  font-size: 12px;
-  margin-left: 4px;
-}
 
 
 
-.settings-filter-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  align-items: center;
-}
+
+
 
 .settings-select {
   height: var(--ctrl-h);
@@ -3897,348 +2798,40 @@ select.settings-select {
   padding: 0 2px;
 }
 
-/* ── 관리자 (레이드/카테고리/난이도/직업 CRUD) ─────────────── */
-
-.admin-card { max-width: 760px; }
-.admin-card-wide { max-width: 900px; }
-
-.admin-class-search {
-  max-width: 320px;
-  margin-bottom: 14px;
-}
-
-.admin-chip-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 14px;
-}
-
-.admin-chip-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  padding: 6px 6px 6px 12px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  font-size: 13px;
-}
-.admin-chip-item.is-support { border-color: var(--accent-dim); }
-.admin-chip-item[hidden] { display: none; }
-
-.admin-chip-label em {
-  font-style: normal;
-  color: var(--accent);
-  font-size: 11px;
-  margin-left: 2px;
-}
-
-.admin-chip-delete {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 50%;
-  font-size: 15px;
-  line-height: 1;
-}
-@media (hover: hover) { .admin-chip-delete:hover { color: var(--danger); background: var(--danger-soft); } }
-
-.admin-error {
-  margin: 12px 0;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--danger);
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-size: 13px;
-}
-
-.admin-group-title {
-  margin: 18px 0 8px;
-  font-size: 13px;
-  font-weight: 650;
-  color: var(--text-muted);
-}
-.admin-group-title:first-of-type { margin-top: 4px; }
-
-.admin-list {
-  list-style: none;
-  margin: 0 0 14px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.admin-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  font-size: 13px;
-}
-
-.admin-row-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.admin-row-sub {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.admin-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.admin-row-actions form { display: contents; }
 
 
-/* ── 관리자 표 / 봇 상태 / 클리어 편집 그리드 ──────────────── */
-.admin-table-wrap { overflow-x: auto; }
-.admin-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.admin-table th, .admin-table td {
-  padding: 8px 10px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-.admin-table th { color: var(--text-muted); font-weight: 600; font-size: 12px; }
-.admin-table td.num, .admin-table th.num { text-align: right; }
-.admin-table-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 10px;
-}
-.admin-table-actions .admin-inline-label { margin-right: auto; }
 
-.admin-status-card {
-  display: flex;
-  align-items: center;
-  gap: 8px 14px;
-  flex-wrap: wrap;
-  margin-bottom: var(--sp-3);
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  font-size: 13px;
-}
-.admin-status-dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--danger);
-  box-shadow: 0 0 0 3px var(--danger-soft);
-}
-.admin-status-dot.is-online { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
-.admin-status-meta { color: var(--text-muted); }
 
-.admin-sub-group { margin-bottom: 12px; }
-.admin-sub-group-title { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
-.admin-sub-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.admin-completion-grid { display: flex; flex-direction: column; gap: 8px; }
-.admin-completion-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--sidebar-bg);
-}
-.admin-completion-raid { font-size: 13px; font-weight: 600; min-width: 110px; }
-.admin-completion-diffs { display: flex; gap: 6px; flex-wrap: wrap; }
-.admin-completion-diffs form { display: contents; }
 
-/* ── 공대 관리 상태 카드 / 문제 공대 배너 ───────────────── */
-.admin-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-3);
-}
-.admin-problem-banner {
-  margin: 0 0 var(--sp-3);
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(239,106,99,0.4);
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-size: 13px;
-}
 
-/* ── 관리자 목록 순서 변경(드래그 + ▲▼) ─────────────────── */
-.admin-drag-handle {
-  cursor: grab;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1;
-  padding: 2px 4px;
-  user-select: none;
-}
-.admin-drag-handle:active { cursor: grabbing; }
-.admin-row.is-dragging { opacity: 0.45; }
-.admin-move-btn {
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 5px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-@media (hover: hover) { .admin-move-btn:hover { color: var(--text); border-color: var(--accent-dim); } }
-.admin-reorder-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 14px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px dashed rgba(53,214,196,0.4);
-  background: var(--accent-soft);
-  font-size: 13px;
-}
-.admin-reorder-bar[hidden] { display: none; }
-.admin-reorder-bar .admin-reorder-hint { color: var(--text-muted); margin-right: auto; }
 
-/* 레이드 행 아래 접히는 두 번째 줄 — 카테고리 이동 / 운영 기간 */
-.admin-row-extra {
-  flex-basis: 100%;
-  padding-top: 4px;
-  border-top: 1px dashed var(--border);
-}
-.admin-row-extra > summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-muted);
-  list-style: none;
-}
-.admin-row-extra > summary::before { content: "▸ "; }
-.admin-row-extra[open] > summary::before { content: "▾ "; }
-.admin-inline-forms {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-top: 8px;
-}
-.admin-inline-form {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.admin-inline-form .settings-select { width: auto; min-width: 120px; }
-.admin-inline-form input[type="datetime-local"].settings-select { min-width: 170px; }
-.admin-inline-label { font-size: 12px; color: var(--text-muted); }
 
-.admin-user-details:empty { display: none; }
 
-.admin-user-details-inner {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  margin: -4px 0 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-}
 
-.admin-user-details-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 
-.admin-user-char-list,
-.admin-user-history-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
 
-.admin-user-history-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 
-/* 폼 한 줄에 placeholder만 믿고 우겨넣던 방식(카테고리/레이드/난이도 추가 폼) —
-   필드가 많아지면 폭이 모자라 placeholder가 잘리고, 입력을 시작하면 힌트가
-   사라지는 문제가 있었다. 라벨을 항상 보이게 하고, 화면 폭에 맞게 자동으로
-   줄바꿈되는 그리드로 바꾼다. */
-.admin-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
 
-.admin-form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--sp-3);
-}
 
-.admin-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-}
 
-.admin-field-label {
-  font-size: var(--fs-label);
-  color: var(--text-muted);
-  letter-spacing: 0.02em;
-}
 
-.admin-field .settings-select { width: 100%; }
 
-.admin-field-narrow { max-width: 90px; }
 
-.admin-form-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
 
-.admin-raid-picker { max-width: 320px; margin-bottom: var(--sp-4); }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ── 공용 프리미티브 (_ui.html 매크로 대응) ────────────────
    페이지 전용 카드/빈 상태/배지를 대체한다. 값은 전부 토큰만 쓴다 —
@@ -4397,152 +2990,23 @@ select.settings-select {
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .ui-list { display: flex; flex-direction: column; gap: var(--sp-3); }
-.ui-grid {
-  display: grid;
-  gap: var(--sp-3);
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-}
 
 /* ── 공대 개설 — 레이드 카드 선택기 ────────────────────────
    예전엔 레이드 select → 난이도 select 두 단계였다. 난이도 버튼 하나가
    곧 "레이드 + 난이도" 선택이라 클릭이 절반으로 준다.
    ─────────────────────────────────────────────────────── */
 
-.raid-picker {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--sp-5);
-  align-items: start;
-}
 
-@media (min-width: 1024px) {
-  .raid-picker { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); }
-  .raid-picker-side { position: sticky; top: var(--sp-4); }
-}
 
-.raid-picker-side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
 
-.raid-picker-side label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  font-size: var(--fs-meta);
-  color: var(--text-muted);
-}
 
-.raid-picker-side select,
-.raid-picker-side input[type="text"] {
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--sunken);
-  color: var(--text);
-  font-size: var(--fs-body);
-}
 
-.raid-search {
-  flex: 1 1 200px;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--sunken);
-}
-.raid-search:focus-within { border-color: var(--accent); }
-.raid-search svg { width: 14px; height: 14px; color: var(--text-muted); flex: none; }
-.raid-search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: var(--fs-body);
-}
 
-#only-enterable-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer; }
-#only-enterable-wrap input { accent-color: var(--accent); margin: 0; }
 
-.raid-group[hidden] { display: none; }
-.raid-group-label {
-  font-size: var(--fs-label);
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: 700;
-  margin: var(--sp-4) 0 var(--sp-2);
-}
-.raid-group:first-child .raid-group-label { margin-top: 0; }
 
-.raid-cards {
-  display: grid;
-  gap: var(--sp-2);
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-}
 
-.raid-pick {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  padding: var(--sp-2) var(--sp-3) var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--panel);
-}
-.raid-pick[hidden] { display: none; }
-@media (hover: hover) { .raid-pick:hover { border-color: var(--accent-dim); } }
-.raid-pick.is-selected { border-color: var(--accent); background: var(--accent-soft); }
-.raid-pick.is-locked { opacity: 0.5; }
 
-.raid-pick-top { display: flex; align-items: center; gap: var(--sp-2); }
-.raid-pick-name {
-  font-size: var(--fs-body);
-  font-weight: 650;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.raid-pick-pin {
-  margin-left: auto;
-  font-size: var(--fs-label);
-  font-weight: 700;
-  padding: 1px 7px;
-  border-radius: var(--r-pill);
-  background: var(--gold-soft);
-  color: var(--gold);
-}
-.raid-pick-sub {
-  font-size: var(--fs-label);
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.raid-pick-diffs { display: flex; gap: var(--sp-1); flex-wrap: wrap; margin-top: var(--sp-1); }
 
-.raid-diff {
-  font-family: inherit;
-  font-size: var(--fs-label);
-  font-weight: 600;
-  padding: 2px var(--sp-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--sunken);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-@media (hover: hover) { .raid-diff:hover { border-color: var(--accent-dim); color: var(--text); } }
-.raid-diff[aria-pressed="true"] {
-  background: var(--accent-soft);
-  border-color: rgba(53, 214, 196, 0.4);
-  color: var(--accent);
-}
 
 .raid-picker-noresult {
   font-size: var(--fs-body);
@@ -4550,18 +3014,6 @@ select.settings-select {
   padding: var(--sp-5) 0;
 }
 
-.raid-summary-kv { margin: 0; display: flex; flex-direction: column; }
-.raid-summary-kv .kv {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-size: var(--fs-meta);
-  padding: var(--sp-1) 0;
-  border-bottom: 1px dashed var(--border-soft);
-}
-.raid-summary-kv .kv:last-child { border-bottom: 0; }
-.raid-summary-kv dt { margin: 0; color: var(--text-muted); }
-.raid-summary-kv dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .party-card-memo {
   margin: 0;
@@ -4572,30 +3024,9 @@ select.settings-select {
   text-overflow: ellipsis;
 }
 
-.raid-picker-side .ui-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  filter: none;
-}
 
-/* ── 메인 대시보드 (개편) ────────────────────────────────── */
 
-.dash-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  max-width: 720px;
-}
 
-.dash-section-title {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-section);
-  font-weight: 650;
-  letter-spacing: -0.015em;
-  margin: 0 0 var(--sp-3);
-}
 
 
 /* ── 공대 이력: 함께한 멤버 ─────────────────────────────── */
@@ -4623,19 +3054,7 @@ select.settings-select {
 .history-week-form { display: flex; align-items: center; gap: var(--sp-2); }
 .history-clear-chips { flex-wrap: wrap; gap: var(--sp-1); }
 
-/* ── 원정대: 마지막 동기화 / 검색 ─────────────────────────── */
-.expedition-sync-form { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
-.expedition-sync-note { font-size: var(--fs-label); color: var(--text-muted); }
-.expedition-search { margin: var(--sp-3) 0 0; max-width: 360px; }
-.expedition-last-sync {
-  margin-left: var(--sp-2);
-  font-size: var(--fs-label);
-  font-weight: 400;
-  color: var(--text-muted);
-}
 
-/* ── 랭킹 검색 ────────────────────────────────────────── */
-.rank-search { margin: 0 0 var(--sp-3); max-width: 360px; }
 
 /* ── 랜딩: 가이드 링크 ─────────────────────────────────── */
 .landing-guide { margin-top: var(--sp-4); font-size: var(--fs-label); }
@@ -4688,46 +3107,16 @@ select.settings-select {
 /* ── 골드 칩 (익스트림 '원정대 주 1회' 등 보조 신호) ──────────── */
 .ui-chip.is-gold { border-color: var(--gold); color: var(--gold); background: var(--gold-soft); }
 
-/* ── 레이드 체크: 익스트림(원정대 단위) 섹션 ───────────────── */
-.extreme-section:not(:empty) { margin-bottom: 20px; }
-.extreme-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3); }
-.extreme-title { margin: 0; font-size: var(--fs-card); }
-.extreme-hint { font-size: var(--fs-meta); color: var(--text-muted); }
-.extreme-card { position: relative; overflow: hidden; padding-left: 21px; }
-.extreme-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--warn); }
-.extreme-card.is-cleared::before { background: var(--ok); }
-.extreme-state { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3); }
-.extreme-state form { margin-left: auto; }
-.extreme-who { font-size: var(--fs-body); }
-.extreme-diffs { display: flex; flex-direction: column; gap: var(--sp-2); }
-.extreme-diff-form { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-.extreme-diff-form .settings-select { flex: 1 1 160px; min-width: 0; height: 30px; font-size: var(--fs-meta); }
-.extreme-diff-name { font-size: var(--fs-body); font-weight: 500; min-width: 88px; }
 
-/* ── 관리자 인라인 수정 폼 ─────────────────────────────── */
-.admin-input-narrow { max-width: 96px; }
-.admin-refs { flex-basis: 100%; }
 
-/* ── 메인: 익스트림 줄 ───────────────────────────────── */
-.dash-extreme-row { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px dashed var(--border); }
 
 
 
 /* ── 메인: 처리 필요 공대 액션, 에러 페이지 액션 ───────────── */
-.dash-overdue-actions { gap: var(--sp-2); }
-.dash-overdue-actions form { display: inline; }
 .error-actions { justify-content: center; gap: var(--sp-2); margin-top: var(--sp-3); }
 
-/* ── 완료 토글: 색만으로 구분하지 않도록 ✓ ───────────────── */
-.raid-card-diff-toggle.done::before { content: "✓ "; font-weight: 700; }
 
 /* ── 모바일 보정 ───────────────────────────────────────── */
-.expedition-account-form { flex-wrap: wrap; }
-@media (max-width: 640px) {
-  .rank-row { grid-template-columns: 40px 1fr 96px; }
-  .rank-row .rank-col-class { display: none; }
-  .rank-row .rank-col-name { white-space: normal; }
-}
 @media (max-width: 760px) {
   .armory-sidebar { position: static; }
 }
@@ -4744,11 +3133,11 @@ select.settings-select {
    맥락별 크기 차이는 의도적으로 유지한다 — 패널 안 보조 동작(sm), 카드/폼 기본, 페이지 주 동작(lg),
    폼 컨트롤 옆 정렬(ctrl = --ctrl-h). 예전 통합 때 크기까지 평준화해서 화면이 밋밋해진 적이 있다.
    ══════════════════════════════════════════════════════════════ */
-.ui-btn, .leader-btn, .party-leave-btn, .party-switch-btn, .party-create-link, .raid-select-save-btn,
-.armory-sync-btn, .calendar-today-btn, .settings-toggle-btn,
-.expedition-add-form button, .expedition-sync-form button, .expedition-account-form button,
-.party-join-form button[type="submit"],
-.leader-btn-sm, .admin-toggle-link, .admin-danger-link, .settings-filter-remove {
+.ui-btn,
+.raid-select-save-btn,
+.armory-sync-btn,
+.calendar-today-btn,
+.leader-btn-sm {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4772,8 +3161,10 @@ select.settings-select {
 
 
 /* 톤: ghost — 테두리만, 보조 동작(내 이력·주차별 기록·전체 동기화·동기화·오늘·관리자 행 액션) */
-.ui-btn.is-ghost, .party-switch-btn, .expedition-sync-form button, .armory-sync-btn, .calendar-today-btn,
-.leader-btn-sm, .admin-toggle-link, .admin-danger-link, .settings-filter-remove {
+.ui-btn.is-ghost,
+.armory-sync-btn,
+.calendar-today-btn,
+.leader-btn-sm {
   background: transparent;
   color: var(--text-muted);
   border-color: var(--border);
@@ -4781,7 +3172,7 @@ select.settings-select {
 }
 
 /* 톤: neutral — 파티장 패널의 일반 동작(마감/재개/초대/위임/일정 변경/등록) */
-.ui-btn.is-neutral, .leader-btn {
+.ui-btn.is-neutral {
   background: var(--sidebar-bg);
   color: var(--text);
   border-color: var(--border);
@@ -4789,13 +3180,13 @@ select.settings-select {
 }
 
 /* 톤: danger / success */
-.ui-btn.is-danger, .party-leave-btn, .leader-btn-danger, .party-join-form button.party-leave-btn {
+.ui-btn.is-danger {
   background: var(--danger-soft);
   border-color: rgba(239, 106, 99, 0.4);
   color: var(--danger);
 }
 
-.ui-btn.is-success, .leader-btn-success, .settings-toggle-on {
+.ui-btn.is-success {
   background: var(--ok-soft);
   border-color: rgba(94, 214, 122, 0.4);
   color: var(--ok);
@@ -4806,8 +3197,8 @@ select.settings-select {
 
 
 /* 크기 */
-.ui-btn.is-sm, .leader-btn-sm, .admin-toggle-link, .admin-danger-link, .settings-filter-remove,
-.expedition-remove-form .party-leave-btn {
+.ui-btn.is-sm,
+.leader-btn-sm {
   height: 26px;
   padding: 0 10px;
   font-size: var(--fs-meta);
@@ -4816,38 +3207,20 @@ select.settings-select {
 }
 .leader-btn-sm { border-radius: var(--r-pill); }
 /* lg = 페이지 주 동작. 높이는 같고(--ctrl-h) 좌우 여백·글자만 키운다 — 옆 셀렉트(36px)와 줄이 맞아야 한다 */
-.ui-btn.is-lg, .party-create-link, .raid-select-save-btn,
-.expedition-add-form button, .expedition-account-form button, .party-join-form button[type="submit"],
-.party-join-form button.party-leave-btn {
+.ui-btn.is-lg,
+.raid-select-save-btn {
   padding: 0 20px;
   font-size: 14px;
 }
-.ui-btn.is-ctrl, .settings-toggle-btn { height: var(--ctrl-h); padding: 0 var(--sp-4); }
+.ui-btn.is-ctrl { height: var(--ctrl-h); padding: 0 var(--sp-4); }
 .ui-btn.is-block, .armory-sync-btn { width: 100%; }
-.calendar-today-btn { position: absolute; left: 0; height: 32px; padding: 0 14px; } /* 옆 ←→ 버튼(32px)과 같은 키 */
-/* 관리자: 입력창(36px) 옆의 인라인 버튼은 같은 키로, 행 액션 링크와 ▲▼는 28px로 맞춘다 */
-.admin-inline-form .admin-toggle-link, .admin-inline-form .admin-danger-link {
-  height: var(--ctrl-h);
-  padding: 0 12px;
-  font-size: var(--fs-body);
-  border-radius: var(--r-md);
-}
-.admin-row-actions .admin-toggle-link, .admin-row-actions .admin-danger-link, .admin-move-btn {
-  height: 28px;
-  box-sizing: border-box;
-}
-.admin-move-btn { padding: 0 6px; }
-/* 버튼 옆에 놓이는 입력창도 같은 키(36px) — 이전엔 34/40/42px가 섞여 있었다 */
-.leader-form input, .expedition-add-form input, .expedition-account-form input, .party-switch-form select,
-.calc-field input, .calc-field select {
+.calendar-today-btn { position: absolute; left: 0; height: 32px; padding: 0 14px; }/* 버튼 옆에 놓이는 입력창도 같은 키(36px) — 이전엔 34/40/42px가 섞여 있었다 */
+.party-switch-form select {
   height: var(--ctrl-h);
   padding-top: 0;
   padding-bottom: 0;
   box-sizing: border-box;
 }
-.party-comment-form { align-items: flex-end; }
-/* 파티장 패널: flex column 안에서 단독 버튼이 가로로 늘어나지 않게 */
-.leader-group > .leader-btn, .leader-group > .ui-btn { align-self: flex-start; }
 
 /* ── 캘린더 모바일: 7열 격자(360px에서 칸당 48px) 대신 하루 한 줄 목록형 ───── */
 @media (max-width: 640px) {
@@ -4882,13 +3255,6 @@ select.settings-select {
   .calendar-week:not(.calendar-week-single):not(:has(.calendar-cell:not(.is-empty-day), .calendar-cell.today)) { display: none; }
   .calendar-week:not(.calendar-week-single) + .calendar-week:not(.calendar-week-single) { margin-top: 0; }
 }
-/* 익스트림 섹션: 캐릭터 셀렉트(30px)와 "체크" 버튼을 같은 키로 */
-.extreme-diff-form .themed-select-trigger, .extreme-diff-form .raid-card-diff-toggle { height: 30px; box-sizing: border-box; }
-.extreme-diff-form .raid-card-diff-toggle { padding: 0 12px; }
-@media (max-width: 1024px) {
-  /* 세로 배치(flex column)에서는 flex:1이 높이를 나눠 가져 입력창이 21px로 찌그러졌다 — 높이는 고정 */
-  .expedition-add-form input, .expedition-account-form input { flex: 0 0 auto; }
-}
 
 /* ══════════════════════════════════════════════════════════════
    상태 시스템 — 포커스 · 올림 · 누름 · 비활성 · 처리 중 · 입력칸
@@ -4912,8 +3278,19 @@ select.settings-select {
 :focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--ring); }
 @media (forced-colors: active) { :focus-visible { outline: 2px solid CanvasText; } }
 
-button, a, summary, .ui-card, .account-tab, .armory-tab, .rank-tab, .pager-num, .raid-card-diff-toggle,
-.raid-select-row, .settings-check, .themed-select-trigger, .themed-select-option, input, select, textarea {
+button,
+a,
+summary,
+.ui-card,
+.armory-tab,
+.pager-num,
+.raid-select-row,
+.settings-check,
+.themed-select-trigger,
+.themed-select-option,
+input,
+select,
+textarea {
   transition: background-color var(--t), border-color var(--t), color var(--t), box-shadow var(--t), transform var(--t), opacity var(--t), filter var(--t);
 }
 
@@ -4934,12 +3311,15 @@ button, a, summary, .ui-card, .account-tab, .armory-tab, .rank-tab, .pager-num, 
 .btn.ghost { background: transparent; }
 .btn.block { width: 100%; }
 
-.ui-btn, .party-create-link, .raid-select-save-btn, .settings-toggle-btn, .expedition-add-form button, .expedition-account-form button,
-.party-join-form button[type="submit"] { --spin: var(--accent); }
-.ui-btn.is-ghost, .party-switch-btn, .expedition-sync-form button, .armory-sync-btn, .calendar-today-btn, .leader-btn-sm,
-.admin-toggle-link, .admin-danger-link, .settings-filter-remove, .ui-btn.is-neutral, .leader-btn { --spin: var(--text); }
-.ui-btn.is-danger, .party-leave-btn, .leader-btn-danger { --spin: var(--danger); }
-.ui-btn.is-success, .leader-btn-success, .settings-toggle-on { --spin: var(--ok); }
+.ui-btn,
+.raid-select-save-btn { --spin: var(--accent); }
+.ui-btn.is-ghost,
+.armory-sync-btn,
+.calendar-today-btn,
+.leader-btn-sm,
+.ui-btn.is-neutral { --spin: var(--text); }
+.ui-btn.is-danger { --spin: var(--danger); }
+.ui-btn.is-success { --spin: var(--ok); }
 
 @media (hover: hover) {
   .btn:hover:not(:disabled) { background: var(--hover); border-color: var(--line-in); }
@@ -4950,42 +3330,44 @@ button, a, summary, .ui-card, .account-tab, .armory-tab, .rank-tab, .pager-num, 
 
   /* 기본 톤(청록) */
   .ui-btn:not(.is-ghost):not(.is-neutral):not(.is-danger):not(.is-success):hover:not(:disabled),
-  .party-create-link:hover, .raid-select-save-btn:hover:not(:disabled), .settings-toggle-btn:not(.settings-toggle-on):hover:not(:disabled),
-  .expedition-add-form button:hover:not(:disabled), .expedition-account-form button:hover:not(:disabled),
-  .party-join-form button[type="submit"]:not(.party-leave-btn):hover:not(:disabled) {
+.raid-select-save-btn:hover:not(:disabled) {
     background: rgba(53, 214, 196, 0.24); border-color: var(--accent);
   }
   /* 약하게(ghost) */
-  .ui-btn.is-ghost:not(.is-danger):hover:not(:disabled), .party-switch-btn:hover, .expedition-sync-form button:hover:not(:disabled),
-  .armory-sync-btn:hover:not(:disabled), .calendar-today-btn:hover, .leader-btn-sm:hover:not(:disabled), .admin-toggle-link:hover:not(:disabled) {
+  .ui-btn.is-ghost:not(.is-danger):hover:not(:disabled),
+.armory-sync-btn:hover:not(:disabled),
+.calendar-today-btn:hover,
+.leader-btn-sm:hover:not(:disabled) {
     background: var(--hover); border-color: var(--line-in); color: var(--text);
   }
   /* 보통(neutral) */
-  .ui-btn.is-neutral:hover:not(:disabled), .leader-btn:not(.leader-btn-danger):not(.leader-btn-success):hover:not(:disabled) {
+  .ui-btn.is-neutral:hover:not(:disabled) {
     background: var(--hover); border-color: var(--line-in);
   }
   /* 위험 / 완료 */
-  .ui-btn.is-danger:not(.is-ghost):hover:not(:disabled), .party-leave-btn:hover:not(:disabled), .leader-btn-danger:hover:not(:disabled) {
+  .ui-btn.is-danger:not(.is-ghost):hover:not(:disabled) {
     background: rgba(239, 106, 99, 0.24); border-color: var(--danger);
   }
-  .ui-btn.is-success:hover:not(:disabled), .leader-btn-success:hover:not(:disabled), .settings-toggle-on:hover:not(:disabled) {
+  .ui-btn.is-success:hover:not(:disabled) {
     background: rgba(94, 214, 122, 0.24); border-color: var(--ok);
   }
   /* 약하게 + 위험(삭제·구독 취소) — 평소엔 조용하고 올리면 빨강 */
-  .ui-btn.is-ghost.is-danger:hover:not(:disabled), .admin-danger-link:hover:not(:disabled), .settings-filter-remove:hover:not(:disabled) {
+  .ui-btn.is-ghost.is-danger:hover:not(:disabled) {
     color: var(--danger); border-color: var(--danger); background: var(--danger-soft);
   }
 }
 
 /* 누름 — 한 단계 어둡게 + 1px 내려감 */
-.btn:active:not(:disabled), .ui-btn:active:not(:disabled), .leader-btn:active:not(:disabled), .party-leave-btn:active:not(:disabled),
-.party-switch-btn:active, .party-create-link:active, .raid-select-save-btn:active:not(:disabled), .armory-sync-btn:active:not(:disabled),
-.calendar-today-btn:active, .settings-toggle-btn:active:not(:disabled), .expedition-add-form button:active:not(:disabled),
-.expedition-sync-form button:active:not(:disabled), .expedition-account-form button:active:not(:disabled),
-.party-join-form button[type="submit"]:active:not(:disabled), .leader-btn-sm:active:not(:disabled), .admin-toggle-link:active:not(:disabled),
-.admin-danger-link:active:not(:disabled), .settings-filter-remove:active:not(:disabled), .admin-move-btn:active:not(:disabled),
-.calendar-nav-btn:active, .calendar-view-btn:active, .fp-step-btn:active, .rank-role-btn:active, .raid-card-diff-toggle:active:not(:disabled),
-.raid-diff:active, .admin-chip-delete:active, .party-comment-delete-btn:active, .icon-btn:active:not(:disabled) {
+.btn:active:not(:disabled),
+.ui-btn:active:not(:disabled),
+.raid-select-save-btn:active:not(:disabled),
+.armory-sync-btn:active:not(:disabled),
+.calendar-today-btn:active,
+.leader-btn-sm:active:not(:disabled),
+.calendar-nav-btn:active,
+.calendar-view-btn:active,
+.fp-step-btn:active,
+.icon-btn:active:not(:disabled) {
   transform: translateY(1px);
   filter: brightness(0.88);
 }
@@ -5073,15 +3455,15 @@ button:disabled, .btn.is-disabled, a[aria-disabled="true"], input:disabled, sele
 /* 기존 필터·칩·탭 계열: 올림 = 테두리 --line-in + 글자 밝게, 누름 = 어두운 면, 선택은 각자 규칙 그대로 */
 @media (hover: hover) {
   .chip-btn:not(.on):not([aria-pressed="true"]):hover,
-  .account-tab:not(.active):hover, .rank-role-btn:not(.is-active):hover,
-  .raid-card-diff-toggle:not(.done):hover:not(:disabled), .raid-diff:hover, .pager-num:not(.is-active):hover,
-  .calendar-view-btn:hover, .calendar-nav-btn:hover {
+.pager-num:not(.is-active):hover,
+.calendar-view-btn:hover,
+.calendar-nav-btn:hover {
     border-color: var(--line-in); color: var(--text);
   }
-  .armory-tab:not(.is-active):hover, .rank-tab:not(.is-active):hover { color: var(--text); }
-  .admin-move-btn:hover:not(:disabled) { color: var(--text); border-color: var(--line-in); background: var(--hover); }
-}
-.chip-btn:active, .account-tab:active, .pager-num:active { background: var(--press); }
+  .armory-tab:not(.is-active):hover { color: var(--text); }
+  }
+.chip-btn:active,
+.pager-num:active { background: var(--press); }
 
 /* ── 입력칸 ────────────────────────────────────────────────
    :is() 목록의 가장 구체적인 선택자(input:not(...) 7개)가 전체 명시도가 되어, 페이지별 입력 규칙
@@ -5102,17 +3484,15 @@ textarea.field { height: auto; min-height: 72px; padding: var(--sp-2) var(--sp-3
       select, textarea, .themed-select-trigger, .field):not(.raid-search input):not(.flatpickr-calendar *):hover:not(:disabled):not(:focus) {
     border-color: var(--line-in-hover);
   }
-  .raid-search:hover:not(:focus-within) { border-color: var(--line-in-hover); }
-}
+  }
 :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]):not([type="submit"]):not([type="button"]):not([type="file"]),
     select, textarea, .field):not(.raid-search input):not(.flatpickr-calendar *):focus,
-.themed-select-trigger:focus-visible, .themed-select.is-open .themed-select-trigger, .raid-search:focus-within {
+.themed-select-trigger:focus-visible,
+.themed-select.is-open .themed-select-trigger {
   outline: 2px solid transparent;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(53, 214, 196, 0.22);
 }
-.raid-search { border-color: var(--line-in); }
-.raid-search input:focus, .raid-search input:focus-visible { box-shadow: none; }
 :is(input, select, textarea, .field, .themed-select-trigger):is([aria-invalid="true"], .is-error) { border-color: var(--danger) !important; }
 :is(input, select, textarea, .field):is([aria-invalid="true"], .is-error):focus { box-shadow: 0 0 0 3px rgba(239, 106, 99, 0.22); }
 :is(input, textarea, .field)[readonly]:not(.flatpickr-input):not(.form-control) { background: transparent; border-style: dashed; color: var(--text-muted); }
@@ -5142,11 +3522,12 @@ textarea.field { height: auto; min-height: 72px; padding: var(--sp-2) var(--sp-3
 
 /* ── 목록 줄 · 링크 카드 ── */
 @media (hover: hover) {
-  a.ui-card:hover, .party-card:hover { border-color: var(--line-in); transform: none; box-shadow: none; background: var(--hover); }
-  a.rank-row:hover, .dash-party-list a:hover { background: var(--hover); }
+  a.ui-card:hover { border-color: var(--line-in); transform: none; box-shadow: none; background: var(--hover); }
+  a.rank-row:hover { background: var(--hover); }
 }
-a.ui-card:active, .party-card:active, a.rank-row:active { background: var(--press); }
-.ui-card:focus-visible, .party-card:focus-visible { box-shadow: var(--ring); border-radius: var(--r-lg); }
+a.ui-card:active,
+a.rank-row:active { background: var(--press); }
+.ui-card:focus-visible { box-shadow: var(--ring); border-radius: var(--r-lg); }
 a.rank-row:focus-visible, .raid-select-row:has(input:focus-visible) { box-shadow: var(--ring-in); }
 
 /* 움직임 줄이기 — 전환·스피너·흔들림 전부 끔 */
@@ -5444,9 +3825,6 @@ html.nav-rail .side-fold svg { transform: scaleX(-1); }
 .more-profile form { margin: 0; }
 .more-section { margin: var(--sp-5) 0 var(--sp-2); font-size: var(--fs-meta); color: var(--text-muted); font-weight: 600; }
 
-/* 홈 → 레이드 체크 · 초대 (홈 개편 전 임시 줄) */
-.home-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-4); }
-.home-links .nav-badge { margin-left: 2px; }
 
 /* ══════════════════════════════════════════════════════════════
    피드백 컴포넌트 — 확인 대화상자 · 토스트 · 툴팁 · 배너 · 불러오는 중 · 빈 상태
