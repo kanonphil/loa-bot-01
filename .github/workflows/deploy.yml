@@ -1,0 +1,80 @@
+name: 테스트 · 배포
+
+# main에 push하면: 봇/웹 테스트 → 둘 다 통과하면 봇 서버 → 웹 서버 순으로 배포.
+# 서버 쪽 동작(바뀐 쪽만 재시작, 헬스체크, 실패 시 롤백)은 scripts/deploy.sh 참고.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 배포가 겹치지 않게 한 번에 하나씩. 진행 중인 배포는 취소하지 않는다(중간에 끊기면 반쯤 배포된 상태가 됨).
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test-bot:
+    name: 봇 테스트 (Python 3.10)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"   # 봇 서버(Oracle)와 같은 버전
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pytest tests -q
+
+  test-web:
+    name: 웹 테스트 (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # 웹 서버(Lightsail)와 같은 버전
+          cache: pip
+          cache-dependency-path: |
+            webapp/requirements.txt
+            requirements-dev.txt
+      - run: pip install -r webapp/requirements.txt -r requirements-dev.txt
+      - run: python -m pytest webapp/tests -q
+
+  deploy:
+    name: 배포
+    needs: [test-bot, test-web]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: SSH 설정
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_CONFIG: ${{ secrets.DEPLOY_SSH_CONFIG }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_SSH_CONFIG" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "::error::배포용 시크릿(DEPLOY_SSH_KEY / DEPLOY_SSH_CONFIG / DEPLOY_KNOWN_HOSTS)이 등록되지 않았습니다. Settings → Secrets and variables → Actions 에서 등록하세요."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_CONFIG" > ~/.ssh/config
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/config ~/.ssh/known_hosts
+
+      # 봇이 API 제공자라 먼저 올린다 — 웹이 새 엔드포인트를 부르기 전에 봇에 그 엔드포인트가 있어야 한다.
+      # 봇 배포가 실패하면(롤백됨) 웹은 배포하지 않는다.
+      - name: 봇 서버 배포
+        run: ssh bot "$GITHUB_SHA"
+
+      - name: 웹 서버 배포
+        run: ssh web "$GITHUB_SHA"
