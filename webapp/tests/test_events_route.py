@@ -3,7 +3,7 @@ import asyncio
 
 import pytest
 
-from webapp import party_events
+from webapp import party_events, sse
 from webapp.routes import events
 
 
@@ -30,7 +30,7 @@ def test_requires_login(client):
 def test_stream_sends_keepalive_then_change_event(monkeypatch):
     """구독 직후엔 큐가 비어있으니 keep-alive가 먼저 오고, 변경 이벤트가 큐에 들어오면
     그 다음 청크로 parties-changed 이벤트가 내려가야 한다."""
-    monkeypatch.setattr(events, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr(sse, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
 
     async def scenario():
         gen = events._stream(_FakeRequest())
@@ -48,7 +48,7 @@ def test_stream_sends_keepalive_then_change_event(monkeypatch):
 
 def test_stream_unsubscribes_on_close(monkeypatch):
     """연결이 끊기면(aclose) 구독을 해제해야 한다 — 안 그러면 죽은 연결의 큐가 계속 쌓인다."""
-    monkeypatch.setattr(events, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr(sse, "KEEPALIVE_INTERVAL_SECONDS", 0.05)
 
     async def scenario():
         gen = events._stream(_FakeRequest())

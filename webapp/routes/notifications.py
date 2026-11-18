@@ -2,11 +2,12 @@
 구독자용 종 아이콘 이력/알림 설정."""
 import asyncio
 import json
+from contextlib import aclosing
 
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import RedirectResponse, StreamingResponse
 
-from webapp import notification_store, party_events
+from webapp import notification_store, party_events, sse
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client
 from webapp.flash import redirect_result, redirect_with_toast
@@ -15,31 +16,25 @@ from webapp.utils import time_ago as _time_ago
 
 router = APIRouter()
 
-KEEPALIVE_INTERVAL_SECONDS = 15
-
 
 async def _stream(request: Request, discord_id: str | None = None):
     queue = party_events.subscribe_notifications()
-    try:
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL_SECONDS)
-                # 개인 알림은 받는 사람에게만, 전체 이벤트는 유저의 종류 토글/레이드 필터대로
-                target = event.get("target_discord_id")
-                if target and target != discord_id:
-                    continue
-                if discord_id is not None and not await notification_store.event_matches(
-                    discord_id, event.get("type"), event.get("raid_name"), event.get("difficulty"),
-                    targeted=bool(target),
-                ):
-                    continue
-                yield f"event: notification\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-            except asyncio.TimeoutError:
-                yield ": keep-alive\n\n"
-    finally:
-        party_events.unsubscribe_notifications(queue)
+
+    async def render(event):
+        # 개인 알림은 받는 사람에게만, 전체 이벤트는 유저의 종류 토글/레이드 필터대로
+        target = event.get("target_discord_id")
+        if target and target != discord_id:
+            return None
+        if discord_id is not None and not await notification_store.event_matches(
+            discord_id, event.get("type"), event.get("raid_name"), event.get("difficulty"),
+            targeted=bool(target),
+        ):
+            return None
+        return f"event: notification\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    async with aclosing(sse.stream(request, queue, party_events.unsubscribe_notifications, render)) as inner:
+        async for chunk in inner:
+            yield chunk
 
 
 @router.get("/events/notifications")
@@ -58,14 +53,23 @@ async def notification_count(user: dict = Depends(get_current_user)):
 @router.get("/notifications/panel")
 async def notification_panel(request: Request, user: dict = Depends(get_current_user)):
     subscribed = await notification_store.is_subscribed(user["discord_id"])
-    items = await notification_store.list_unread(user["discord_id"], personal_only=not subscribed)
+    # 읽음 목록을 먼저 뽑고 → 안 읽음 목록을 뽑고 → 방금 뽑은 안 읽음만 읽음 처리한다. 예전엔 패널 조회와
+    # read-all이 따로 날아가 읽음 처리가 먼저 커밋되면 새 알림이 "읽음" 탭에 들어가 버렸다.
+    # items는 이 요청에서 처음 보여주는(= 아직 안 읽은) 알림이라 템플릿이 "새 알림"으로 그린다.
     read_items = await notification_store.list_read(user["discord_id"], personal_only=not subscribed)
+    items = await notification_store.list_unread(user["discord_id"], personal_only=not subscribed)
+    await notification_store.mark_read_ids(user["discord_id"], [item["id"] for item in items])
     for item in items + read_items:
         item["time_ago"] = _time_ago(item.get("created_at"))
     return templates.TemplateResponse(
         request,
         "_notification_panel.html",
-        {"subscribed": subscribed, "items": items, "read_items": read_items},
+        {
+            "subscribed": subscribed,
+            "items": items,
+            "read_items": read_items,
+            "new_ids": [item["id"] for item in items],
+        },
     )
 
 
@@ -93,30 +97,21 @@ async def open_notification(notification_id: int, user: dict = Depends(get_curre
 
 @router.get("/settings")
 async def settings_page(
-    request: Request, saved: str | None = None, error: str | None = None,
-    user: dict = Depends(get_current_user),
+    request: Request, user: dict = Depends(get_current_user),
 ):
     prefs = await notification_store.get_preferences(user["discord_id"])
     # 봇 쪽 데이터(레이드 목록/디스코드 구독/사전 알림)는 봇 서버가 응답 못 하면 그 카드만
     # 비활성으로 보여준다 — 설정 페이지 자체(웹 알림 설정)는 계속 동작해야 한다.
-    raids: dict = {}
-    discord_subscriptions: list[dict] | None = None
-    pre_notify: dict | None = None
-    for attr, call in (
-        ("raids", lambda: bot_client.get_raids()),
-        ("discord_subscriptions", lambda: bot_client.get_raid_subscriptions(user["discord_id"])),
-        ("pre_notify", lambda: bot_client.get_preferences(user["discord_id"])),
-    ):
-        try:
-            value = await call()
-        except Exception:
-            continue
-        if attr == "raids":
-            raids = value
-        elif attr == "discord_subscriptions":
-            discord_subscriptions = value
-        else:
-            pre_notify = value
+    # 세 호출은 서로 무관해 동시에 보내고, 각각 실패해도 그 카드만 비운다(return_exceptions).
+    raids_r, subs_r, pre_r = await asyncio.gather(
+        bot_client.get_raids(),
+        bot_client.get_raid_subscriptions(user["discord_id"]),
+        bot_client.get_preferences(user["discord_id"]),
+        return_exceptions=True,
+    )
+    raids: dict = {} if isinstance(raids_r, BaseException) else raids_r
+    discord_subscriptions: list[dict] | None = None if isinstance(subs_r, BaseException) else subs_r
+    pre_notify: dict | None = None if isinstance(pre_r, BaseException) else pre_r
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -128,8 +123,6 @@ async def settings_page(
             "raids": raids,
             "discord_subscriptions": discord_subscriptions,
             "pre_notify": pre_notify,
-            "saved": saved,
-            "error": error,
         },
     )
 
@@ -196,8 +189,9 @@ async def remove_discord_subscription(request: Request, user: dict = Depends(get
     raid_name = (form.get("raid_name") or "").strip()
     difficulty = (form.get("difficulty") or "").strip() or "전체"
     if raid_name:
-        await bot_client.remove_raid_subscription(user["discord_id"], raid_name, difficulty)
-    return redirect_with_toast("/settings", "디스코드 DM 구독을 취소했습니다." if raid_name else None)
+        result = await bot_client.remove_raid_subscription(user["discord_id"], raid_name, difficulty)
+        return redirect_result("/settings", result, "디스코드 DM 구독을 취소했습니다.", "구독을 취소하지 못했습니다.")
+    return redirect_with_toast("/settings")
 
 
 @router.post("/settings/pre-notify")

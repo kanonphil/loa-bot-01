@@ -41,12 +41,19 @@ CREATE TABLE IF NOT EXISTS notification_subscriptions (
 
 -- 레이드+난이도 단위 알림 필터 (봇의 /레이드구독과 같은 개념).
 -- 유저에게 필터가 하나도 없으면 "전체 레이드" 알림을 받는다.
--- difficulty가 NULL이면 그 레이드의 모든 난이도를 뜻한다.
+-- difficulty가 ''(빈 문자열)이면 그 레이드의 모든 난이도를 뜻한다. NULL을 쓰면 PRIMARY KEY가 NULL을
+-- 서로 다른 값으로 취급해 같은 "모든 난이도" 필터가 중복 저장됐다 — 그래서 NULL 대신 ''를 쓴다.
 CREATE TABLE IF NOT EXISTS notification_raid_filters (
     discord_id  TEXT NOT NULL,
     raid_name   TEXT NOT NULL,
     difficulty  TEXT,
     PRIMARY KEY (discord_id, raid_name, difficulty)
+);
+
+-- 폴링 커서 등 프로세스가 재시작돼도 이어가야 하는 작은 상태(예: 봇 알림 큐 마지막 id).
+CREATE TABLE IF NOT EXISTS poll_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
@@ -61,6 +68,17 @@ _MIGRATIONS = [
     "ALTER TABLE notification_subscriptions ADD COLUMN notify_guest_joined INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE notifications ADD COLUMN target_discord_id TEXT",
     "ALTER TABLE notification_subscriptions ADD COLUMN notify_personal INTEGER NOT NULL DEFAULT 1",
+]
+
+# 모든 난이도 필터를 NULL에서 ''로 옮기는 마이그레이션 — 여러 번 실행해도 결과가 같다.
+# 1) 이미 같은 키가 ''로 있으면 NULL 행은 지운다  2) NULL끼리 중복이면 하나만 남긴다  3) 남은 NULL을 ''로.
+_FILTER_DEDUPE_MIGRATIONS = [
+    "DELETE FROM notification_raid_filters WHERE difficulty IS NULL AND EXISTS ("
+    " SELECT 1 FROM notification_raid_filters f2 WHERE f2.discord_id = notification_raid_filters.discord_id"
+    " AND f2.raid_name = notification_raid_filters.raid_name AND f2.difficulty = '')",
+    "DELETE FROM notification_raid_filters WHERE difficulty IS NULL AND rowid NOT IN ("
+    " SELECT MIN(rowid) FROM notification_raid_filters WHERE difficulty IS NULL GROUP BY discord_id, raid_name)",
+    "UPDATE notification_raid_filters SET difficulty = '' WHERE difficulty IS NULL",
 ]
 
 # 이 유저에게 보이는 알림 — 전체 이벤트 + 본인 앞으로 온 개인 알림
@@ -80,6 +98,25 @@ async def init_db() -> None:
                 await db.execute(migration)
             except aiosqlite.OperationalError:
                 pass  # duplicate column — 이미 마이그레이션됨
+        for migration in _FILTER_DEDUPE_MIGRATIONS:
+            await db.execute(migration)
+        await db.commit()
+
+
+async def get_state(key: str) -> str | None:
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        cur = await db.execute("SELECT value FROM poll_state WHERE key=?", (key,))
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+
+async def set_state(key: str, value: str) -> None:
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO poll_state (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
         await db.commit()
 
 
@@ -126,7 +163,8 @@ async def get_preferences(discord_id: str) -> dict:
             "WHERE discord_id=? ORDER BY raid_name, difficulty",
             (discord_id,),
         )
-        filters = [dict(r) for r in await cur.fetchall()]
+        # 저장은 ''(모든 난이도)지만 호출 측은 None을 "모든 난이도"로 쓴다.
+        filters = [{**dict(r), "difficulty": dict(r)["difficulty"] or None} for r in await cur.fetchall()]
     return {
         "subscribed": bool(row and row["subscribed"]),
         "notify_created": bool(row["notify_created"]) if row else True,
@@ -158,23 +196,17 @@ async def add_raid_filter(discord_id: str, raid_name: str, difficulty: str | Non
         await db.execute(
             "INSERT OR IGNORE INTO notification_raid_filters (discord_id, raid_name, difficulty) "
             "VALUES (?, ?, ?)",
-            (discord_id, raid_name, difficulty),
+            (discord_id, raid_name, difficulty or ""),
         )
         await db.commit()
 
 
 async def remove_raid_filter(discord_id: str, raid_name: str, difficulty: str | None) -> None:
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
-        if difficulty is None:
-            await db.execute(
-                "DELETE FROM notification_raid_filters WHERE discord_id=? AND raid_name=? AND difficulty IS NULL",
-                (discord_id, raid_name),
-            )
-        else:
-            await db.execute(
-                "DELETE FROM notification_raid_filters WHERE discord_id=? AND raid_name=? AND difficulty=?",
-                (discord_id, raid_name, difficulty),
-            )
+        await db.execute(
+            "DELETE FROM notification_raid_filters WHERE discord_id=? AND raid_name=? AND difficulty=?",
+            (discord_id, raid_name, difficulty or ""),
+        )
         await db.commit()
 
 
@@ -286,6 +318,21 @@ async def list_read(discord_id: str, limit: int = 30, personal_only: bool = Fals
     return _filter_rows(prefs, rows, limit)
 
 
+async def mark_read_ids(discord_id: str, notification_ids: list[int]) -> int:
+    """주어진 알림만 읽음 처리 — 패널이 방금 보여준 목록과 정확히 같은 것만 읽음으로 바꾼다
+    (그 사이 새로 도착한 알림까지 읽음 처리하지 않도록)."""
+    if not notification_ids:
+        return 0
+    now = _now_iso()
+    async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
+        cur = await db.executemany(
+            "INSERT OR IGNORE INTO notification_reads (discord_id, notification_id, read_at) VALUES (?, ?, ?)",
+            [(discord_id, nid, now) for nid in notification_ids],
+        )
+        await db.commit()
+        return cur.rowcount
+
+
 async def mark_all_read(discord_id: str) -> int:
     """이 유저에게 보이는 안 읽은 알림을 전부 읽음 처리(남의 개인 알림은 건드리지 않는다).
     종 아이콘을 열기만 해도 전부 읽음이 되도록. 반환: 새로 읽음 처리된 알림 수."""
@@ -389,7 +436,7 @@ async def rename_raid(old: str, new: str) -> None:
 
 
 async def rename_difficulty(raid_name: str, old: str, new: str) -> None:
-    """NULL 난이도(모든 난이도) 필터는 difficulty=old에 안 걸려 그대로 남는다."""
+    """''(모든 난이도) 필터는 difficulty=old에 안 걸려 그대로 남는다."""
     async with aiosqlite.connect(config.NOTIFICATION_DB_PATH) as db:
         await db.execute(
             "UPDATE notifications SET difficulty=? WHERE raid_name=? AND difficulty=?", (new, raid_name, old)

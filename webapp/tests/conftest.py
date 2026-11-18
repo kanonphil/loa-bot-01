@@ -48,10 +48,20 @@ def _reset_auth_and_guild_state():
     from webapp import guild_info
     from webapp.auth import dependencies
 
+    from webapp import party_events
+
+    def _reset_party_events():
+        party_events._seen_ids.clear()
+        party_events._pending_vanished.clear()
+        party_events._pending_events.clear()
+        party_events._admin_hints.clear()
+
     dependencies.clear_registration_cache()
+    _reset_party_events()
     guild_info._next_attempt_at = float("inf")
     yield
     dependencies.clear_registration_cache()
+    _reset_party_events()
     guild_info._next_attempt_at = 0.0
 
 
