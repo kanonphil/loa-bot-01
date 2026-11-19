@@ -1,55 +1,72 @@
-"""홈(/main) — 이번 주 숙제표 + 할 일 + 일정 + 로스트아크 공용 정보.
+"""홈(/main) — 이번 주 숙제 + 할 일 + 공대 + 로스트아크 공용 정보.
 
-왼쪽은 숙제표(캐릭터 × 레이드 한 표)와 이번 주 골드, 오른쪽은 지금 처리할 것(초대·일정 지난 공대) →
-내 일정 → 오늘의 콘텐츠 → 시세 → 이벤트 → 들어갈 만한 공대 순.
-숙제표는 봇의 /raid-check-summary 한 번으로 그린다. 로아 API 카드(오늘의 콘텐츠·시세·이벤트·점검)는
+위에 숫자 카드 4장(숙제·내 일정·참여 가능 공대·초기화까지), 그 아래
+왼쪽 큰 칸 = 할 일 → 숙제 → 공대, 오른쪽 작은 칸 = 오늘의 콘텐츠 → 진행 중 이벤트 → 시세 → 이번 주 골드.
+숙제는 캐릭터마다 그 캐릭터가 고른 레이드만 칸으로 보여준다(다른 캐릭터의 레이드 열이 끼어들지 않는다).
+숙제는 봇의 /raid-check-summary 한 번으로 그린다. 로아 API 카드(오늘의 콘텐츠·시세·이벤트·점검)는
 봇 쪽 엔드포인트가 없거나 느려도 홈이 깨지지 않도록 비워 둔다.
 """
 import asyncio
 from datetime import datetime
+from urllib.parse import quote
 
+import httpx
 from fastapi import APIRouter, Depends, Request
+from starlette.responses import JSONResponse
 
-from webapp import config
+from webapp import config, party_logic
 from webapp.auth.dependencies import get_current_user
 from webapp.clients import bot_client, bot_home
-from webapp.format import KST, _parse, is_overdue_party, party_view, period_view, reset_view
+from webapp.format import KST, _parse, is_overdue_party, next_reset, party_view, period_view
 from webapp.raid_check import eligible_characters, extreme_raids
 from webapp.routes.invites import _build_invite_views
 from webapp.templating import templates
 
 router = APIRouter()
 
-MY_SCHEDULE_LIMIT = 5
-OPPORTUNITY_LIMIT = 3
+PARTY_ROWS = 5             # 공대 카드 탭마다 보여줄 줄 수
 EVENT_LIMIT = 3
-HOMEWORK_FILTER_FROM = 6   # 캐릭터가 이보다 많으면 "숙제 남은 캐릭터만" 필터를 기본으로 켠다
-SCROLL_FROM_COLUMNS = 5    # 레이드 열이 이보다 많으면 표 안에서만 가로 스크롤
-_SEG_BTN = 58              # 난이도 버튼 폭(px) — home.css와 같은 값
+TILES_PER_ROW = 3          # 숙제 칸은 한 줄에 3개 — 고른 레이드가 그보다 적으면 "+ 레이드 고르기" 빈 칸
 
 
-def split_parties(parties: list[dict], discord_id: str, max_level: float) -> tuple[list, list]:
-    """내가 이미 속한 공대(임박순)와, 아직 안 들어갔지만 입장 가능한 공대를 나눈다."""
-    mine, opportunities = [], []
+def split_parties(parties: list[dict], discord_id: str) -> list[dict]:
+    """내가 이미 속한(파티장이거나 자리에 있는) 공대 중 일정이 안 지난 것, 임박순."""
+    mine = []
     for p in parties:
         joined = p.get("leader_id") == discord_id or any(
             s["discord_id"] == discord_id for s in p.get("slots") or []
         )
         view = party_view(p)
-        if joined:
-            if not view["schedule"]["is_past"]:
-                mine.append(view)
-        elif (
-            p["status"] == "recruiting"
-            and (p.get("min_level") or 0) <= max_level
-            and not view["schedule"]["is_past"]
-        ):
-            opportunities.append(view)
+        if joined and not view["schedule"]["is_past"]:
+            mine.append(view)
+    mine.sort(key=lambda p: p.get("scheduled_datetime") or "9999")
+    return mine
 
-    key = lambda p: p.get("scheduled_datetime") or "9999"
-    mine.sort(key=key)
-    opportunities.sort(key=key)
-    return mine, opportunities
+
+def joinable_parties(
+    parties: list[dict], summary: dict | None, discord_id: str, now: datetime | None = None,
+) -> list[dict]:
+    """모집 중이고 일정이 안 지났으며 내 캐릭터 하나라도 참여 가능한 공대(공대 목록의 "참여 가능"과 같은 판정).
+    줄마다 party_view + join(참여 칸 상태, 캐릭터 후보) + comp(딜/폿 현황) + fits(참여 가능한 캐릭터 이름)."""
+    if not summary:
+        return []
+    raids = summary.get("raids") or {}
+    out = []
+    for p in parties:
+        if p.get("status") != "recruiting":
+            continue
+        view = party_view(p)
+        if view["schedule"]["is_past"]:
+            continue
+        join = party_logic.list_row_join(p, summary, parties, discord_id, raids, now=now)
+        if join["state"] != "can":
+            continue
+        view["join"] = join
+        view["comp"] = party_logic.composition(p)
+        view["fits"] = [o["name"] for o in join["options"]]
+        out.append(view)
+    out.sort(key=lambda p: p.get("scheduled_datetime") or "9999")
+    return out
 
 
 async def _safe(coro, default):
@@ -60,87 +77,145 @@ async def _safe(coro, default):
         return default
 
 
-# ── 숙제표 ──────────────────────────────────────────────
+# ── 숙제 ────────────────────────────────────────────────
 
-def _seg_width(n_diffs: int) -> int:
-    return max(120, n_diffs * _SEG_BTN + 4)
+def shown_difficulty(raid: dict, done_diff: str | None = None) -> str:
+    """칸에 보여줄 난이도 — 클리어했으면 클리어한 난이도, 아니면 저장해 둔 난이도(preferred_difficulty),
+    그것도 없거나 이제 그 캐릭터가 못 가는 난이도면 갈 수 있는 가장 높은 것(목록의 마지막)."""
+    if done_diff:
+        return done_diff
+    diffs = raid.get("difficulties") or []
+    pref = raid.get("preferred_difficulty")
+    if pref in diffs:
+        return pref
+    return diffs[-1] if diffs else ""
 
 
-def build_homework(summary: dict) -> dict:
-    """/raid-check-summary → 숙제표 표시 모델.
+def _done_difficulty(raid: dict, done_keys: set[str]) -> str | None:
+    name = raid.get("raid_name")
+    for d in raid.get("difficulties") or []:
+        if f"{name}_{d}" in done_keys:
+            return d
+    # 레벨이 내려가 목록에서 빠진 난이도로 클리어한 기록도 "클리어"로 본다
+    for key in done_keys:
+        raid_name, _, diff = key.rpartition("_")
+        if raid_name == name:
+            return diff
+    return None
 
-    columns — 모든 캐릭터에서 한 번이라도 보이는 레이드(봇 순서). 칸 폭은 그 열의 최대 난이도 개수로 정한다.
-    rows    — 입장 가능한 레이드가 하나도 없는 캐릭터는 뺀다(누를 게 없다). cells는 columns와 같은 길이이고
-              그 캐릭터에게 해당 없는 레이드는 None.
+
+def _recruit_link(ids: list[str]) -> str:
+    return f"/parties/{ids[0]}" if len(ids) == 1 else "/parties?filter=eligible"
+
+
+def build_homework(summary: dict, joinable: list[dict] | None = None) -> dict:
+    """/raid-check-summary → 숙제 표시 모델.
+
+    rows     — 캐릭터마다 그 캐릭터의 표시 레이드(visible_raid_names)만 칸(tiles)으로. 입장 가능한 레이드가 하나도
+               없는 캐릭터는 뺀다. active(남은 숙제 있음)와 finished(이번 주 다 끝냄)로 나눈다.
+    raids    — "레이드별" 보기: 레이드마다 그 레이드를 고른 캐릭터 칩 + 남은 수 + 참여 가능한 모집 수.
+    칸의 recruit = 이 캐릭터가 이 레이드로 참여 가능한 모집 중 공대 수(joinable에서 센다).
     """
-    characters = summary.get("characters") or []
-    columns: list[dict] = []
-    index: dict[str, int] = {}
-    for c in characters:
-        visible = set(c.get("visible_raid_names") or [])
-        for r in c.get("applicable_raids") or []:
-            name = r.get("raid_name")
-            if name not in visible:
-                continue
-            if name not in index:
-                index[name] = len(columns)
-                columns.append({"raid_name": name, "short_name": r.get("short_name") or name, "max_diffs": 0})
-            col = columns[index[name]]
-            col["max_diffs"] = max(col["max_diffs"], len(r.get("difficulties") or []))
-    for col in columns:
-        col["width"] = _seg_width(col["max_diffs"])
+    joinable = joinable or []
+    recruit: dict[tuple[str, str], list[str]] = {}
+    raid_recruit: dict[str, list[str]] = {}
+    for p in joinable:
+        raid_recruit.setdefault(p["raid_name"], []).append(p["message_id"])
+        for name in p.get("fits") or []:
+            recruit.setdefault((p["raid_name"], name), []).append(p["message_id"])
 
+    characters = summary.get("characters") or []
     rows = []
-    for c in characters:
+    raid_order: list[str] = []
+    raid_map: dict[str, dict] = {}
+    for ci, c in enumerate(characters):
+        cname = c["character_name"]
         visible = set(c.get("visible_raid_names") or [])
-        applicable = {r["raid_name"]: r for r in c.get("applicable_raids") or [] if r.get("raid_name") in visible}
-        if not applicable:
-            continue
-        done = set(c.get("completions") or [])
-        cells = []
-        for col in columns:
-            r = applicable.get(col["raid_name"])
-            if r is None:
-                cells.append(None)
+        done_keys = set(c.get("completions") or [])
+        tiles = []
+        for r in c.get("applicable_raids") or []:
+            rname = r.get("raid_name")
+            if rname not in visible:
                 continue
-            gold = r.get("difficulty_gold") or {}
-            cells.append({
-                "raid_name": r["raid_name"],
-                "short_name": col["short_name"],
-                "diffs": [
-                    {"name": d, "on": f"{r['raid_name']}_{d}" in done, "gold": gold.get(d)}
-                    for d in r.get("difficulties") or []
-                ],
-            })
-        total = c.get("total_slots")
-        total = len(applicable) if total is None else total
-        done_count = c.get("done_count") or 0
+            diffs = list(r.get("difficulties") or [])
+            done_diff = _done_difficulty(r, done_keys)
+            ids = [] if done_diff else recruit.get((rname, cname), [])
+            tile = {
+                "raid_name": rname,
+                "short_name": r.get("short_name") or rname,
+                "category": r.get("category") or "",
+                "diffs": diffs,
+                "diff": shown_difficulty(r, done_diff),
+                "done": done_diff is not None,
+                "recruit": len(ids),
+                "recruit_href": _recruit_link(ids) if ids else None,
+                "menu_id": f"hwd-{ci}-{len(tiles)}",
+            }
+            tiles.append(tile)
+            if rname not in raid_map:
+                raid_map[rname] = {"raid_name": rname, "short_name": tile["short_name"], "category": tile["category"], "entries": []}
+                raid_order.append(rname)
+            raid_map[rname]["entries"].append({"char": cname, "diff": tile["diff"], "done": tile["done"]})
+        if not tiles:
+            continue
+        done = sum(1 for t in tiles if t["done"])
         rows.append({
-            "name": c["character_name"],
+            "name": cname,
             "cls": c.get("character_class") or "",
             "item_level": c.get("item_level"),
-            "cells": cells,
-            "done": done_count,
-            "total": total,
-            "remaining": max(total - done_count, 0),
+            "tiles": tiles,
+            "done": done,
+            "total": len(tiles),
+            "finished": done >= len(tiles),
+            "ghosts": max(TILES_PER_ROW - len(tiles), 0),
+            "select_href": f"/raid-check/select/{quote(cname)}",
+        })
+
+    raids = []
+    for rname in raid_order:
+        r = raid_map[rname]
+        ids = raid_recruit.get(rname, [])
+        left = sum(1 for e in r["entries"] if not e["done"])
+        raids.append({
+            **r,
+            "left": left,
+            "total": len(r["entries"]),
+            "recruit": len(ids),
+            "recruit_href": _recruit_link(ids) if ids else None,
+            "create_href": f"/parties/create?raid={quote(rname)}",
         })
 
     done_sum = sum(r["done"] for r in rows)
     total_sum = sum(r["total"] for r in rows)
     return {
-        "columns": columns,
         "rows": rows,
+        "active": [r for r in rows if not r["finished"]],
+        "finished": [r for r in rows if r["finished"]],
+        "raids": raids,
         "done": done_sum,
         "total": total_sum,
         "pct": round(done_sum / total_sum * 100) if total_sum else 0,
-        "filter_default": len(rows) > HOMEWORK_FILTER_FROM,
-        "scroll": len(columns) > SCROLL_FROM_COLUMNS,
-        "grid_cols": " ".join(f"{col['width']}px" for col in columns),
         "select_characters": [
             {"name": c["character_name"], "cls": c.get("character_class") or "", "item_level": c.get("item_level")}
             for c in characters
         ],
     }
+
+
+def build_stats(homework: dict, schedule_count: int, joinable_count: int, now: datetime | None = None) -> list[dict]:
+    """위쪽 숫자 카드 4장. 초기화는 하루 넘게 남았으면 일, 하루 안이면 시간(경고색)."""
+    now = now or datetime.now(KST)
+    remaining = next_reset(now) - now
+    if remaining.days >= 1:
+        reset_value, reset_unit, reset_tone = remaining.days, "일", ""
+    else:
+        reset_value, reset_unit, reset_tone = max(1, remaining.seconds // 3600), "시간", "warn"
+    return [
+        {"key": "homework", "label": "이번 주 숙제", "icon": "check", "value": homework["done"], "unit": f"/ {homework['total']}", "tone": "ok" if homework["total"] and homework["done"] >= homework["total"] else ""},
+        {"key": "schedule", "label": "내 공대 일정", "icon": "clock", "value": schedule_count, "unit": "건", "tone": ""},
+        {"key": "joinable", "label": "참여 가능 공대", "icon": "plus", "value": joinable_count, "unit": "개", "tone": ""},
+        {"key": "reset", "label": "주간 초기화까지", "icon": "reset", "value": reset_value, "unit": reset_unit, "tone": reset_tone},
+    ]
 
 
 def build_extreme(summary: dict) -> list[dict]:
@@ -285,60 +360,67 @@ def build_maintenance(overview: dict) -> dict | None:
     }
 
 
-# 오늘의 콘텐츠 탭 순서 — 로아 API 순서(섬 → 카오스게이트 → 모험 섬 …)를 따르면 정작 많이 보는 모험섬이
-# 세 번째로 밀리고 일반 "섬"이 기본 탭이 됐다. 여기 없는 종류는 "섬" 바로 앞에 API 순서대로 둔다.
-TODAY_TAB_ORDER = ["모험섬", "필드보스", "카오스게이트", "태초의섬", "로웬", "항해"]
-TODAY_TAB_LAST = "섬"
-TODAY_VISIBLE_ROWS = 6  # 탭마다 처음 보이는 줄 수 — 나머지는 "나머지 N개"로 접는다(카오스게이트는 13줄)
+
+# 오늘의 콘텐츠 줄 순서 — 로아 API 순서(섬 → 카오스게이트 → 모험 섬 …)를 따르면 정작 많이 보는 모험섬이
+# 세 번째로 밀린다. 여기 없는 종류는 "섬" 바로 앞에 API 순서대로 둔다.
+TODAY_ORDER = ["모험섬", "필드보스", "카오스게이트", "태초의섬", "로웬", "항해"]
+TODAY_LAST = "섬"
 
 
-def _today_tab_key(label: str, api_index: int) -> tuple:
-    if label in TODAY_TAB_ORDER:
-        return (0, TODAY_TAB_ORDER.index(label))
-    if label == TODAY_TAB_LAST:
+def _today_key(label: str, api_index: int) -> tuple:
+    if label in TODAY_ORDER:
+        return (0, TODAY_ORDER.index(label))
+    if label == TODAY_LAST:
         return (2, 0)
     return (1, api_index)
 
 
 def build_today(overview: dict, now: datetime | None = None) -> dict | None:
-    """오늘의 콘텐츠 — 카테고리별로 묶고, 항목마다 다음 시작 시각(없으면 마지막)과 남은 시간을 붙인다.
-    탭은 TODAY_TAB_ORDER 순서, 줄은 곧 시작하는 순서로 정렬하고 오늘 일정이 끝난 항목은 아래로 보내 흐리게 한다."""
+    """오늘의 콘텐츠(작은 카드) — 종류마다 한 줄: 다음에 시작하는 항목 이름(같은 시각에 여럿이면 "외 N")과 그 시각.
+    같은 시각 항목 중 골드 섬이 있으면 그 이름을 앞에 두고 골드 표시. 오늘 일정이 다 지났으면 "오늘 끝남"."""
     now = now or datetime.now(KST)
     items = overview.get("today") or []
     if not isinstance(items, list):
         return None
-    tabs: list[dict] = []
+    groups: list[dict] = []
     for it in items:
         if not isinstance(it, dict):
             continue
         label = (it.get("category") or "기타").replace(" ", "")
-        tab = next((t for t in tabs if t["label"] == label), None)
-        if tab is None:
-            tab = {"label": label, "rows": []}
-            tabs.append(tab)
-        times = sorted(t for t in (_parse(x) for x in it.get("times") or []) if t)
-        upcoming = next((t for t in times if t >= now), None)
-        shown = upcoming or (times[-1] if times else None)
-        rewards = [r.get("name") for r in it.get("rewards") or [] if isinstance(r, dict) and r.get("name")]
-        tab["rows"].append({
-            "name": it.get("name") or "",
-            "icon": _safe_url(it.get("icon")),
-            "is_gold": bool(it.get("is_gold")),
-            "rewards": " · ".join(rewards[:3]),
-            "time": shown.strftime("%H:%M") if shown else "",
-            "rel": _until(upcoming, now) if upcoming else ("종료" if shown else ""),
-            "past": upcoming is None,
-            "_sort": (upcoming is None, upcoming or shown or now),
-        })
-    if not tabs:
+        group = next((g for g in groups if g["label"] == label), None)
+        if group is None:
+            group = {"label": label, "items": []}
+            groups.append(group)
+        group["items"].append(it)
+    if not groups:
         return None
-    tabs = [t for _, t in sorted(enumerate(tabs), key=lambda p: _today_tab_key(p[1]["label"], p[0]))]
-    for t in tabs:
-        t["rows"].sort(key=lambda r: r.pop("_sort"))
-        t["more"] = t["rows"][TODAY_VISIBLE_ROWS:]
-        t["rows"] = t["rows"][:TODAY_VISIBLE_ROWS]
-    return {"date": f"{now.month}/{now.day} ({'월화수목금토일'[now.weekday()]})", "tabs": tabs}
 
+    rows = []
+    for g in groups:
+        had_times = False
+        nexts = []
+        for it in g["items"]:
+            times = sorted(t for t in (_parse(x) for x in it.get("times") or []) if t)
+            had_times = had_times or bool(times)
+            upcoming = next((t for t in times if t >= now), None)
+            if upcoming:
+                nexts.append((upcoming, it))
+        if nexts:
+            first = min(t for t, _ in nexts)
+            same = [it for t, it in nexts if t == first]
+            same.sort(key=lambda it: not it.get("is_gold"))  # 골드 섬을 대표로
+            rows.append({
+                "label": g["label"], "name": same[0].get("name") or "", "more": len(same) - 1,
+                "time": first.strftime("%H:%M"), "rel": _until(first, now),
+                "gold": any(it.get("is_gold") for it in same), "ended": False,
+            })
+        else:
+            rows.append({
+                "label": g["label"], "name": "오늘 끝남" if had_times else "오늘 일정 없음", "more": 0,
+                "time": "", "rel": "", "gold": False, "ended": True,
+            })
+    rows = [r for _, r in sorted(enumerate(rows), key=lambda p: _today_key(p[1]["label"], p[0]))]
+    return {"date": f"{now.month}/{now.day} ({'월화수목금토일'[now.weekday()]})", "rows": rows}
 
 def build_events(overview: dict, now: datetime | None = None) -> dict | None:
     now = now or datetime.now(KST)
@@ -355,6 +437,7 @@ def build_events(overview: dict, now: datetime | None = None) -> dict | None:
             "link": _safe_url(ev.get("link")),
             "dday": ("오늘" if days == 0 else f"D-{days}") if days is not None else "",
             "until": f"{end.month}/{end.day} {end.strftime('%H:%M')}까지" if end else "",
+            "end_md": f"{end.month}/{end.day}" if end else "",
             "soon": days is not None and days <= 3,
             "key": end or datetime.max.replace(tzinfo=KST),
         })
@@ -394,6 +477,8 @@ def build_prices(prices: dict) -> list[dict] | None:
     return rows or None
 
 
+
+
 # ── 컨텍스트 ─────────────────────────────────────────────
 
 async def _dashboard_context(discord_id: str) -> dict:
@@ -405,32 +490,35 @@ async def _dashboard_context(discord_id: str) -> dict:
         bot_home.get_loa_prices(),
     )
     summary_failed = summary is None
-    summary = summary or {}
     parties = all_parties or []
 
+    joinable = joinable_parties(parties, summary, discord_id)
+    summary = summary or {}
     characters = summary.get("characters") or []
-    max_level = max((c.get("item_level") or 0) for c in characters) if characters else 0
-    mine, opportunities = split_parties(parties, discord_id, max_level)
+    mine = split_parties(parties, discord_id)
     overdue_mine = [
         {**party_view(p), "leader": leader_overview(p, discord_id)}
         for p in parties
         if p.get("leader_id") == discord_id and is_overdue_party(p)
     ]
+    homework = build_homework(summary, joinable)
+    schedule = build_schedule(mine, invites, discord_id)
 
     overview_ok = bool(overview.get("available"))
     return {
         "summary_failed": summary_failed,
         "has_characters": bool(characters),
-        "homework": build_homework(summary),
+        "homework": homework,
         "extreme": build_extreme(summary),
         "gold": build_gold(summary),
-        "reset": reset_view(),
+        "stats": build_stats(homework, len(schedule), len(joinable)),
         "invites": invites,
         "overdue_parties": overdue_mine,
         "todo_count": len(invites) + len(overdue_mine),
-        "schedule": build_schedule(mine, invites, discord_id)[:MY_SCHEDULE_LIMIT],
-        "opportunities": opportunities[:OPPORTUNITY_LIMIT],
-        "opportunity_count": len(opportunities),
+        "schedule": schedule[:PARTY_ROWS],
+        "schedule_count": len(schedule),
+        "opportunities": joinable[:PARTY_ROWS],
+        "opportunity_count": len(joinable),
         "maintenance": build_maintenance(overview),
         "today": build_today(overview) if overview_ok else None,
         "events": build_events(overview) if overview_ok else None,
@@ -447,6 +535,29 @@ async def main_dashboard(request: Request, user: dict = Depends(get_current_user
         request, "main.html", {"user": user, "active": "main", **ctx}
     )
 
+
+@router.post("/raid-check/difficulty-pref")
+async def set_difficulty_pref(request: Request, user: dict = Depends(get_current_user)):
+    """숙제 칸의 난이도(▾)를 바꾸면 home.js가 JSON {character_name, raid_name, difficulty}로 부른다.
+    봇이 이 캐릭터·레이드에 그 난이도가 있는지, 내 캐릭터인지 확인한다(difficulty: null = 저장값 지우기).
+    화면은 먼저 바꿔 두고(낙관적), 실패하면 되돌리고 토스트로 알린다."""
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return JSONResponse({"success": False, "reason": "잘못된 요청입니다."}, status_code=400)
+    character_name, raid_name, difficulty = body.get("character_name"), body.get("raid_name"), body.get("difficulty")
+    if not (isinstance(character_name, str) and character_name and isinstance(raid_name, str) and raid_name) \
+            or not (difficulty is None or (isinstance(difficulty, str) and difficulty)):
+        return JSONResponse({"success": False, "reason": "잘못된 요청입니다."}, status_code=400)
+    try:
+        result = await bot_home.set_raid_difficulty_pref(user["discord_id"], character_name, raid_name, difficulty)
+    except httpx.HTTPError:
+        return JSONResponse({"success": False, "reason": "봇 서버와 통신하지 못했습니다. 잠시 후 다시 시도해주세요."}, status_code=502)
+    if not result.get("success"):
+        return JSONResponse({"success": False, "reason": result.get("reason") or "난이도를 저장하지 못했습니다."}, status_code=400)
+    return {"success": True, "difficulty": result.get("difficulty", difficulty), "reason": None}
 
 @router.get("/main/gold")
 async def main_gold_fragment(request: Request, user: dict = Depends(get_current_user)):

@@ -1,159 +1,313 @@
-/* 홈(/main) 전용 — 공용 컴포넌트(.ui-card .btn .chip-btn .menu .banner …)에 없는 것만 여기서 만든다.
-   색·간격·글자는 전부 style.css의 토큰. 개편안 "홈" 탭 치수: 오른쪽 열 300px.
-   난이도 버튼(.seg)·스위치(.switch)·표(.table)·툴바(.toolbar)는 공용 컴포넌트 — 여기서 크기를 다시 정하지 않는다. */
+/* 홈(/main) 전용 — 공용 컴포넌트(.ui-card .btn .chip .menu .banner .switch …)에 없는 것만 여기서 만든다.
+   색은 전부 토큰 이름(테마가 값만 바꾼다). 새 토큰(--line --on-accent --accent-hover --menu)은 아직 없을 수 있어 옛 토큰으로 대체값을 둔다.
+   치수는 승인된 개편안(SPEC-home-v3): 숫자 카드 4장 → [큰 칸 | 작은 칸 340px], 화면 1600px 미만이면 작은 칸을 아래 2열로.
+   여기서 만든 것: 두 칸짜리 보기 전환(.hc-seg), 숙제 칸(.hw-tile)·칩(.hw-chip), 숫자 카드(.hs-stat), 한 줄 목록(.hc-cl·.hp-row). */
 
-.home { position: relative; }
-.home-grid {
-  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--sp-4); align-items: start;
+.home {
+  position: relative;
+  --hc-line: var(--line, var(--border-soft));
+  --hc-on-accent: var(--on-accent, var(--bg));
 }
-.home-main, .home-side { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+/* 본문 최대 폭 — 홈만 1640px(다른 화면은 page-wide 1320 그대로) */
+.main:has(.page-content.home) { --page-w: 1640px; }
 
-/* 카드 안쪽 여백·간격은 개편안 값(14/16, 10) */
-.home .ui-card { padding: 14px var(--sp-4); gap: 10px; }
-.home .ui-card.has-stripe { padding-left: calc(var(--sp-4) + 3px); }
-.home .ui-card-title { margin: 0; }
 .home .banner { margin-bottom: var(--sp-3); }
-.hc-muted { margin: 0; font-size: var(--fs-meta); color: var(--text-muted); }
-.home .nowrap { flex-wrap: nowrap; }
-.home .item-end { margin-left: auto; }
 .home .meta { font-size: var(--fs-meta); color: var(--text-muted); }
-.home .muted { color: var(--text-muted); }
+.hc-muted { margin: 0; font-size: var(--fs-body); color: var(--text-muted); }
+.home .item-end { margin-left: auto; }
 
-/* ── 숙제표 ───────────────────────────────────────────── */
-.hw-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-.hw-head-spacer { flex: 1; }
-.hw-count { display: inline-flex; align-items: baseline; gap: 4px; font-size: var(--fs-body); }
-.hw-count b { font-size: var(--fs-card); }
-.hw-menu-wrap { position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; }
-.hw-menu-wrap > .menu { min-width: 180px; } /* 위치는 ui.js data-float(화면 기준) */
-.hw-select-menu { max-height: 320px; overflow-y: auto; }
+/* ── 카드 공통 머리줄: 제목 · 숫자 · (빈칸) · 버튼들. 휴대폰에서 .hc-brk가 줄을 끊는다 ── */
+.home .ui-card { padding: 18px 20px; gap: 12px; border-radius: var(--r-lg); }
+.home .ui-card.has-stripe { padding-left: 23px; }
+.home .ui-card-title { margin: 0; font-size: 16px; letter-spacing: -0.4px; }
+.hc-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
+.hc-sp { flex: 1; }
+.hc-brk { display: none; }
+.hc-m-only { display: none; }
 
-.hw-scroll { overflow-x: auto; padding-bottom: 2px; }
-.hw {
-  display: grid; grid-template-columns: minmax(140px, 1fr) var(--hw-cols); column-gap: var(--sp-2); align-items: center;
-  min-width: 100%;
+/* 두 칸 보기 전환(캐릭터별/레이드별, 참여 가능/내 일정) — 공용 .seg는 난이도용이라 높이·모양이 달라 여기서 만든다 */
+.hc-seg { display: inline-flex; height: var(--ctrl-h); border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; flex: none; }
+.hc-seg > button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  border: 0; background: transparent; color: var(--text-muted); padding: 0 12px;
+  font: inherit; font-size: var(--fs-body); font-weight: 600; white-space: nowrap; cursor: pointer;
 }
-.hw-scroll.is-wide .hw { width: max-content; grid-template-columns: 160px var(--hw-cols); }
-.hw-row { display: contents; }
-.hw-row[hidden] { display: none; }
-.hw .hd, .hw-row > div { padding: var(--sp-2) 0; min-width: 0; }
-.hw .hd { padding: 0 0 6px; font-size: var(--fs-meta); font-weight: 600; color: var(--text-muted); }
-.hw .ln { grid-column: 1 / -1; padding: 0; height: 0; border-top: 1px solid var(--border-soft); }
-.hw .ln.dash { border-top-style: dashed; border-top-color: var(--border); }
-/* 가로로 스크롤될 때 캐릭터 열은 제자리 */
-.hw .hd:first-child, .hw .who { position: sticky; left: 0; z-index: 1; background: var(--panel); padding-right: var(--sp-2); }
-.who { display: flex; flex-direction: column; white-space: nowrap; min-width: 0; }
-.who > b { font-size: 14px; }
-.who > span { font-size: var(--fs-meta); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
-.hw .na { color: var(--text-muted); opacity: 0.45; padding-left: 24px; }
-.hw-x-note { grid-column: 3 / -1; font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; }
-.hw-x-note b { color: var(--text); font-weight: 600; }
+.hc-seg > button + button { border-left: 1px solid var(--border); }
+.hc-seg > button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+@media (hover: hover) { .hc-seg > button[aria-pressed="false"]:hover { background: var(--hover); color: var(--text); } }
+.hc-seg > button:active { background: var(--press); }
+.hc-seg > button:focus-visible { outline: none; box-shadow: var(--ring-in); }
+.hw-left[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
-/* ── 모바일 숙제 카드(데스크톱에서는 숨김) ── */
-.hw-mobile { display: none; }
-.hm-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.hm-head > b { font-size: 14px; flex: none; max-width: 40%; }
-.hm-head > .meta { flex: 1; min-width: 0; }
-.hm-count { margin-left: auto; flex: none; }
-.mrow { display: flex; align-items: center; gap: 10px; padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); }
-.mrow > b { flex: 1; min-width: 0; font-weight: 600; }
-.mrow .hw-menu-wrap { flex: none; }
+/* ── 숫자 카드 ── */
+.hs-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); margin-bottom: 20px; }
+.hs-stat { min-width: 0; padding: 16px 20px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.hs-k { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-body); color: var(--text-muted); min-width: 0; }
+.hs-k svg { flex: none; color: var(--accent); }
+.hs-v { margin-top: 6px; font-size: 26px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
+.hs-v small { margin-left: 4px; font-size: 14px; font-weight: 500; color: var(--text-muted); letter-spacing: 0; }
+.hs-stat.is-warn .hs-v { color: var(--warn); }
+.hs-stat.is-ok .hs-v { color: var(--ok); }
+
+/* ── 큰 칸 / 작은 칸 ── */
+.home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.home-main, .home-side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 
 /* ── 할 일 ── */
-.hc-todo .item { display: flex; flex-direction: column; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--border-soft); min-width: 0; }
-.hc-todo > .ui-row:first-child + .item { border-top: 0; padding-top: 0; }
+.hc-todo .item { display: flex; flex-direction: column; gap: var(--sp-2); padding-top: 10px; border-top: 1px solid var(--hc-line); min-width: 0; }
+.hc-todo > .hc-head + .item { border-top: 0; padding-top: 0; }
+.hc-todo .item-line { display: flex; align-items: center; gap: var(--sp-2) 10px; flex-wrap: wrap; min-width: 0; }
+.hc-todo .item-line > b { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.hc-todo .item-line > .meta { min-width: 0; overflow-wrap: anywhere; }
 .hc-todo .ui-row > form { margin: 0; display: contents; }
-.hc-todo .ui-row > b { min-width: 0; font-size: 14px; }
-.isle .what-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .inv-form { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; }
-.inv-pick { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: var(--sp-2); }
+.inv-pick { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: var(--sp-2); max-width: 420px; }
 .inv-pick[hidden] { display: none; }
 .inv-pick .themed-select { min-width: 0; }
 
-/* ── 한 줄 목록(내 일정·들어갈 만한 공대·이벤트·시세) ── */
-.tl-list { display: flex; flex-direction: column; }
-.tl {
-  display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 10px; align-items: center;
-  padding: 9px 0; border-top: 1px solid var(--border-soft); color: var(--text); text-decoration: none; white-space: nowrap;
-}
-.tl-list > .tl:first-child { border-top: 0; padding-top: 0; }
-.tl-list > .tl:last-child { padding-bottom: 0; }
-.tl .when { display: flex; flex-direction: column; font-size: var(--fs-meta); color: var(--text-muted); }
-.tl .when .num { color: var(--text); font-size: var(--fs-body); }
-.tl .what, .isle .what, .price .what { display: flex; flex-direction: column; min-width: 0; }
-.tl .what b, .isle .what b, .price .what b { font-size: var(--fs-body); }
-@media (hover: hover) { a.tl:hover .what b { color: var(--accent); } }
-a.tl:focus-visible { box-shadow: var(--ring); border-radius: var(--r-sm); }
+/* ── 숙제 ── */
+.hc-hw { container-type: inline-size; }
+.hw-count { display: inline-flex; align-items: baseline; gap: 4px; }
+.hw-count b { font-size: 15px; }
+.hw-select-menu { max-height: 320px; overflow-y: auto; min-width: 180px; }
+.hc-hw .ui-gauge { margin: -4px 0 0; }
+.hw-panel[hidden] { display: none; }
 
-/* ── 오늘의 콘텐츠 ── */
-.isle { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); white-space: nowrap; }
-.isle-list > .isle:first-child { border-top: 0; padding-top: 0; }
-.isle-list[hidden] { display: none; }
-/* 오늘 일정이 끝난 항목 — 맨 아래로 정렬되고 흐리게 */
-.isle.is-past { opacity: 0.5; }
-/* 탭이 많아도 한 줄 — 넘치면 탭 줄만 가로로 민다 */
-.hc-today-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
-.hc-today-tabs::-webkit-scrollbar { display: none; }
-.hc-today-tabs > .chip-btn { flex: none; }
-/* 6줄 넘는 탭의 나머지 */
-.isle-more > summary {
-  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 var(--sp-1); border-top: 1px solid var(--border-soft);
+/* 캐릭터 줄 = 이름 칸 | 레이드 칸 3개(넘치면 다음 줄) */
+.hw-crow { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: var(--sp-2); align-items: center; padding: 10px 0; border-top: 1px solid var(--hc-line); }
+.hw-panel > .hw-crow:first-child { border-top: 0; padding-top: 0; }
+.hw-crow[hidden] { display: none; }
+.hw-who { min-width: 0; display: flex; flex-direction: column; }
+.hw-who > b { font-size: 15px; letter-spacing: -0.3px; line-height: 1.35; overflow-wrap: anywhere; }
+.hw-who > .meta { overflow-wrap: anywhere; }
+.hw-dots { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: var(--fs-meta); color: var(--text-muted); }
+.hw-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--sunken); border: 1px solid var(--line-in); flex: none; }
+.hw-dots i.on { background: var(--accent); border-color: var(--accent); }
+.hw-dots .num { margin-left: 4px; }
+.hw-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); min-width: 0; }
+
+/* 레이드 칸. .hw-hit(빈 버튼)가 칸 전체를 덮고, 글자·원은 그 위의 장식 — 누르면 hit로 간다 */
+.hw-tile {
+  position: relative; display: flex; align-items: center; gap: 10px; min-height: 58px; min-width: 0; padding: 6px 8px 6px 10px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--sunken);
+  transition: background var(--t), border-color var(--t);
+}
+.hw-hit {
+  position: absolute; inset: 0; z-index: 0; width: 100%; margin: 0; padding: 0;
+  border: 0; border-radius: inherit; background: transparent; cursor: pointer;
+}
+.hw-hit:active { background: var(--press); }
+.hw-hit:focus-visible { outline: none; box-shadow: var(--ring); }
+@media (hover: hover) {
+  .hw-tile:not(.is-locked):not(.is-ghost):hover { border-color: var(--line-in); }
+  .hw-tile:not(.is-locked) .hw-hit:hover { background: var(--hover); }
+}
+.hw-ck, .hw-nm { position: relative; z-index: 1; pointer-events: none; }
+.hw-ck {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-in);
+  display: grid; place-items: center; color: transparent;
+}
+.hw-nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hw-nm > b { font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.hw-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--fs-meta); color: var(--text-muted); line-height: 1.45; min-width: 0; }
+.hw-sub-todo { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.hw-sub-done { display: none; }
+.hw-badge {
+  pointer-events: auto; position: relative; z-index: 2;
+  display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--r-pill);
+  font-size: var(--fs-label); font-weight: 700; white-space: nowrap; text-decoration: none;
+  color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn);
+}
+@media (hover: hover) { .hw-badge:hover { background: var(--warn); color: var(--hc-on-accent); } }
+.hw-badge:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* 난이도 버튼(▾) — 칸 체크와 따로 눌린다 */
+.hw-dd {
+  position: relative; z-index: 2; flex: none; display: inline-flex; align-items: center; gap: 4px;
+  height: 32px; padding: 0 8px 0 10px; border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--panel); color: var(--text); font: inherit; font-size: var(--fs-body); white-space: nowrap; cursor: pointer;
+}
+.hw-dd .hw-car { color: var(--text-muted); }
+@media (hover: hover) { button.hw-dd:hover { border-color: var(--line-in); background: var(--hover); } }
+button.hw-dd:active { background: var(--press); }
+button.hw-dd:focus-visible { outline: none; box-shadow: var(--ring); }
+.hw-dd.is-static { cursor: default; background: transparent; border-color: transparent; color: var(--text-muted); pointer-events: none; }
+.hw-dd-menu { min-width: 150px; }
+.hw-dd-menu .menu-item[aria-checked="true"] { color: var(--accent); font-weight: 700; }
+.hw-dd-menu .menu-item[aria-checked="false"] .menu-state { visibility: hidden; }
+.hw-dd-menu .menu-item[aria-checked="true"] .menu-state { color: var(--accent); }
+
+/* 클리어 */
+.hw-tile.is-done { background: var(--accent-soft); border-color: var(--accent-dim); }
+.hw-tile.is-done .hw-ck, .hw-chip.is-done .hw-ck { background: var(--accent); border-color: var(--accent); color: var(--hc-on-accent); }
+.hw-tile.is-done .hw-sub { color: var(--accent); }
+.hw-tile.is-done .hw-sub-todo, .hw-tile.is-done .hw-dd { display: none; }
+.hw-tile.is-done .hw-sub-done { display: inline; }
+/* 처리 중: 원이 돈다(다시 눌러도 무시) */
+.hw-tile.is-busy .hw-ck, .hw-chip.is-busy .hw-ck { border-color: var(--accent-dim); border-top-color: var(--accent); animation: hw-spin 0.7s linear infinite; }
+.hw-tile.is-busy .hw-hit, .hw-chip.is-busy { cursor: progress; }
+/* 실패: 빨갛게 흔들고 원래대로 */
+.hw-tile.is-err, .hw-chip.is-err { border-color: var(--danger); background: var(--danger-soft); animation: hw-shake 0.3s; }
+.hw-tile.is-err .hw-sub { color: var(--danger); }
+@keyframes hw-spin { to { transform: rotate(360deg); } }
+@keyframes hw-shake { 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+@media (prefers-reduced-motion: reduce) { .hw-tile.is-err, .hw-chip.is-err { animation: none; } .hw-tile.is-busy .hw-ck, .hw-chip.is-busy .hw-ck { animation-duration: 2s; } }
+/* 잠김(익스트림: 이미 다른 난이도로 클리어·입장 가능 캐릭터 없음) */
+.hw-tile.is-locked { opacity: 0.55; }
+.hw-tile.is-locked .hw-hit { cursor: not-allowed; }
+/* 빈 칸 — 고른 레이드가 3개보다 적을 때 */
+.hw-tile.is-ghost {
+  justify-content: center; border-style: dashed; background: transparent; color: var(--text-muted);
+  font-size: var(--fs-body); text-decoration: none; text-align: center;
+}
+@media (hover: hover) { .hw-tile.is-ghost:hover { color: var(--text); border-color: var(--line-in); background: var(--hover); } }
+.hw-tile.is-ghost:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* 익스트림 줄 — 점선으로 구분 */
+.hw-crow.hw-x { border-top-style: dashed; border-top-color: var(--border); }
+.hw-panel > .hw-crow.hw-x:first-child { border-top: 0; }
+
+/* 다 끝낸 캐릭터 접기 */
+.hw-fin > summary {
+  display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 4px; border-top: 1px solid var(--hc-line);
   color: var(--text-muted); font-size: var(--fs-body); cursor: pointer; list-style: none; border-radius: var(--r-sm);
 }
-.isle-more > summary::-webkit-details-marker { display: none; }
-.isle-more > summary::before { content: "\25B8"; font-size: 10px; }
-.isle-more[open] > summary::before { content: "\25BE"; }
-@media (hover: hover) { .isle-more > summary:hover { color: var(--text); background: var(--hover); } }
-.isle-more > summary:focus-visible { outline: none; box-shadow: var(--ring); }
-.isle .thumb {
-  width: 52px; height: 36px; border-radius: var(--r-sm); overflow: hidden; display: grid; place-items: center;
-  background: linear-gradient(135deg, #1d3a3c, #0f2224); font-size: var(--fs-label); color: var(--text-muted);
-}
-.isle .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.isle-when { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: var(--fs-body); }
-.hc-switch-row { padding-top: 10px; border-top: 1px dashed var(--border); flex-wrap: nowrap; }
-.hc-switch-label { min-width: 0; font-size: var(--fs-body); }
+.hw-panel > .hw-fin:first-child > summary { border-top: 0; }
+.hw-fin > summary::-webkit-details-marker { display: none; }
+.hw-fin > summary::before { content: "\25B8"; font-size: 10px; }
+.hw-fin[open] > summary::before { content: "\25BE"; }
+@media (hover: hover) { .hw-fin > summary:hover { color: var(--text); } }
+.hw-fin > summary:focus-visible { outline: none; box-shadow: var(--ring); }
+.hw-all { padding: 4px 0 10px; }
 
-/* ── 시세 ── */
-.price { display: grid; grid-template-columns: minmax(0, 1fr) 92px 56px; gap: 10px; align-items: center; padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); white-space: nowrap; }
-.tl-list > .price:first-child { border-top: 0; padding-top: 0; }
+/* 남은 것만: 클리어한 칸·빈 칸·다 끝낸 캐릭터·레이드별의 클리어 칩을 숨긴다 */
+.hc-hw.is-left .hw-tile.is-done, .hc-hw.is-left .hw-tile.is-ghost, .hc-hw.is-left .hw-fin,
+.hc-hw.is-left .hw-chip.is-done, .hc-hw.is-left .hw-rrow.is-clear { display: none; }
+
+/* 레이드별 보기 */
+.hw-rrow { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--hc-line); }
+.hw-panel > .hw-rrow:first-child { border-top: 0; padding-top: 0; }
+.hw-rhead { min-width: 0; }
+.hw-rhead h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.hw-rhead .meta b { color: var(--text); }
+.hw-racts { display: flex; gap: 6px; margin-top: var(--sp-2); flex-wrap: wrap; }
+.hw-rrow.is-clear .hw-create { display: none; }
+.hw-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.hw-alldone { display: none; align-self: center; }
+.hw-rrow.is-clear .hw-alldone { display: inline; }
+.hc-hw.is-left .hw-rrow.is-clear .hw-alldone { display: none; }
+.hw-chip {
+  display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 36px; max-width: 100%; padding: 4px 12px 4px 8px;
+  border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--sunken); color: var(--text);
+  font: inherit; font-size: var(--fs-body); cursor: pointer; text-align: left; overflow-wrap: anywhere;
+}
+.hw-chip .hw-ck { width: 18px; height: 18px; }
+.hw-chip .hw-ck svg { width: 10px; height: 10px; }
+.hw-chip small { color: var(--text-muted); font-size: var(--fs-meta); white-space: nowrap; }
+.hw-chip.is-done { background: var(--accent-soft); border-color: var(--accent-dim); }
+.hw-chip.is-done small { color: var(--accent); }
+@media (hover: hover) { .hw-chip:not(.is-done):hover { border-color: var(--line-in); background: var(--hover); } }
+.hw-chip:active { background: var(--press); }
+.hw-chip:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* 숙제 카드가 좁을 때(휴대폰·좁은 창): 이름 칸이 위로, 칸은 한 줄에 하나 */
+@container (max-width: 620px) {
+  .hw-crow { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .hw-who { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-2); }
+  .hw-who > .hw-dots { grid-row: 1 / 3; grid-column: 2; margin: 0; }
+  .hw-tiles { grid-template-columns: minmax(0, 1fr); }
+  .hw-tile { min-height: 54px; }
+  .hw-rrow { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+@container (min-width: 621px) and (max-width: 880px) {
+  .hw-crow { grid-template-columns: 150px minmax(0, 1fr); }
+  .hw-rrow { grid-template-columns: 160px minmax(0, 1fr); }
+}
+
+/* ── 공대 ── */
+.hc-party { container-type: inline-size; }
+.hp-panel { display: flex; flex-direction: column; }
+.hp-panel[hidden] { display: none; }
+.hp-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 150px auto; gap: 12px; align-items: center; min-height: 56px; padding: 8px 0; border-top: 1px solid var(--hc-line); }
+.hp-panel > .hp-row:first-child { border-top: 0; }
+.hp-when, .hp-what { color: var(--text); text-decoration: none; min-width: 0; }
+.hp-when b { display: block; font-size: 14px; }
+.hp-when span { font-size: var(--fs-meta); color: var(--text-muted); }
+.hp-what { display: flex; flex-direction: column; }
+.hp-what b { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; overflow-wrap: anywhere; }
+.hp-what > span { font-size: var(--fs-meta); color: var(--text-muted); overflow-wrap: anywhere; }
+@media (hover: hover) { a.hp-what:hover b { color: var(--accent); } }
+.hp-when:focus-visible, .hp-what:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+.hp-fill { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; font-size: var(--fs-meta); color: var(--text-muted); min-width: 0; }
+.hp-fill b { font-size: 15px; color: var(--text); }
+.hp-act { display: flex; justify-content: flex-end; }
+.hp-act form { margin: 0; }
+.hp-act .menu form { display: contents; }
+.hp-empty { padding: 6px 0; }
+.hp-more { display: block; padding-top: 10px; border-top: 1px solid var(--hc-line); font-size: var(--fs-body); }
+@container (max-width: 560px) {
+  .hp-row { grid-template-columns: 64px minmax(0, 1fr) auto; }
+  .hp-fill { display: none; }
+}
+
+/* ── 작은 칸 카드(오늘의 콘텐츠·이벤트·시세·골드) ── */
+.home .hc-side { padding: 16px; }
+.home .hc-side .ui-card-title { font-size: 15px; }
+.hc-list { display: flex; flex-direction: column; }
+.hc-cl { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; min-height: 40px; padding: 6px 0; border-top: 1px solid var(--hc-line); font-size: var(--fs-body); }
+.hc-list > .hc-cl:first-child { border-top: 0; }
+.hc-cl .k { color: var(--text-muted); overflow-wrap: anywhere; }
+.hc-cl .k.is-soon { color: var(--warn); }
+.hc-cl .v { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.hc-cl .v .chip { vertical-align: 1px; }
+.hc-cl .t { white-space: nowrap; }
+.hc-cl.is-ended .v, .hc-cl.is-ended .t { color: var(--text-muted); }
+.lnk-plain { color: inherit; text-decoration: none; }
+@media (hover: hover) { .lnk-plain:hover { color: var(--accent); text-decoration: underline; } }
+.lnk-plain:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 2px; }
+.hc-switch-row { display: flex; align-items: center; gap: var(--sp-2); padding-top: 10px; border-top: 1px solid var(--hc-line); }
+.hc-switch-label { flex: 1; min-width: 0; font-size: var(--fs-body); }
+
+/* 시세 */
+.price { display: grid; grid-template-columns: minmax(0, 1fr) 92px 56px; gap: 10px; align-items: center; padding: var(--sp-2) 0; border-top: 1px solid var(--hc-line); }
+.hc-list > .price:first-child { border-top: 0; padding-top: 0; }
+.price .what { display: flex; flex-direction: column; min-width: 0; }
+.price .what b { font-size: var(--fs-body); overflow-wrap: anywhere; }
 .price .pct { text-align: right; font-size: var(--fs-body); }
 .spark.is-up, .pct.is-up { color: var(--danger); }
-.spark.is-down, .pct.is-down { color: #5aa9ff; }
+.spark.is-down, .pct.is-down { color: var(--accent); }
 .spark.is-flat, .pct.is-flat { color: var(--text-muted); }
 
-/* ── 이번 주 골드 ── */
+/* 이번 주 골드(_home_gold.html) */
 .hc-gold .gold-sum { align-items: baseline; gap: 6px; }
 .gold-num { color: var(--gold); }
 .hc-gold b.gold-num { font-size: 22px; }
 .ui-gauge.is-gold i { background: var(--gold); }
 
-/* ── 태블릿 이하: 한 열 ── */
-@media (max-width: 1024px) {
+/* ── 화면 1600px 미만: 작은 칸을 큰 칸 아래 2열로(숙제 칸 폭이 우선) ── */
+@media (max-width: 1599px) {
   .home-grid { grid-template-columns: minmax(0, 1fr); }
   .home-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .home-side > .hc-todo { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
+  .hs-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* ── 모바일: 급한 것(할 일) 먼저, 숙제는 캐릭터마다 카드 ── */
+/* ── 휴대폰: 한 줄 ── */
 @media (max-width: 640px) {
-  .home-grid { display: flex; flex-direction: column; align-items: stretch; }
-  .home-main, .home-side { display: contents; }
-  .hc-todo { order: 0; }
-  .hc-hw { order: 1; }
-  .hc-gold { order: 2; }
-  .hc-sched { order: 3; }
-  .hc-today { order: 4; }
-  .hc-price { order: 5; }
-  .hc-event { order: 6; }
-  .hc-opp { order: 7; }
-  .hc-hw.ui-card { padding: 0; border: 0; background: transparent; gap: var(--sp-3); overflow: visible; }
-  .hc-hw .ui-empty, .hc-hw.ui-card:not([data-hw]) { padding: 14px var(--sp-4); }
-  .hw-desktop { display: none; }
-  .hw-mobile { display: flex; flex-direction: column; gap: var(--sp-3); }
-  .hm-card[hidden] { display: none; }
-  .hm-card { padding: var(--sp-3); }
-  .hm-card .mrow:nth-of-type(1) { border-top: 0; }
+  .home .ui-card { padding: 14px; }
+  .home .hc-side { padding: 14px; }
+  .hs-stats { gap: 10px; margin-bottom: var(--sp-4); }
+  .hs-stat { padding: 12px 14px; }
+  .hs-v { font-size: 22px; }
+  .home-grid, .home-main, .home-side { gap: var(--sp-4); }
+  .home-side { grid-template-columns: minmax(0, 1fr); }
+  .hc-brk { display: block; flex-basis: 100%; height: 0; }
+  .hc-head > .hc-seg { flex: 1 1 100%; }
+  .hc-seg > button { flex: 1; }
+  .hc-m-only { display: inline-flex; }
+  .hc-sp.hc-m-only { display: block; }
+  .hc-d-only { display: none; }
   .inv-form .btn.sm, .hc-todo .btn.sm { height: 44px; padding: 0 var(--sp-4); font-size: var(--fs-body); }
   .hc-todo .btn.pri { flex: 1; }
 }

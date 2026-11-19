@@ -1,30 +1,116 @@
-{# 홈 숙제표 전용 조각 #}
+{# 홈 숙제 전용 조각 — 칸(tile)·캐릭터 줄·레이드별 칩·익스트림 칸. 동작은 pages/home.js(전부 document 위임). #}
 
-{# 익스트림 난이도 버튼 줄 — 하나라도 클리어했으면 선택한 난이도만 눌러서 해제하고 나머지는 잠근다.
-   입장 가능한 캐릭터가 여럿이면 누를 때 캐릭터를 고르는 메뉴(.menu)가 열린다. idx는 같은 화면의 메뉴 id를 겹치지 않게 하는 번호. #}
-{% macro extreme_seg(x, where, idx) %}
-<div class="hw-menu-wrap">
-  <span class="seg" role="group" aria-label="{{ x.short_name }} 원정대 클리어" data-x-raid="{{ x.raid_name }}" data-short="{{ x.short_name }}" data-x-by="{{ x.character_name or '' }}" data-x-prev="{{ x.difficulty or '' }}">
-    {% for d in x.diffs %}
-    {% if d.on %}
-    <button type="button" class="on" data-diff="{{ d.name }}" aria-pressed="true" data-x-clear>{{ d.name }}</button>
-    {% elif x.cleared %}
-    <button type="button" class="locked" data-diff="{{ d.name }}" aria-pressed="false" aria-disabled="true" data-tip="이번 주는 {{ x.difficulty }}로 이미 클리어했습니다">{{ d.name }}</button>
-    {% elif not d.eligible %}
-    <button type="button" class="locked" data-diff="{{ d.name }}" aria-pressed="false" aria-disabled="true" data-tip="입장 가능한 캐릭터가 없습니다">{{ d.name }}</button>
-    {% elif d.eligible | length == 1 %}
-    <button type="button" data-diff="{{ d.name }}" aria-pressed="false" data-x-set data-x-char="{{ d.eligible[0].name }}">{{ d.name }}</button>
-    {% else %}
-    <button type="button" data-diff="{{ d.name }}" aria-pressed="false" data-x-set data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="xm-{{ where }}-{{ idx }}-{{ loop.index0 }}">{{ d.name }}</button>
-    {% endif %}
-    {% endfor %}
+{% macro check_icon() -%}
+<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{%- endmacro %}
+
+{% macro caret_icon() -%}
+<svg class="hw-car" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{%- endmacro %}
+
+{# 레이드 칸 하나. 칸(.hw-hit)을 누르면 보이는 난이도로 완료 체크/해제, ▾(.hw-dd)는 난이도 고르기(저장).
+   .hw-hit는 칸 전체를 덮는 빈 버튼이고 글자는 그 위에 겹친 장식(pointer-events: none) — 버튼 안에 링크(모집 N)를 넣지 않으려고. #}
+{% macro tile(row, t) %}
+<div class="hw-tile{% if t.done %} is-done{% endif %}" data-hw-item data-char="{{ row.name }}" data-raid="{{ t.raid_name }}" data-short="{{ t.short_name }}" data-diff="{{ t.diff }}" data-done="{{ t.diff if t.done else '' }}">
+  <button type="button" class="hw-hit" data-hw-hit aria-pressed="{{ 'true' if t.done else 'false' }}" aria-label="{{ row.name }} · {{ t.raid_name }} {{ t.diff }} 완료"></button>
+  <span class="hw-ck" aria-hidden="true">{{ check_icon() }}</span>
+  <span class="hw-nm">
+    <b>{{ t.raid_name }}</b>
+    <span class="hw-sub">
+      <span class="hw-sub-todo">{% if t.category %}<span>{{ t.category }}</span>{% endif %}{% if t.recruit %}<a class="hw-badge" href="{{ t.recruit_href }}" title="{{ row.name }}(으)로 참여 가능한 {{ t.raid_name }} 공대">모집 {{ t.recruit }}</a>{% endif %}</span>
+      <span class="hw-sub-done" data-done-label>{{ t.diff }} 클리어</span>
+    </span>
   </span>
-  {% if not x.cleared %}
-  {% for d in x.diffs if d.eligible | length > 1 %}
-  <div class="menu hw-x-menu" data-float id="xm-{{ where }}-{{ idx }}-{{ x.diffs.index(d) }}" role="menu" aria-label="{{ d.name }} 클리어 캐릭터" hidden>
-    {% for c in d.eligible %}<button type="button" class="menu-item" role="menuitem" data-x-pick="{{ c.name }}" data-x-diff="{{ d.name }}">{{ c.name }}<span class="menu-state num">{{ c.item_level | ilvl }}</span></button>{% endfor %}
+  {% if t.diffs | length > 1 %}
+  <button type="button" class="hw-dd" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="{{ t.menu_id }}" aria-label="{{ t.raid_name }} 난이도: {{ t.diff }}"><span data-dd-label>{{ t.diff }}</span>{{ caret_icon() }}</button>
+  <div class="menu hw-dd-menu" id="{{ t.menu_id }}" data-float="end" role="menu" aria-label="{{ row.name }} · {{ t.raid_name }} 난이도" hidden>
+    {% for d in t.diffs %}<button type="button" class="menu-item" role="menuitemradio" aria-checked="{{ 'true' if d == t.diff else 'false' }}" data-hw-pick="{{ d }}">{{ d }}<span class="menu-state" aria-hidden="true">{{ check_icon() }}</span></button>{% endfor %}
   </div>
-  {% endfor %}
+  {% else %}
+  <span class="hw-dd is-static">{{ t.diff }}</span>
   {% endif %}
 </div>
 {% endmacro %}
+
+{% macro crow(row) %}
+<div class="hw-crow" data-row="{{ row.name }}" data-done="{{ row.done }}" data-total="{{ row.total }}">
+  <div class="hw-who">
+    <b>{{ row.name }}</b>
+    <span class="meta">{{ row.cls }} · <span class="num">{{ row.item_level | ilvl }}</span></span>
+    <span class="hw-dots" data-hw-dots>{% for t in row.tiles %}<i{% if loop.index <= row.done %} class="on"{% endif %}></i>{% endfor %}<span class="num" data-char-count>{{ row.done }}/{{ row.total }}</span></span>
+  </div>
+  <div class="hw-tiles">
+    {% for t in row.tiles %}{{ tile(row, t) }}{% endfor %}
+    {% for _ in range(row.ghosts) %}<a class="hw-tile is-ghost" href="{{ row.select_href }}">+ 레이드 고르기</a>{% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{# 레이드별 보기 한 줄 — 칩을 누르면 그 캐릭터의 칸과 같이 체크된다(같은 data-char/data-raid) #}
+{% macro rrow(r) %}
+<div class="hw-rrow{% if not r.left %} is-clear{% endif %}" data-hw-raid="{{ r.raid_name }}">
+  <div class="hw-rhead">
+    <h3>{{ r.raid_name }}</h3>
+    <div class="meta">{% if r.category %}{{ r.category }} · {% endif %}남은 캐릭터 <b data-left>{{ r.left }}</b>/{{ r.total }}</div>
+    <div class="hw-racts">
+      {% if r.recruit %}<a class="btn sm" href="{{ r.recruit_href }}">모집 중 {{ r.recruit }}</a>{% endif %}
+      <a class="btn sm hw-create" href="{{ r.create_href }}">+ 공대 열기</a>
+    </div>
+  </div>
+  <div class="hw-chips">
+    {% for e in r.entries %}
+    <button type="button" class="hw-chip{% if e.done %} is-done{% endif %}" data-hw-item data-hw-hit data-char="{{ e.char }}" data-raid="{{ r.raid_name }}" data-short="{{ r.short_name }}" data-diff="{{ e.diff }}" data-done="{{ e.diff if e.done else '' }}" aria-pressed="{{ 'true' if e.done else 'false' }}"><span class="hw-ck" aria-hidden="true">{{ check_icon() }}</span>{{ e.char }}<small data-chip-diff>{{ e.diff }}</small></button>
+    {% endfor %}
+    <span class="meta hw-alldone">모두 끝났습니다</span>
+  </div>
+</div>
+{% endmacro %}
+
+{# 익스트림(원정대 주 1회) — 난이도마다 칸 하나. 클리어한 난이도 칸을 누르면 해제, 나머지는 잠긴다.
+   입장 가능한 캐릭터가 여럿이면 칸을 누를 때 캐릭터를 고르는 메뉴가 열린다. idx는 메뉴 id를 겹치지 않게 하는 번호. #}
+{% macro extreme_row(x, idx) %}
+<div class="hw-crow hw-x">
+  <div class="hw-who">
+    <b>{{ x.short_name }}</b>
+    <span class="meta">원정대 주 1회{% if x.period %} · {{ x.period.label }}{% endif %}</span>
+  </div>
+  <div class="hw-tiles">
+    {% for d in x.diffs %}
+    {% set mid = "xm-" ~ idx ~ "-" ~ loop.index0 %}
+    <div class="hw-tile hw-xt{% if d.on %} is-done{% elif x.cleared or not d.eligible %} is-locked{% endif %}" data-x-raid="{{ x.raid_name }}" data-short="{{ x.short_name }}" data-diff="{{ d.name }}" data-x-by="{{ x.character_name or '' }}">
+      {% if d.on %}
+      <button type="button" class="hw-hit" data-x-clear aria-pressed="true" aria-label="{{ x.short_name }} {{ d.name }} 원정대 클리어 해제"></button>
+      {% elif x.cleared %}
+      <button type="button" class="hw-hit" aria-disabled="true" aria-label="{{ x.short_name }} {{ d.name }} — 이번 주는 {{ x.difficulty }}로 이미 클리어"></button>
+      {% elif not d.eligible %}
+      <button type="button" class="hw-hit" aria-disabled="true" aria-label="{{ x.short_name }} {{ d.name }} — 입장 가능한 캐릭터 없음"></button>
+      {% elif d.eligible | length == 1 %}
+      <button type="button" class="hw-hit" data-x-set data-x-char="{{ d.eligible[0].name }}" aria-pressed="false" aria-label="{{ x.short_name }} {{ d.name }} {{ d.eligible[0].name }}(으)로 원정대 클리어"></button>
+      {% else %}
+      <button type="button" class="hw-hit" data-menu-trigger aria-haspopup="menu" aria-expanded="false" aria-controls="{{ mid }}" aria-label="{{ x.short_name }} {{ d.name }} 클리어한 캐릭터 고르기"></button>
+      {% endif %}
+      <span class="hw-ck" aria-hidden="true">{{ check_icon() }}</span>
+      <span class="hw-nm">
+        <b>{{ x.short_name }} {{ d.name }}</b>
+        <span class="hw-sub">{% if d.on %}{{ x.character_name }} 클리어{% elif x.cleared %}이번 주 {{ x.difficulty }}로 클리어함{% elif not d.eligible %}입장 가능한 캐릭터 없음{% elif d.eligible | length == 1 %}{{ d.eligible[0].name }}{% else %}캐릭터 {{ d.eligible | length }}명 중 고르기{% endif %}</span>
+      </span>
+      {% if not x.cleared and d.eligible | length > 1 %}
+      <div class="menu hw-dd-menu" data-float="end" id="{{ mid }}" role="menu" aria-label="{{ d.name }} 클리어 캐릭터" hidden>
+        {% for c in d.eligible %}<button type="button" class="menu-item" role="menuitem" data-x-pick="{{ c.name }}" data-x-diff="{{ d.name }}">{{ c.name }}<span class="menu-state num">{{ c.item_level | ilvl }}</span></button>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{# 위쪽 숫자 카드 아이콘 #}
+{% macro stat_icon(name) -%}
+<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+{%- if name == "check" %}<circle cx="8" cy="8" r="6.2"/><path d="M5.2 8.2l2 2 3.8-4.2"/>
+{%- elif name == "clock" %}<circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.4 1.6"/>
+{%- elif name == "plus" %}<rect x="2" y="2" width="12" height="12" rx="3"/><path d="M8 5v6M5 8h6"/>
+{%- else %}<path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3"/><path d="M12 1.8v2.8H9.2"/>{% endif -%}
+</svg>
+{%- endmacro %}

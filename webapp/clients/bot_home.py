@@ -63,3 +63,22 @@ async def set_gold_island_subscription(discord_id: str, enabled: bool) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+async def set_raid_difficulty_pref(discord_id: str, character_name: str, raid_name: str, difficulty: str | None) -> dict:
+    """숙제 칸에 보여줄 난이도를 캐릭터·레이드마다 저장(difficulty=None이면 지운다). 주간 초기화에도 남는다.
+    봇은 내 캐릭터가 아니거나 그 캐릭터가 못 가는 난이도면 400 + {success: false, reason}을 준다 — 예외 대신 그 본문을 돌려준다."""
+    resp = await _get_client().post(
+        f"{_base()}/raid-difficulty-pref",
+        json={"discord_id": discord_id, "character_name": character_name, "raid_name": raid_name, "difficulty": difficulty},
+        headers=_headers(),
+        timeout=10,
+    )
+    if resp.status_code == 400:
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        return {"success": False, "reason": (data or {}).get("reason") or (data or {}).get("detail")}
+    resp.raise_for_status()
+    return resp.json()
