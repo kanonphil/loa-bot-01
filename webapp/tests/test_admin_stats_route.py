@@ -130,7 +130,8 @@ def test_completions_page_flow_and_toggle(client, monkeypatch):
         })
     body = page.text
     assert 'id="completion-grid"' in body
-    assert body.count('aria-pressed="true"') == 1  # 노말만 완료
+    grid = body.split('id="completion-grid"')[1]  # 머리줄 테마 버튼(aria-pressed)은 빼고 센다
+    assert grid.count('aria-pressed="true"') == 1  # 노말만 완료
     assert frag.status_code == 200 and 'id="completion-grid"' in frag.text
     import json as _json
     sent = _json.loads(set_route.calls[0].request.content)
