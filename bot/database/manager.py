@@ -223,6 +223,16 @@ CREATE TABLE IF NOT EXISTS character_raid_selection (
     PRIMARY KEY (discord_id, character_name, raid_name)
 );
 
+-- 캐릭터·레이드별 선호 난이도 (주간 리셋과 무관하게 유지)
+CREATE TABLE IF NOT EXISTS raid_difficulty_prefs (
+    discord_id      TEXT,
+    character_name  TEXT,
+    raid_name       TEXT,
+    difficulty      TEXT,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (discord_id, character_name, raid_name)
+);
+
 CREATE TABLE IF NOT EXISTS raid_subscriptions (
     discord_id  TEXT,
     raid_name   TEXT,
@@ -639,6 +649,7 @@ async def delete_user(discord_id: str) -> None:
         await db.execute("DELETE FROM raid_subscriptions WHERE discord_id=?", (discord_id,))
         await db.execute("DELETE FROM character_raid_selection WHERE discord_id=?", (discord_id,))
         await db.execute("DELETE FROM character_raid_selection_state WHERE discord_id=?", (discord_id,))
+        await db.execute("DELETE FROM raid_difficulty_prefs WHERE discord_id=?", (discord_id,))
         await db.commit()
 
 
@@ -959,6 +970,10 @@ async def remove_character(discord_id: str, character_name: str) -> bool:
     async with _connect() as db:
         cur = await db.execute(
             "DELETE FROM user_characters WHERE discord_id=? AND character_name=?",
+            (discord_id, character_name),
+        )
+        await db.execute(
+            "DELETE FROM raid_difficulty_prefs WHERE discord_id=? AND character_name=?",
             (discord_id, character_name),
         )
         await db.commit()
@@ -1335,6 +1350,38 @@ async def set_selected_raids(discord_id: str, character_name: str, raid_names: l
             "INSERT INTO character_raid_selection (discord_id, character_name, raid_name) VALUES (?, ?, ?)",
             [(discord_id, character_name, raid_name) for raid_name in raid_names],
         )
+        await db.commit()
+
+
+async def get_difficulty_prefs(discord_id: str) -> dict[tuple[str, str], str]:
+    """유저의 선호 난이도 전체 — {(character_name, raid_name): difficulty}. 쿼리 1회."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "SELECT character_name, raid_name, difficulty FROM raid_difficulty_prefs WHERE discord_id=?",
+            (discord_id,),
+        )
+        rows = await cur.fetchall()
+    return {(r[0], r[1]): r[2] for r in rows}
+
+
+async def set_difficulty_pref(
+    discord_id: str, character_name: str, raid_name: str, difficulty: str | None
+) -> None:
+    """선호 난이도 저장. difficulty=None이면 삭제."""
+    async with _connect() as db:
+        if difficulty is None:
+            await db.execute(
+                "DELETE FROM raid_difficulty_prefs WHERE discord_id=? AND character_name=? AND raid_name=?",
+                (discord_id, character_name, raid_name),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO raid_difficulty_prefs (discord_id, character_name, raid_name, difficulty) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(discord_id, character_name, raid_name) DO UPDATE SET "
+                "difficulty=excluded.difficulty, updated_at=CURRENT_TIMESTAMP",
+                (discord_id, character_name, raid_name, difficulty),
+            )
         await db.commit()
 
 
