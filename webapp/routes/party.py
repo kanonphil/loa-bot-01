@@ -20,7 +20,7 @@ router = APIRouter()
 
 # 목록 상단 필터 — 라벨과 순서를 한 곳에서 관리한다. 기본은 "들어갈 수 있는".
 PARTY_FILTERS = [
-    ("eligible", "들어갈 수 있는"),
+    ("eligible", "참여 가능"),
     ("all", "전체"),
     ("mine", "내 공대"),
 ]

@@ -185,7 +185,7 @@ def test_home_schedule_and_opportunities(client):
     other = party("p2", "999", when=LATER, raid="종막", slots=[])
     body = get_home(client, parties=[mine, other], invites=[INVITE]).text
     assert "내 일정" in body and "/parties/p1" in body and "초대 대기 중" in body
-    assert "들어갈 만한 공대" in body and "/parties/p2" in body
+    assert "참여 가능한 공대" in body and "/parties/p2" in body
 
 
 def test_home_invite_without_eligible_character_shows_reason(client):

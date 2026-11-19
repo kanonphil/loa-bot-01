@@ -257,7 +257,7 @@
 
     {% if opportunities %}
     <section class="ui-card hc-opp" aria-labelledby="opp-title">
-      <div class="ui-row"><h2 class="ui-card-title" id="opp-title">들어갈 만한 공대</h2>{{ ui.chip(opportunity_count, "ok") }}<span class="ui-spacer"></span><a class="lnk meta" href="/parties?filter=eligible">전체 보기</a></div>
+      <div class="ui-row"><h2 class="ui-card-title" id="opp-title">참여 가능한 공대</h2>{{ ui.chip(opportunity_count, "ok") }}<span class="ui-spacer"></span><a class="lnk meta" href="/parties?filter=eligible">전체 보기</a></div>
       <div class="tl-list">
         {% for p in opportunities %}
         <a class="tl" href="/parties/{{ p.message_id }}">
