@@ -137,6 +137,8 @@ def test_history_shows_members_and_memo(client):
 # ── 익스트림 운영 종료 D-day ──────────────────────────────────
 
 def test_party_list_and_detail_show_period_chip(client):
+    # 종료일을 모듈 로드 때가 아니라 테스트 실행 때 정한다 — 자정을 넘겨 실행되면 D-2가 D-1로 바뀌어 깨졌다(2026-11-20).
+    RAIDS["익스트림"]["available_until"] = (datetime.now(KST) + timedelta(days=2)).isoformat()
     with respx.mock:
         log_in(client)
         respx.get(f"{B}/parties").mock(return_value=httpx.Response(200, json=[PARTY]))
