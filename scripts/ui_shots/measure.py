@@ -53,7 +53,7 @@ JS = r"""
       const line = lines[k];
       const hs = line.map(i => i.h);
       const spread = Math.max(...hs) - Math.min(...hs);
-      const stretched = line.filter(i => (i.tag === 'button' || i.cls.includes('btn') || i.cls.includes('link')) && i.w > 0.7 * rr.width && rr.width > 300 && !i.cls.includes('is-block') && !i.cls.includes('armory-sync') && !i.cls.includes('raid-select-save'));
+      const stretched = line.filter(i => (i.tag === 'button' || i.cls.includes('btn') || i.cls.includes('link')) && i.w > 0.7 * rr.width && rr.width > 300 && !i.cls.includes('is-block') && !i.cls.includes('armory-sync') && !i.cls.includes('raid-select-save') && !i.cls.includes('hw-hit'));  // hw-hit: 홈 숙제 칸 전체를 덮는 빈 체크 버튼(의도)
       if ((line.length > 1 && spread > 2) || stretched.length) {
         out.push({ row: (row.className || row.tagName).toString().slice(0, 50), roww: Math.round(rr.width), spread, stretched: stretched.map(s => s.text), items: line.map(i => `${i.tag}.${i.cls.split(' ')[0]}[${i.text}] ${i.w}x${i.h}`) });
       }
