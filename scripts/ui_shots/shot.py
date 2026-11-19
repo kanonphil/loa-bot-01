@@ -52,6 +52,13 @@ try:
     VIEWPORTS = [("desktop", {"width": 1280, "height": 900}, 1), ("mobile", {"width": 390, "height": 844}, 1)]
     if os.environ.get("SHOT_WIDE"):
         VIEWPORTS.insert(1, ("wide", {"width": 1536, "height": 814}, 1.25))
+    # SHOT_WIDTHS=1280,1366,1536@1.25,1920,2560,390 — 이 폭들로만 찍는다(파일 이름 <tag>-w<폭>.jpg). 640 이하는 휴대폰 취급.
+    if os.environ.get("SHOT_WIDTHS"):
+        VIEWPORTS = []
+        for spec in os.environ["SHOT_WIDTHS"].split(","):
+            w, _, dpr = spec.strip().partition("@")
+            w = int(w)
+            VIEWPORTS.append((f"w{w}", {"width": w, "height": 844 if w <= 640 else 900}, float(dpr or 1)))
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for name, vp, dpr in VIEWPORTS:
@@ -59,7 +66,7 @@ try:
             ctx.add_cookies([{"name": "session", "value": cookie, "domain": "127.0.0.1", "path": "/"}])
             page = ctx.new_page()
             for tag, path in PAGES:
-                if name == "mobile" and tag not in MOBILE:
+                if (name == "mobile" or vp["width"] <= 640) and tag not in MOBILE:
                     continue
                 page.goto(f"http://127.0.0.1:{WEB_PORT}" + path, wait_until="networkidle")
                 page.wait_for_timeout(300)

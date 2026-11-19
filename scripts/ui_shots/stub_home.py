@@ -33,6 +33,8 @@ def register(app, RAIDS, CHARS):
     done = {"발키리": {"아르모체(4막)_하드"}, "워로드부캐": {"종막_노말"}, "소서리스": set()}
     ext = {"cleared": None}
     sub = {"on": False}
+    # 난이도 저장값(봇 raid_difficulty_prefs) — 계약: applicable_raids[].preferred_difficulty, POST /raid-difficulty-pref
+    prefs = {("소서리스", "아르모체(4막)"): "노말"}
 
     def applicable(level):
         out = []
@@ -45,8 +47,14 @@ def register(app, RAIDS, CHARS):
                             "difficulties": diffs, "difficulty_gold": {d: GOLD[name][d] for d in diffs}})
         return out
 
+    def with_prefs(char_name, raids):
+        for r in raids:
+            p = prefs.get((char_name, r["raid_name"]))
+            r["preferred_difficulty"] = p if p in r["difficulties"] else None
+        return raids
+
     def char_row(c):
-        app_raids = applicable(c["item_level"])
+        app_raids = with_prefs(c["character_name"], applicable(c["item_level"]))
         mine = done[c["character_name"]]
         done_raids = {k.rsplit("_", 1)[0] for k in mine}
         earned = sum(GOLD[k.rsplit("_", 1)[0]][k.rsplit("_", 1)[1]] for k in mine)
@@ -72,6 +80,20 @@ def register(app, RAIDS, CHARS):
         return JSONResponse({"week_key": "w", "characters": rows, "raids": RAIDS, "categories": [], "support_classes": [],
                              "extreme": extreme_payload(),
                              "gold": {"earned": sum(r["gold_earned"] for r in rows), "total": sum(r["gold_total"] for r in rows)}})
+
+    @app.post("/api/internal/raid-difficulty-pref")
+    async def difficulty_pref(request: Request):
+        b = await request.json()
+        c = next((c for c in CHARS if c["character_name"] == b.get("character_name")), None)
+        r = next((r for r in applicable(c["item_level"]) if r["raid_name"] == b.get("raid_name")), None) if c else None
+        d = b.get("difficulty")
+        if r is None or (d is not None and d not in r["difficulties"]):
+            return JSONResponse({"success": False, "reason": "그 캐릭터는 이 난이도에 갈 수 없습니다."}, status_code=400)
+        if d is None:
+            prefs.pop((c["character_name"], r["raid_name"]), None)
+        else:
+            prefs[(c["character_name"], r["raid_name"])] = d
+        return JSONResponse({"success": True, "difficulty": d})
 
     @app.get("/api/internal/completions")
     async def completions(discord_id: str, character_name: str):
