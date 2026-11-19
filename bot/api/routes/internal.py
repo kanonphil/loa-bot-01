@@ -259,6 +259,52 @@ async def raid_progress(discord_id: str):
   }
 
 
+def _applicable_by_raid(item_level: float) -> dict[str, dict]:
+  """아이템 레벨로 입장 가능한 일반 레이드를 레이드별로 묶는다(RAIDS 순서). 레이드 체크 요약과
+  선호 난이도 검증이 같은 로직을 쓰도록 한 곳에 둔다."""
+  from bot.data.raids import RAIDS, get_applicable_raids
+
+  by_raid: dict[str, dict] = {}
+  for raid_name, diff_name, _info in get_applicable_raids(item_level):
+    info = RAIDS.get(raid_name, {})
+    entry = by_raid.setdefault(raid_name, {
+      "raid_name": raid_name,
+      "short_name": info.get("short_name") or raid_name,
+      "icon": info.get("icon"),
+      "category": info.get("category"),
+      "difficulties": [],
+      "difficulty_gold": {},
+    })
+    entry["difficulties"].append(diff_name)
+    entry["difficulty_gold"][diff_name] = _info.get("clear_gold")
+  return by_raid
+
+
+class RaidDifficultyPrefBody(BaseModel):
+  discord_id: str
+  character_name: str
+  raid_name: str
+  difficulty: str | None = None
+
+
+@router.post("/raid-difficulty-pref")
+async def set_raid_difficulty_pref(body: RaidDifficultyPrefBody):
+  """캐릭터·레이드별 선호 난이도 저장(difficulty=null이면 삭제). 실패 시
+  {"success": False, "reason"} — 본인 캐릭터이고 그 캐릭터가 입장 가능한 난이도만 허용."""
+  chars = await db.get_cached_characters(body.discord_id, max_age_hours=99999)
+  char = next((c for c in chars if c["character_name"] == body.character_name), None)
+  if char is None:
+    return {"success": False, "reason": "본인 캐릭터만 설정할 수 있습니다."}
+  if body.difficulty is not None:
+    entry = _applicable_by_raid(char.get("item_level") or 0).get(body.raid_name)
+    if entry is None:
+      return {"success": False, "reason": "이 캐릭터가 입장할 수 없거나 존재하지 않는 레이드입니다."}
+    if body.difficulty not in entry["difficulties"]:
+      return {"success": False, "reason": "이 캐릭터가 입장할 수 없는 난이도입니다."}
+  await db.set_difficulty_pref(body.discord_id, body.character_name, body.raid_name, body.difficulty)
+  return {"success": True, "difficulty": body.difficulty}
+
+
 @router.get("/raid-check-summary")
 async def raid_check_summary(discord_id: str):
   """웹 레이드 체크 페이지 한 화면에 필요한 데이터를 한 번에 — 예전엔 캐릭터 목록·레이드·
@@ -269,29 +315,21 @@ async def raid_check_summary(discord_id: str):
   키 목록), selection({customized, selected_raids}), applicable_raids(입장 가능한 일반 레이드,
   선택 필터 적용 전, RAIDS 순서: [{raid_name, short_name, icon, category, difficulties:[이름...]}]),
   visible_raid_names(선택 필터 적용 후 카드에 보일 레이드명), done_count, total_slots."""
-  from bot.data.raids import RAIDS, SUPPORT_CLASSES, get_applicable_raids
+  from bot.data.raids import SUPPORT_CLASSES
 
   week_key = db.get_week_key()
   characters = await db.get_cached_characters_with_account(discord_id, max_age_hours=99999)
   completions_by_char = await db.get_week_completions_by_character(discord_id, week_key)
   selections = await db.get_all_selected_raids(discord_id)
+  prefs = await db.get_difficulty_prefs(discord_id)  # 쿼리 1회 — 레이드마다 조회하지 않는다
 
   out = []
   for char in characters:
     name = char["character_name"]
-    by_raid: dict[str, dict] = {}
-    for raid_name, diff_name, _info in get_applicable_raids(char.get("item_level") or 0):
-      info = RAIDS.get(raid_name, {})
-      entry = by_raid.setdefault(raid_name, {
-        "raid_name": raid_name,
-        "short_name": info.get("short_name") or raid_name,
-        "icon": info.get("icon"),
-        "category": info.get("category"),
-        "difficulties": [],
-        "difficulty_gold": {},
-      })
-      entry["difficulties"].append(diff_name)
-      entry["difficulty_gold"][diff_name] = _info.get("clear_gold")
+    by_raid = _applicable_by_raid(char.get("item_level") or 0)
+    for raid_name, entry in by_raid.items():
+      pref = prefs.get((name, raid_name))
+      entry["preferred_difficulty"] = pref if pref in entry["difficulties"] else None
     applicable = list(by_raid.values())
 
     selected = selections.get(name)
