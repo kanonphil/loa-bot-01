@@ -113,7 +113,7 @@
 /* ── 이용 가이드 ───────────────────────────────────────── */
 .guide-page.exp-page .guide-steps { margin-top: 0; }
 .guide-page .guide-step { padding: var(--sp-4) var(--sp-5); }
-.guide-page .guide-step-num { color: #06211f; }
+.guide-page .guide-step-num { color: var(--on-accent); }
 .guide-page .guide-step p, .guide-page .guide-step ul { font-size: var(--fs-body); }
 .guide-page .guide-step-head h2 { font-size: var(--fs-card); }
 
