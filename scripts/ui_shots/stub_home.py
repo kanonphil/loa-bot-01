@@ -10,8 +10,26 @@ GOLD = {"아르모체(4막)": {"노말": 10000, "하드": 14000}, "종막": {"�
         "카멘 익스트림": {"노말": 20000, "하드": 30000}}
 
 
+def _real_responses():
+    """SHOT_REAL_HOME=<파일> — 운영 봇에서 받은 응답(한 줄에 JSON 하나: raid-check-summary, loa/overview, loa/prices)을
+    그대로 돌려준다. 가짜 데이터로는 안 보이는 것(긴 난이도 이름, 3단계 레이드, 실제 섬 목록)을 화면에서 확인하는 용도.
+    파일에는 실제 캐릭터 이름이 들어 있으니 리포 밖(scratchpad)에 둘 것."""
+    import json
+    import os
+    path = os.environ.get("SHOT_REAL_HOME")
+    if not path:
+        return None
+    lines = [ln for ln in open(path, encoding="utf-8").read().splitlines() if ln.strip()]
+    keys = ["raid-check-summary", "loa/overview", "loa/prices"]
+    return {k: json.loads(v) for k, v in zip(keys, lines)}
+
+
 def register(app, RAIDS, CHARS):
     now = datetime.now(KST)
+    real = _real_responses()
+    if real:
+        for path, body in real.items():
+            app.add_api_route(f"/api/internal/{path}", (lambda b: (lambda: JSONResponse(b)))(body), methods=["GET"])
     done = {"발키리": {"아르모체(4막)_하드"}, "워로드부캐": {"종막_노말"}, "소서리스": set()}
     ext = {"cleared": None}
     sub = {"on": False}

@@ -193,19 +193,26 @@
     <section class="ui-card hc-today" aria-labelledby="today-title">
       <div class="ui-row"><h2 class="ui-card-title" id="today-title">오늘의 콘텐츠</h2><span class="meta">{{ today.date }}</span></div>
       {% if today.tabs | length > 1 %}
-      <div class="toolbar" role="group" aria-label="콘텐츠 종류">
+      <div class="toolbar hc-today-tabs" role="group" aria-label="콘텐츠 종류">
         {% for t in today.tabs %}<button type="button" class="chip-btn" data-today-tab="{{ loop.index0 }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ t.label }}</button>{% endfor %}
       </div>
       {% endif %}
-      {% for t in today.tabs %}
-      <div class="isle-list" data-today-panel="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>
-        {% for it in t.rows %}
-        <div class="isle">
+      {% macro isle_row(it, t) %}
+        <div class="isle{% if it.past %} is-past{% endif %}">
           <span class="thumb">{% if it.icon %}<img src="{{ it.icon }}" alt="" loading="lazy">{% else %}{{ t.label[:1] }}{% endif %}</span>
           <span class="what"><span class="what-line"><b class="trunc">{{ it.name }}</b>{% if it.is_gold %}{{ ui.chip("골드", "warn") }}{% endif %}</span>{% if it.rewards %}<span class="meta trunc">보상: {{ it.rewards }}</span>{% endif %}</span>
           <span class="isle-when">{% if it.time %}<span class="num">{{ it.time }}</span>{% endif %}{% if it.rel %}<span class="meta">{{ it.rel }}</span>{% endif %}</span>
         </div>
-        {% endfor %}
+      {% endmacro %}
+      {% for t in today.tabs %}
+      <div class="isle-list" data-today-panel="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>
+        {% for it in t.rows %}{{ isle_row(it, t) }}{% endfor %}
+        {% if t.more %}
+        <details class="isle-more">
+          <summary>나머지 {{ t.more | length }}개</summary>
+          {% for it in t.more %}{{ isle_row(it, t) }}{% endfor %}
+        </details>
+        {% endif %}
       </div>
       {% endfor %}
       <div class="ui-row hc-switch-row">

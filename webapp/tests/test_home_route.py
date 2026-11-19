@@ -426,3 +426,28 @@ def test_upcoming_maintenance_notice_shows_info_banner():
     assert build_maintenance({"maintenance": None}) is None
     active = build_maintenance({"maintenance": {"active": True, "title": "점검 중"}})
     assert active["active"] is True
+
+
+def test_today_tabs_put_adventure_islands_first_and_sort_rows_by_next_start():
+    """실제 로아 응답 순서(섬 → 카오스게이트 → 모험 섬)대로 두면 일반 섬이 기본 탭이 되고,
+    끝난 섬이 시간 순서 없이 위를 차지했다(2026-11-19 운영에서 발견)."""
+    from webapp.routes.dashboard import build_today
+
+    KST = timezone(timedelta(hours=9))
+    now = datetime(2026, 11, 19, 20, 0, tzinfo=KST)
+
+    def at(h, m=0):
+        return datetime(2026, 11, 19, h, m, tzinfo=KST).isoformat()
+
+    items = [{"category": "섬", "name": f"일반{i}", "times": [at(h)]} for i, h in enumerate([22, 21, 19, 23, 18, 12, 21, 22])]
+    items += [{"category": "카오스게이트", "name": "카게", "times": [at(21)]}]
+    items += [{"category": "모험 섬", "name": "쿵덕쿵", "times": [at(19), at(21), at(23)]}]
+    today = build_today({"today": items}, now)
+
+    assert [t["label"] for t in today["tabs"]] == ["모험섬", "카오스게이트", "섬"]
+    assert today["tabs"][0]["rows"][0]["time"] == "21:00"
+    isles = today["tabs"][2]
+    shown = isles["rows"] + isles["more"]
+    assert [r["time"] for r in shown] == ["21:00", "21:00", "22:00", "22:00", "23:00", "12:00", "18:00", "19:00"]
+    assert [r["past"] for r in shown][-3:] == [True, True, True]
+    assert len(isles["rows"]) == 6 and len(isles["more"]) == 2

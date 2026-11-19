@@ -89,6 +89,22 @@ a.tl:focus-visible { box-shadow: var(--ring); border-radius: var(--r-sm); }
 .isle { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: var(--sp-2) 0; border-top: 1px solid var(--border-soft); white-space: nowrap; }
 .isle-list > .isle:first-child { border-top: 0; padding-top: 0; }
 .isle-list[hidden] { display: none; }
+/* 오늘 일정이 끝난 항목 — 맨 아래로 정렬되고 흐리게 */
+.isle.is-past { opacity: 0.5; }
+/* 탭이 많아도 한 줄 — 넘치면 탭 줄만 가로로 민다 */
+.hc-today-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+.hc-today-tabs::-webkit-scrollbar { display: none; }
+.hc-today-tabs > .chip-btn { flex: none; }
+/* 6줄 넘는 탭의 나머지 */
+.isle-more > summary {
+  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 var(--sp-1); border-top: 1px solid var(--border-soft);
+  color: var(--text-muted); font-size: var(--fs-body); cursor: pointer; list-style: none; border-radius: var(--r-sm);
+}
+.isle-more > summary::-webkit-details-marker { display: none; }
+.isle-more > summary::before { content: "\25B8"; font-size: 10px; }
+.isle-more[open] > summary::before { content: "\25BE"; }
+@media (hover: hover) { .isle-more > summary:hover { color: var(--text); background: var(--hover); } }
+.isle-more > summary:focus-visible { outline: none; box-shadow: var(--ring); }
 .isle .thumb {
   width: 52px; height: 36px; border-radius: var(--r-sm); overflow: hidden; display: grid; place-items: center;
   background: linear-gradient(135deg, #1d3a3c, #0f2224); font-size: var(--fs-label); color: var(--text-muted);

@@ -45,10 +45,17 @@ try:
         ("more", "/more"), ("admin-users", "/admin/users"), ("guide", "/guide"), ("auction", "/tools/auction-calculator"),
     ]
     MOBILE = {"more", "history", "main", "parties", "party-detail", "expedition", "raid-check", "invites", "ranking", "calendar", "settings", "raid-select"}
+    # SHOT_PAGES=main,parties — 이 화면만 찍는다. SHOT_WIDE=1 — 1920 모니터·배율 125%(CSS 1536px, 배율 1.25)도 찍는다.
+    only = {p for p in os.environ.get("SHOT_PAGES", "").split(",") if p}
+    if only:
+        PAGES = [p for p in PAGES if p[0] in only]
+    VIEWPORTS = [("desktop", {"width": 1280, "height": 900}, 1), ("mobile", {"width": 390, "height": 844}, 1)]
+    if os.environ.get("SHOT_WIDE"):
+        VIEWPORTS.insert(1, ("wide", {"width": 1536, "height": 814}, 1.25))
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        for name, vp in (("desktop", {"width": 1280, "height": 900}), ("mobile", {"width": 390, "height": 844})):
-            ctx = browser.new_context(viewport=vp, device_scale_factor=1)
+        for name, vp, dpr in VIEWPORTS:
+            ctx = browser.new_context(viewport=vp, device_scale_factor=dpr)
             ctx.add_cookies([{"name": "session", "value": cookie, "domain": "127.0.0.1", "path": "/"}])
             page = ctx.new_page()
             for tag, path in PAGES:

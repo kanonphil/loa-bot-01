@@ -285,8 +285,24 @@ def build_maintenance(overview: dict) -> dict | None:
     }
 
 
+# 오늘의 콘텐츠 탭 순서 — 로아 API 순서(섬 → 카오스게이트 → 모험 섬 …)를 따르면 정작 많이 보는 모험섬이
+# 세 번째로 밀리고 일반 "섬"이 기본 탭이 됐다. 여기 없는 종류는 "섬" 바로 앞에 API 순서대로 둔다.
+TODAY_TAB_ORDER = ["모험섬", "필드보스", "카오스게이트", "태초의섬", "로웬", "항해"]
+TODAY_TAB_LAST = "섬"
+TODAY_VISIBLE_ROWS = 6  # 탭마다 처음 보이는 줄 수 — 나머지는 "나머지 N개"로 접는다(카오스게이트는 13줄)
+
+
+def _today_tab_key(label: str, api_index: int) -> tuple:
+    if label in TODAY_TAB_ORDER:
+        return (0, TODAY_TAB_ORDER.index(label))
+    if label == TODAY_TAB_LAST:
+        return (2, 0)
+    return (1, api_index)
+
+
 def build_today(overview: dict, now: datetime | None = None) -> dict | None:
-    """오늘의 콘텐츠 — 카테고리별로 묶고, 항목마다 다음 시작 시각(없으면 마지막)과 남은 시간을 붙인다."""
+    """오늘의 콘텐츠 — 카테고리별로 묶고, 항목마다 다음 시작 시각(없으면 마지막)과 남은 시간을 붙인다.
+    탭은 TODAY_TAB_ORDER 순서, 줄은 곧 시작하는 순서로 정렬하고 오늘 일정이 끝난 항목은 아래로 보내 흐리게 한다."""
     now = now or datetime.now(KST)
     items = overview.get("today") or []
     if not isinstance(items, list):
@@ -311,9 +327,16 @@ def build_today(overview: dict, now: datetime | None = None) -> dict | None:
             "rewards": " · ".join(rewards[:3]),
             "time": shown.strftime("%H:%M") if shown else "",
             "rel": _until(upcoming, now) if upcoming else ("종료" if shown else ""),
+            "past": upcoming is None,
+            "_sort": (upcoming is None, upcoming or shown or now),
         })
     if not tabs:
         return None
+    tabs = [t for _, t in sorted(enumerate(tabs), key=lambda p: _today_tab_key(p[1]["label"], p[0]))]
+    for t in tabs:
+        t["rows"].sort(key=lambda r: r.pop("_sort"))
+        t["more"] = t["rows"][TODAY_VISIBLE_ROWS:]
+        t["rows"] = t["rows"][:TODAY_VISIBLE_ROWS]
     return {"date": f"{now.month}/{now.day} ({'월화수목금토일'[now.weekday()]})", "tabs": tabs}
 
 
