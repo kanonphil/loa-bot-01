@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block head %}<link rel="stylesheet" href="/static/pages/party.css?v={{ static_version }}">{% endblock %}
+{% block crumb %}달력{% endblock %}
 {% block page_top %}{% include "_party_top.html" %}{% endblock %}
 {% block content %}
 {% macro render_parties(parties) %}
