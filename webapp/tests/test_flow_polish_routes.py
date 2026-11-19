@@ -65,11 +65,12 @@ def test_bottom_tabs_have_four_entries_and_bell_in_top_bar(client):
     assert tabs.count("<a ") == 4
     for href in ('href="/main"', 'href="/parties"', 'href="/expedition"', 'href="/more"'):
         assert href in tabs
-    assert "notif-bell" not in tabs  # 종은 탭 한 칸을 차지하지 않고 위 줄로
-    top = resp.text.split('class="m-top"')[1].split("</header>")[0]
-    assert 'id="notif-bell-mobile"' in top and "data-notif-badge" in top
-    # 팝오버 하나를 데스크톱 종·모바일 종이 같이 쓴다
-    assert 'id="notif-panel" role="dialog"' in resp.text and 'id="notif-bell"' in resp.text
+    assert "notif-bell" not in tabs  # 종은 탭 한 칸을 차지하지 않고 위 머리줄로
+    # 위 머리줄은 데스크톱·휴대폰 공용 — 종 하나 + 테마 버튼 + 프로필 메뉴
+    top = resp.text.split('<header class="top">')[1].split("</header>")[0]
+    assert 'id="notif-bell"' in top and "data-notif-badge" in top
+    assert 'data-theme-toggle' in top and 'id="profile-menu"' in top
+    assert 'id="notif-panel" role="dialog"' in resp.text
     assert 'aria-live="polite"' in resp.text
 
 

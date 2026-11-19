@@ -83,7 +83,7 @@
 .ad-grp { padding: 10px 8px 2px; font-size: var(--fs-label); color: var(--text-muted); }
 .ad-ri { display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 4px 0 2px; border-radius: var(--r-md); }
 .ad-ri.on { background: var(--accent-soft); }
-@media (hover: hover) { .ad-ri:hover:not(.on) { background: var(--hover); } .ad-ri.on:hover { background: rgba(53, 214, 196, 0.2); } }
+@media (hover: hover) { .ad-ri:hover:not(.on) { background: var(--hover); } .ad-ri.on:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); } }
 .ad-ri-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; color: var(--text); text-decoration: none; border-radius: var(--r-md); white-space: nowrap; }
 .ad-ri-link:focus-visible { outline: none; box-shadow: var(--ring-in); }
 .ad-ri-link b { font-weight: 600; flex: 0 1 auto; }

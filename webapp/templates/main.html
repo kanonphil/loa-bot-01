@@ -3,6 +3,7 @@
 {% import "_home_macros.html" as hm %}
 {% block head %}<link rel="stylesheet" href="/static/pages/home.css?v={{ static_version }}">{% endblock %}
 {% block page_top %}<h1>이번 주</h1>{% endblock %}
+{% block page_desc %}이번 주 숙제와 공대 일정을 한 곳에서 체크합니다.{% endblock %}
 {% block above_top %}
 {% if maintenance %}
 <div class="banner {{ 'warn' if maintenance.active else 'info' }}" role="status">

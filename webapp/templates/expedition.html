@@ -3,6 +3,7 @@
 {% from "_subtabs.html" import subtabs with context %}
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
 {% block page_top %}<h1>원정대</h1>{% if characters %}<span class="ui-chip">캐릭터 {{ characters|length }}</span>{% endif %}{% endblock %}
+{% block page_desc %}내 캐릭터의 아이템 레벨·전투력과 이번 주 진행을 봅니다.{% endblock %}
 {% block content %}
 <div class="page-content exp-page">
 {{ subtabs("exp") }}

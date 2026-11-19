@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block head %}<link rel="stylesheet" href="/static/flatpickr.min.css"><link rel="stylesheet" href="/static/pages/party.css?v={{ static_version }}">{% endblock %}
+{% block crumb %}{% if party %}{{ party.raid_name }} {{ party.difficulty }}{% else %}공대{% endif %}{% endblock %}
 {% block page_top %}
-<div class="pt-crumb"><a class="btn sm ghost pt-back" href="/parties">&larr; 공대</a>
+<div class="pt-crumb">
 {% if party %}<h1>{{ party.raid_name }} {{ party.difficulty }}</h1>{{ ui.chip(party.proficiency) }}{{ ui.chip(status_label, status_tone) }}{% endif %}</div>
 {% endblock %}
 {% block content %}

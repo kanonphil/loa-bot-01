@@ -2,10 +2,9 @@
 {% import "_ui.html" as ui %}
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
 {% block page_top %}<h1>이용 가이드</h1>{% endblock %}
+{% block page_desc %}숙제 체크와 공대 모집을 처음 쓰는 분을 위한 안내입니다.{% endblock %}
 {% block content %}
 <div class="page-content page-narrow guide-page exp-page">
-{# 로그인하지 않으면 머리줄이 없으므로 제목을 여기서 그린다 #}
-{% if not user %}<h1>이용 가이드</h1>{% endif %}
 <p class="exp-meta exp-caption">디스코드 <code>/가이드</code>와 같은 내용을 웹 기준으로 정리했습니다. 처음이라면 위에서부터 순서대로 따라오면 됩니다.</p>
 
 <ol class="guide-steps">
@@ -19,14 +18,14 @@
 
   <li class="guide-step">
     <div class="guide-step-head"><span class="guide-step-num">2</span><h2>화면 구성</h2></div>
-    <p>왼쪽 메뉴(모바일은 아래 탭)는 네 칸입니다.</p>
+    <p>왼쪽 메뉴는 <b>메인</b>(홈 · 공대 · 원정대)과 <b>도구</b>(알림 설정 · 분배금 계산기 · 이용 가이드)로 나뉩니다. 모바일은 아래 탭 네 칸이고, 도구는 <b>더보기</b> 안에 있습니다.</p>
     <ul>
       <li><b>홈</b> — 로그인하면 바로 이번 주 숙제표가 보입니다. 할 일(초대 · 일정이 지난 공대)과 내 일정도 여기 있습니다.</li>
       <li><b>공대</b> — 모집 중인 공대 목록, 달력, 내 공대 이력. 위쪽 탭으로 바꿉니다.</li>
       <li><b>원정대</b> — 내 캐릭터와 계정, 원정대 랭킹.</li>
-      <li><b>더보기</b> — 알림 설정, 경매 분배금 계산기, 이 가이드. 관리자는 관리 화면도 여기서 들어갑니다.</li>
+      <li><b>도구 · 더보기</b> — 알림 설정, 경매 분배금 계산기, 이 가이드. 관리자는 메뉴 맨 아래 <b>관리</b>(모바일은 더보기)로 들어갑니다.</li>
     </ul>
-    <p>화면 제목 줄 오른쪽 끝의 <b>알림 종</b>을 누르면 새 알림과 지난 알림을 볼 수 있습니다. 모바일은 맨 위 줄에 있습니다.</p>
+    <p>맨 위 줄 오른쪽의 <b>알림 종</b>을 누르면 새 알림과 지난 알림을 볼 수 있습니다. 그 옆 해·달 버튼으로 밝은 화면(라이트)과 어두운 화면(다크)을 바꿉니다.</p>
   </li>
 
   <li class="guide-step">
@@ -66,7 +65,7 @@
 
   <li class="guide-step">
     <div class="guide-step-head"><span class="guide-step-num">7</span><h2>알림 설정</h2></div>
-    <p><a href="/settings">알림 설정</a>(더보기 → 알림 설정, 또는 왼쪽 아래 프로필 메뉴)에서 따로 정할 수 있습니다.</p>
+    <p><a href="/settings">알림 설정</a>(왼쪽 메뉴의 도구 → 알림 설정, 또는 오른쪽 위 프로필 메뉴)에서 따로 정할 수 있습니다.</p>
     <ul>
       <li><b>웹 알림</b> — 공대 모집 시작 · 클리어 · 게스트 합류 소식이 화면 토스트와 종 아이콘에 쌓입니다. 알림 이력 구독, 받을 종류, 레이드 필터를 정할 수 있습니다.</li>
       <li><b>디스코드 DM 레이드 구독</b> — 구독한 레이드의 새 공대가 열리면 디스코드 DM으로 알려줍니다. (<code>/레이드구독</code>과 같은 설정)</li>

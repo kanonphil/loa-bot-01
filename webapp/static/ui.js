@@ -15,6 +15,7 @@
 
   // ── 메뉴 접기(데스크톱) — 상태는 기억하되 저장소가 막혀 있어도 동작은 해야 한다 ──
   var RAIL_KEY = "loa.navRail";
+  var THEME_KEY = "theme";
   function syncFold(btn) {
     var rail = document.documentElement.classList.contains("nav-rail");
     btn.setAttribute("aria-pressed", rail ? "true" : "false");
@@ -31,6 +32,22 @@
       var rail = document.documentElement.classList.toggle("nav-rail");
       try { localStorage.setItem(RAIL_KEY, rail ? "1" : "0"); } catch (e) { /* 저장 못 해도 이번 화면에서는 접힌다 */ }
       syncFold(btn);
+    });
+  });
+  // 테마(다크 기본 / 라이트) — <head> 인라인 스크립트가 첫 그림 전에 data-theme을 정하고, 여기선 버튼 상태만 맞춘다.
+  // 이름표는 "다크 테마"로 고정하고 aria-pressed로 켜짐/꺼짐을 알린다(툴팁은 누르면 바뀔 쪽).
+  document.querySelectorAll("[data-theme-toggle]").forEach(function (btn) {
+    function sync() {
+      var dark = document.documentElement.getAttribute("data-theme") !== "light";
+      btn.setAttribute("aria-pressed", dark ? "true" : "false");
+      btn.setAttribute("data-tip", dark ? "라이트 테마로 바꾸기" : "다크 테마로 바꾸기");
+    }
+    sync();
+    btn.addEventListener("click", function () {
+      var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* 저장 못 해도 이번 화면에서는 바뀐다 */ }
+      sync();
     });
   });
   }

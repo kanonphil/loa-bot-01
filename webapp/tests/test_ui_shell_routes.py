@@ -27,8 +27,8 @@ def test_more_page_lists_tools_and_admin_for_admin(client, monkeypatch):
         assert href in body.split("<main")[1]
     # 모바일에서 닿을 곳이 없던 로그아웃·관리자 모드도 여기
     assert 'action="/logout"' in body and 'action="/admin/toggle-mode"' in body
-    # 더보기 화면에서는 더보기 메뉴가 선택 상태
-    assert 'href="/more" class="side-link on"' in body
+    # 더보기 화면에서는 하단 탭의 더보기가 선택 상태(왼쪽 메뉴는 도구 그룹으로 펼쳐져 있어 더보기 칸이 없다)
+    assert 'href="/more" class="on"' in body
 
 
 def test_more_page_hides_admin_for_member(client):
@@ -47,10 +47,15 @@ def test_sidebar_has_four_items_plus_admin_and_profile_menu(client, monkeypatch)
         log_in(client, discord_id="111")
         resp = client.get("/more")
     side = _sidebar(resp.text)
-    assert re.findall(r'class="side-link[^"]*" data-tip="([^"]+)"', side)[:5] == ["홈", "공대", "원정대", "더보기", "관리"]
+    # 그룹 메뉴: 메인(홈·공대·원정대) / 도구(알림 설정·분배금 계산기·이용 가이드) / 관리
+    assert re.findall(r'class="side-link[^"]*" data-tip="([^"]+)"', side)[:7] == ["홈", "공대", "원정대", "알림 설정", "분배금 계산기", "이용 가이드", "관리"]
+    assert re.findall(r'<p class="side-grp">([^<]+)</p>', side) == ["메인", "도구", "관리"]
     # 관리 세부 링크 7개와 관리자 모드 스위치는 사이드바에서 빠졌다(관리 화면 탭·프로필 메뉴로)
     assert 'href="/admin/classes"' not in side and 'role="switch"' not in side
-    assert 'id="profile-menu"' in side and 'data-nav-fold' in side
+    assert 'data-nav-fold' in side
+    # 프로필 메뉴는 위 머리줄 오른쪽 알약으로
+    top = resp.text.split('<header class="top">')[1].split("</header>")[0]
+    assert 'id="profile-menu"' in top
     assert "본문으로 건너뛰기" in resp.text
 
 

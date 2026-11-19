@@ -48,8 +48,15 @@ try:
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        for name, vp in (("desktop", {"width": 1280, "height": 900}), ("mobile", {"width": 390, "height": 844})):
-            ctx = browser.new_context(viewport=vp, device_scale_factor=1)
+        # SHOT_THEME=light|dark — 테마를 골라 찍는다(localStorage "theme"을 첫 그림 전에 넣음). 없으면 기본(다크).
+        THEME_JS = f"try {{ localStorage.setItem('theme', '{os.environ['SHOT_THEME']}'); }} catch (e) {{}}" if os.environ.get("SHOT_THEME") else None
+        # SHOT_WIDE=1 — 1536(배율 1.25) / SHOT_XL=1 — 1920도 찍는다
+        VPS = [("desktop", {"width": 1280, "height": 900}, 1)] + ([("wide", {"width": 1536, "height": 814}, 1.25)] if os.environ.get("SHOT_WIDE") else []) \
+            + ([("xl", {"width": 1920, "height": 1080}, 1)] if os.environ.get("SHOT_XL") else []) + [("mobile", {"width": 390, "height": 844}, 1)]
+        for name, vp, dpr in VPS:
+            ctx = browser.new_context(viewport=vp, device_scale_factor=dpr)
+            if THEME_JS:
+                ctx.add_init_script(THEME_JS)
             ctx.add_cookies([{"name": "session", "value": cookie, "domain": "127.0.0.1", "path": "/"}])
             page = ctx.new_page()
             errors = []

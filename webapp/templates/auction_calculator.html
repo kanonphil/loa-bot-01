@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
-{% block page_top %}<a class="btn sm ghost" href="/more">← 더보기</a><h1>경매 분배금 계산기</h1>{% endblock %}
+{% block crumb %}분배금 계산기{% endblock %}
+{% block page_top %}<h1>경매 분배금 계산기</h1>{% endblock %}
 {% block content %}
 <div class="page-content exp-page">
 <p class="exp-meta exp-caption">공대 경매 아이템의 템 가격을 기준으로, 직접 사용할 때와 되팔 때 각각 손해를 보지 않는 입찰가를 계산합니다.</p>

@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
-{% block page_top %}<a class="btn sm ghost" href="/more">← 더보기</a><h1>알림 설정</h1>{% endblock %}
+{% block crumb %}알림 설정{% endblock %}
+{% block page_top %}<h1>알림 설정</h1>{% endblock %}
+{% block page_desc %}웹과 디스코드 DM으로 받을 알림을 고릅니다.{% endblock %}
 {% block content %}
 {# 스위치는 홈과 같은 공용 컴포넌트(_ui.html switch) — 줄 오른쪽 끝에 [트랙][켜짐/꺼짐]. #}
 {% macro switch(label_id, on, action, json=false, field=false) %}

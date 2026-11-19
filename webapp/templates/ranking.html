@@ -2,7 +2,9 @@
 {% import "_ui.html" as ui %}
 {% from "_subtabs.html" import subtabs with context %}
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
+{% block crumb %}랭킹{% endblock %}
 {% block page_top %}<h1>원정대</h1><span class="ui-chip">랭킹</span>{% endblock %}
+{% block page_desc %}길드원 원정대를 전투력·아이템 레벨 순으로 봅니다.{% endblock %}
 {% block content %}
 {% set base_q = "metric=" ~ metric ~ ("&role=" ~ role if metric == "combat_power" else "") %}
 <div class="page-content exp-page">

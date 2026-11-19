@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block head %}<link rel="stylesheet" href="/static/flatpickr.min.css"><link rel="stylesheet" href="/static/pages/party.css?v={{ static_version }}">{% endblock %}
-{% block page_top %}<div class="pt-crumb"><a class="btn sm ghost pt-back" href="/parties">&larr; 공대</a><h1>공대 열기</h1></div>{% endblock %}
+{% block crumb %}공대 열기{% endblock %}
+{% block page_top %}<div class="pt-crumb"><h1>공대 열기</h1></div>{% endblock %}
+{% block page_desc %}레이드·일정·인원을 정하면 디스코드 모집 글이 함께 올라갑니다.{% endblock %}
 {% block content %}
 <div class="page-content page-wide pt-page" data-pt="create">
   {% if error %}{{ ui.banner(error, "err") }}{% endif %}

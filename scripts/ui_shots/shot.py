@@ -52,6 +52,8 @@ try:
     VIEWPORTS = [("desktop", {"width": 1280, "height": 900}, 1), ("mobile", {"width": 390, "height": 844}, 1)]
     if os.environ.get("SHOT_WIDE"):
         VIEWPORTS.insert(1, ("wide", {"width": 1536, "height": 814}, 1.25))
+    if os.environ.get("SHOT_XL"):  # SHOT_XL=1 — 1920 모니터 100%
+        VIEWPORTS.insert(-1, ("xl", {"width": 1920, "height": 1080}, 1))
     # SHOT_WIDTHS=1280,1366,1536@1.25,1920,2560,390 — 이 폭들로만 찍는다(파일 이름 <tag>-w<폭>.jpg). 640 이하는 휴대폰 취급.
     if os.environ.get("SHOT_WIDTHS"):
         VIEWPORTS = []
@@ -59,10 +61,14 @@ try:
             w, _, dpr = spec.strip().partition("@")
             w = int(w)
             VIEWPORTS.append((f"w{w}", {"width": w, "height": 844 if w <= 640 else 900}, float(dpr or 1)))
+    # SHOT_THEME=light|dark — 테마를 골라 찍는다(localStorage "theme"을 첫 그림 전에 넣음). 없으면 기본(다크).
+    THEME_JS = f"try {{ localStorage.setItem('theme', '{os.environ['SHOT_THEME']}'); }} catch (e) {{}}" if os.environ.get("SHOT_THEME") else None
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for name, vp, dpr in VIEWPORTS:
             ctx = browser.new_context(viewport=vp, device_scale_factor=dpr)
+            if THEME_JS:
+                ctx.add_init_script(THEME_JS)
             ctx.add_cookies([{"name": "session", "value": cookie, "domain": "127.0.0.1", "path": "/"}])
             page = ctx.new_page()
             for tag, path in PAGES:

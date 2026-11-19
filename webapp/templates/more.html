@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block head %}<link rel="stylesheet" href="/static/pages/exp.css?v={{ static_version }}">{% endblock %}
 {% block page_top %}<h1>더보기</h1>{% endblock %}
+{% block page_desc %}알림 설정, 도구, 이용 가이드를 모았습니다.{% endblock %}
 {% block content %}
 {% macro row(href, title, desc, icon_path) %}
 <a class="more-row" href="{{ href }}">

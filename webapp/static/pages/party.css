@@ -70,7 +70,7 @@
 .pt-step-h { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .pt-step-h h2 { margin: 0; font-size: var(--fs-card); font-weight: 650; }
 .pt-k { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 700 12px var(--font-mono); }
-.pt-k.is-done { background: var(--accent); color: #06211f; }
+.pt-k.is-done { background: var(--accent); color: var(--on-accent); }
 .pt-reopen { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 .pt-reopen .chip-btn::before { content: "\21BB"; margin-right: 6px; }
 .pt-raids { display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -138,7 +138,7 @@
 .pt-bar-join .pt-why.is-block { line-height: 1.6; }
 .pt-statusline { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--sidebar-bg); }
 .pt-statusline p { margin: 0; font-size: var(--fs-body); }
-.pt-statusline.is-ok { border-color: rgba(94, 214, 122, 0.5); background: var(--ok-soft); }
+.pt-statusline.is-ok { border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-soft); }
 .pt-detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-4); align-items: start; }
 .pt-main { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
 .pt-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
@@ -162,7 +162,7 @@
 .pt-slot.is-pickable { cursor: pointer; }
 @media (hover: hover) { .pt-slot.is-pickable:hover { border-color: var(--line-in-hover); color: var(--text); } }
 .pt-slot.is-picked { border-color: var(--accent); border-style: solid; color: var(--accent); }
-.pt-pop { position: absolute; z-index: 60; width: 320px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--sidebar-bg); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
+.pt-pop { position: absolute; z-index: 60; width: 320px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--menu); box-shadow: var(--shadow-pop); }
 .pt-pop[hidden] { display: none; }
 .pt-pop form { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; }
 

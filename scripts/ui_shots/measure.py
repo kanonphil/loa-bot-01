@@ -48,7 +48,8 @@ JS = r"""
     });
     // 같은 시각적 줄(top이 비슷)끼리만 비교
     const lines = {};
-    for (const it of items) { const k = Math.round(it.top / 12); (lines[k] = lines[k] || []).push(it); }
+    // hw-hit = 홈 숙제 칸 전체를 덮는 투명 체크 버튼(칸 높이가 곧 버튼 높이) — 같은 줄 높이 비교에서 뺀다
+    for (const it of items) { if (it.cls.includes('hw-hit')) continue; const k = Math.round(it.top / 12); (lines[k] = lines[k] || []).push(it); }
     for (const k in lines) {
       const line = lines[k];
       const hs = line.map(i => i.h);

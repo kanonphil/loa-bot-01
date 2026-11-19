@@ -71,11 +71,13 @@ try:
         page.goto(BASE + "/main", wait_until="networkidle"); page.wait_for_timeout(300)
         check("안 읽은 알림 수가 탭 제목 앞에", page.title().startswith("("), page.title())
         order = []
-        for _ in range(9):
+        # 건너뛰기 → (위 머리줄) 길드 · 테마 · 종 · 프로필 → (왼쪽 메뉴) 메인 3 · 도구 3 · 관리 → 접기
+        for _ in range(13):
             page.keyboard.press("Tab"); order.append(page.evaluate(FOCUS))
         print("  tab order:", *order, sep="\n    ")
         check("Tab 1 = 본문으로 건너뛰기", "skip-link" in order[0])
-        check("Tab 순서에 홈·공대·원정대·더보기·관리", all(any(k in o for o in order) for k in ("[홈", "[공대", "[원정대", "[더보기", "[관리")))
+        check("Tab 순서: 머리줄(테마·종·프로필)이 메뉴보다 먼저", order.index(next(o for o in order if "[홈" in o)) > max(i for i, o in enumerate(order) if "theme-btn" in o or "notif-bell" in o or "top-user" in o))
+        check("Tab 순서에 홈·공대·원정대·알림 설정·분배금 계산기·이용 가이드·관리", all(any(k in o for o in order) for k in ("[홈", "[공대", "[원정대", "[알림 설정", "[분배금 계산기", "[이용 가이드", "[관리")))
         page.keyboard.press("Shift+Tab"); page.keyboard.press("Shift+Tab"); page.wait_for_timeout(250)
         page.screenshot(path=str(OUT / "focus-nav.jpg"), type="jpeg", quality=80, clip={"x": 0, "y": 0, "width": 420, "height": 320})
         # 건너뛰기 링크 동작
@@ -83,13 +85,20 @@ try:
         page.keyboard.press("Tab"); page.keyboard.press("Enter")
         check("건너뛰기 → main에 포커스", page.evaluate("document.activeElement.id") == "main")
 
-        # 2) 접기 → 기억 → 접힌 메뉴 툴팁
-        page.click("[data-nav-fold]"); page.wait_for_timeout(350)  # 폭 전환 0.18s
-        w = page.evaluate("document.querySelector('.side-col').getBoundingClientRect().width")
-        check("접으면 60px", abs(w - 60) < 1, f"{w}")
+        # 2) 1400 미만은 처음에 접힘 → 펼치기 기억 → 다시 접기 기억 → 접힌 메뉴 툴팁
+        side_w = "document.querySelector('.side-col').getBoundingClientRect().width"
+        w0 = page.evaluate(side_w)
+        check("1280: 처음엔 접힘(64px)", abs(w0 - 64) < 1, f"{w0}")
+        page.click("[data-nav-fold]"); page.wait_for_timeout(350)  # 폭 전환 0.2s
+        check("펼치면 252px", abs(page.evaluate(side_w) - 252) < 1, f"{page.evaluate(side_w)}")
         page.reload(wait_until="networkidle")
-        w2 = page.evaluate("document.querySelector('.side-col').getBoundingClientRect().width")
-        check("새로고침해도 접힘 유지", abs(w2 - 60) < 1, f"{w2}")
+        check("새로고침해도 펼침 유지", abs(page.evaluate(side_w) - 252) < 1, f"{page.evaluate(side_w)}")
+        page.click("[data-nav-fold]"); page.wait_for_timeout(350)
+        w = page.evaluate(side_w)
+        check("접으면 64px", abs(w - 64) < 1, f"{w}")
+        page.reload(wait_until="networkidle")
+        w2 = page.evaluate(side_w)
+        check("새로고침해도 접힘 유지", abs(w2 - 64) < 1, f"{w2}")
         page.hover(".side-link[href='/parties']"); page.wait_for_timeout(250)
         page.screenshot(path=str(OUT / "rail-hover.jpg"), type="jpeg", quality=80, clip={"x": 0, "y": 0, "width": 360, "height": 320})
         page.focus(".side-link[href='/expedition']"); page.keyboard.press("Tab"); page.keyboard.press("Shift+Tab"); page.wait_for_timeout(200)
@@ -117,16 +126,16 @@ try:
         check("바깥 클릭 → 닫힘", not page.is_visible("#notif-panel"))
 
         # 4) 프로필 메뉴: Enter → 첫 항목, ↓ 이동, Esc 복귀
-        page.focus(".side-user"); page.keyboard.press("Enter"); page.wait_for_timeout(100)
+        page.focus(".top-user"); page.keyboard.press("Enter"); page.wait_for_timeout(100)
         first = page.evaluate(FOCUS)
         check("프로필 Enter → 메뉴 첫 항목 포커스", "알림 설정" in first, first)
         page.keyboard.press("ArrowDown")
         second = page.evaluate(FOCUS)
         check("↓ → 다음 항목", "관리자 모드" in second, second)
         page.wait_for_timeout(250)
-        page.screenshot(path=str(OUT / "profile-menu.jpg"), type="jpeg", quality=80, clip={"x": 0, "y": 560, "width": 420, "height": 340})
+        page.screenshot(path=str(OUT / "profile-menu.jpg"), type="jpeg", quality=80, clip={"x": 860, "y": 0, "width": 420, "height": 340})
         page.keyboard.press("Escape")
-        check("Esc → 메뉴 닫힘·프로필로 복귀", page.is_hidden("#profile-menu") and "side-user" in page.evaluate(FOCUS))
+        check("Esc → 메뉴 닫힘·프로필로 복귀", page.is_hidden("#profile-menu") and "top-user" in page.evaluate(FOCUS))
 
         # 5) 확인 대화상자: 처음 포커스 취소, 포커스 가둠, Esc, 연 버튼으로 복귀
         page.goto(BASE + "/parties/p1", wait_until="networkidle")
@@ -191,7 +200,8 @@ try:
         mp.goto(BASE + "/main", wait_until="networkidle")
         check("모바일 하단 탭 4개", mp.locator(".tabbar a").count() == 4 and mp.is_visible(".tabbar"))
         check("모바일: 왼쪽 메뉴 숨김", not mp.is_visible("#sidebar"))
-        mp.click("#notif-bell-mobile"); mp.wait_for_timeout(500)
+        check("모바일: 위 머리줄(종·테마) 보임", mp.is_visible(".top #notif-bell") and mp.is_visible("[data-theme-toggle]"))
+        mp.click("#notif-bell"); mp.wait_for_timeout(500)
         check("모바일 종 → 팝오버", mp.is_visible("#notif-panel"))
         mp.screenshot(path=str(OUT / "mobile-notif.jpg"), type="jpeg", quality=80)
         mp.keyboard.press("Escape")
@@ -204,7 +214,7 @@ try:
         t = browser.new_context(viewport={"width": 900, "height": 800})
         t.add_cookies([{"name": "session", "value": cookie, "domain": "127.0.0.1", "path": "/"}])
         tp = t.new_page(); tp.goto(BASE + "/parties", wait_until="networkidle")
-        check("태블릿: 메뉴 60px 띠", abs(tp.evaluate("document.querySelector('.side-col').getBoundingClientRect().width") - 60) < 1)
+        check("태블릿: 메뉴 64px 띠", abs(tp.evaluate("document.querySelector('.side-col').getBoundingClientRect().width") - 64) < 1)
         tp.screenshot(path=str(OUT / "tablet-parties.jpg"), type="jpeg", quality=70)
         t.close()
         g = browser.new_context(viewport={"width": 1280, "height": 800})
