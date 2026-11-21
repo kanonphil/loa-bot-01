@@ -10,7 +10,7 @@
 
 {% call ui.toolbar() %}
   <form method="get" action="/raid-check/history" class="history-week-form">
-    <select name="week" class="settings-select js-themed-select" aria-label="주차 선택" onchange="this.form.submit()">
+    <select name="week" class="settings-select js-themed-select" aria-label="주차 선택" data-auto-submit>
       {% for w in weeks %}
       <option value="{{ w.key }}" {% if w.key == selected_week %}selected{% endif %}>{{ w.label }}{% if w.is_current %} (이번 주){% endif %}</option>
       {% endfor %}

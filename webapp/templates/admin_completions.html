@@ -5,7 +5,7 @@
 <form method="get" action="/admin/completions" class="toolbar mg-pick">
   <label class="mg-pick-f">
     <span class="field-label">유저</span>
-    <select name="target_discord_id" class="js-themed-select" aria-label="유저" onchange="this.form.submit()">
+    <select name="target_discord_id" class="js-themed-select" aria-label="유저" data-auto-submit>
       <option value="">유저 선택…</option>
       {% for u in users %}<option value="{{ u.discord_id }}"{% if u.discord_id == target_discord_id %} selected{% endif %}>{{ u.representative or u.discord_nick or u.discord_id }}</option>{% endfor %}
     </select>
@@ -13,14 +13,14 @@
   {% if target_discord_id %}
   <label class="mg-pick-f">
     <span class="field-label">캐릭터</span>
-    <select name="character_name" class="js-themed-select" aria-label="캐릭터" onchange="this.form.submit()">
+    <select name="character_name" class="js-themed-select" aria-label="캐릭터" data-auto-submit>
       <option value="">캐릭터 선택…</option>
       {% for c in characters %}<option value="{{ c.character_name }}"{% if c.character_name == character_name %} selected{% endif %}>{{ c.character_name }} ({{ c.character_class or "?" }})</option>{% endfor %}
     </select>
   </label>
   <label class="mg-pick-f">
     <span class="field-label">주차</span>
-    <select name="week_key" class="js-themed-select" aria-label="주차" onchange="this.form.submit()">
+    <select name="week_key" class="js-themed-select" aria-label="주차" data-auto-submit>
       {% for w in weeks %}<option value="{{ w }}"{% if w == week %} selected{% endif %}>{{ w }} 주{% if loop.first %} (이번 주){% endif %}</option>{% endfor %}
     </select>
   </label>

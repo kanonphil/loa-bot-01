@@ -29,7 +29,7 @@
     <button type="submit" class="raid-select-save-btn">저장</button>
   </form>
 </div>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
   (function () {
     var form = document.getElementById("raid-select-form");
     var boxes = form.querySelectorAll('input[name="raid_names"]');

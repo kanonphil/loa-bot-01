@@ -10,7 +10,7 @@
   <span class="mg-spacer mg-row">
     <form method="get" action="/admin/stats" class="mg-inline mg-week">
       <input type="hidden" name="tab" value="clears">
-      <select name="week_key" class="js-themed-select" aria-label="주차" onchange="this.form.submit()">
+      <select name="week_key" class="js-themed-select" aria-label="주차" data-auto-submit>
         {% for w in weeks %}<option value="{{ w }}"{% if w == week %} selected{% endif %}>{{ w }} 주{% if loop.first %} (이번 주){% endif %}</option>{% endfor %}
       </select>
     </form>

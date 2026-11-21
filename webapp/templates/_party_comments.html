@@ -6,7 +6,7 @@
   {# htmx로 목록만 갈아끼운다 — 폼은 그대로 두어 실패(X-Toast error) 시 쓰던 글이 사라지지 않는다 #}
   <form method="post" action="/parties/{{ party.message_id }}/comments" class="pt-comment-form"
         hx-post="/parties/{{ party.message_id }}/comments" hx-target="#party-comments-list" hx-swap="outerHTML" hx-disabled-elt="find button"
-        hx-on::after-request="if (event.detail.successful && !event.detail.xhr.getResponseHeader('X-Toast-Type')) this.reset()">
+        data-reset-on-success>
     <textarea class="field" name="content" maxlength="500" rows="2" placeholder="댓글 입력" required aria-label="댓글"></textarea>
     <button type="submit" class="btn pri" data-busy-text="등록 중">등록</button>
   </form>

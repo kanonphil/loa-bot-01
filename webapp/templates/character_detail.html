@@ -531,7 +531,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
   (function () {
     var tabs = document.querySelectorAll('[data-armory-tab]');
     var panels = document.querySelectorAll('[data-armory-panel]');

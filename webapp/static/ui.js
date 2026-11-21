@@ -363,3 +363,28 @@
     document.title = (n > 0 ? "(" + (n > 99 ? "99+" : n) + ") " : "") + baseTitle;
   };
 })();
+
+// ── CSP 때문에 인라인 속성 대신 쓰는 위임 처리(webapp/security_headers.py) ──
+//   data-auto-submit : 고르면 바로 폼 제출(예전 onchange="this.form.submit()")
+//   data-history-back : 이전 화면(예전 href="javascript:history.back()")
+//   data-reset-on-success : htmx 요청이 성공하고 에러 토스트가 없으면 폼 비우기(예전 hx-on::after-request)
+(function () {
+  document.addEventListener("change", function (e) {
+    var el = e.target;
+    if (el && el.matches && el.matches("[data-auto-submit]") && el.form) {
+      if (el.form.requestSubmit) el.form.requestSubmit(); else el.form.submit();
+    }
+  });
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("[data-history-back]");
+    if (!a) return;
+    e.preventDefault();
+    if (history.length > 1) history.back(); else location.href = "/main";
+  });
+  document.addEventListener("htmx:afterRequest", function (e) {
+    var form = e.target;
+    if (!form || !form.matches || !form.matches("form[data-reset-on-success]")) return;
+    var d = e.detail;
+    if (d && d.successful && !d.xhr.getResponseHeader("X-Toast-Type")) form.reset();
+  });
+})();

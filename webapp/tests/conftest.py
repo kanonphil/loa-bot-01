@@ -56,8 +56,11 @@ def _reset_auth_and_guild_state():
         party_events._pending_events.clear()
         party_events._admin_hints.clear()
 
+    from webapp import rate_limit
+
     dependencies.clear_registration_cache()
     _reset_party_events()
+    rate_limit.reset()  # 테스트끼리 IP("testclient")가 같아 횟수가 쌓이지 않게
     guild_info._next_attempt_at = float("inf")
     yield
     dependencies.clear_registration_cache()

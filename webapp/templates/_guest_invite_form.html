@@ -18,5 +18,5 @@
   </select>
   <button type="submit" class="btn sm pri" data-busy-text="발송 중">게스트 초대</button>
 </form>
-<script>if (window.initThemedSelects) window.initThemedSelects();</script>
+<script nonce="{{ request.state.csp_nonce }}">if (window.initThemedSelects) window.initThemedSelects();</script>
 {% endif %}

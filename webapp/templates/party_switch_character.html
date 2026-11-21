@@ -37,7 +37,7 @@
 {% endif %}
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
   // 캐릭터를 고르는 순간 확인창을 띄우고, 확인해야만 실제로 제출한다.
   // 타 공대에 참여 중인 캐릭터를 고르면 그 공대에서는 자동으로 빠진다는 것을 안내한다.
   (function () {

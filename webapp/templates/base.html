@@ -33,7 +33,7 @@
   <title>{% block title %}{% if grp_label %}{{ grp_label }} · {% endif %}{{ get_guild_name() or "로아봇" }}{% endblock %}</title>
   {# 테마(기본 다크)와 접힌 메뉴 상태를 첫 그림 전에 적용(깜빡임 방지).
      메뉴: 직접 고른 값이 있으면 그대로, 없으면 1400px 미만에서 접힘. 저장소가 막혀 있으면 다크 + 폭 기준. #}
-  <script>(function (d) { var t = null, r = null; try { t = localStorage.getItem("theme"); r = localStorage.getItem("loa.navRail"); } catch (e) {}
+  <script nonce="{{ request.state.csp_nonce }}">(function (d) { var t = null, r = null; try { t = localStorage.getItem("theme"); r = localStorage.getItem("loa.navRail"); } catch (e) {}
     if (t === "light" || t === "dark") d.setAttribute("data-theme", t);
     if (r === "1" || (r === null && window.innerWidth < 1400)) d.classList.add("nav-rail"); })(document.documentElement);</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,6 +43,7 @@
   {# 확인 대화상자·팝업 API — 본문 인라인 스크립트가 바로 쓰므로 머리에서 먼저 읽는다 #}
   <script src="/static/ui.js?v={{ static_version }}"></script>
   {% block head %}{% endblock %}
+  <meta name="htmx-config" content='{"inlineScriptNonce": "{{ request.state.csp_nonce }}", "allowEval": false}'>
   <script src="/static/htmx.min.js?v={{ static_version }}"></script>
 </head>
 <body>

@@ -18,6 +18,8 @@ from starlette.staticfiles import StaticFiles
 
 from webapp import config, guild_info, notification_store, party_events
 from webapp.csrf import OriginCheckMiddleware
+from webapp.rate_limit import RateLimitMiddleware
+from webapp.security_headers import SecurityHeadersMiddleware
 from webapp.clients import bot_client
 from webapp.auth.dependencies import NotAuthenticated
 from webapp.routes import (
@@ -130,33 +132,10 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
-class NoStoreHtmlMiddleware:
-    """HTML 응답은 저장하지 않게 한다(Cache-Control: no-store). 이 헤더가 없으면 브라우저가
-    로그인 화면·관리 화면을 디스크 캐시와 뒤로가기 캐시(bfcache)에 남겨, 로그아웃하거나
-    관리자 권한이 빠진 뒤에도 뒤로가기로 예전 화면이 그대로 다시 보였다(서버는 403을 주는데도).
-    정적 파일은 VersionedStaticFiles가 따로 정한다."""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["path"].startswith("/static/"):
-            return await self.app(scope, receive, send)
-
-        async def send_wrapper(message):
-            if message["type"] == "http.response.start":
-                headers = message.get("headers", [])
-                ctype = next((v for k, v in headers if k.lower() == b"content-type"), b"")
-                if ctype.startswith(b"text/html"):
-                    headers = [(k, v) for k, v in headers if k.lower() != b"cache-control"]
-                    headers.append((b"cache-control", b"no-store, private"))
-                    message = {**message, "headers": headers}
-            await send(message)
-
-        await self.app(scope, receive, send_wrapper)
-
-
-app.add_middleware(NoStoreHtmlMiddleware)
+# IP별 요청 횟수 제한 — webapp/rate_limit.py
+app.add_middleware(RateLimitMiddleware)
+# 보안 헤더(CSP nonce·no-store·nosniff 등) — webapp/security_headers.py. 429 응답에도 붙도록 바깥에 둔다.
+app.add_middleware(SecurityHeadersMiddleware)
 # CSRF — 규칙은 webapp/csrf.py 참고. 세션 미들웨어와 무관하게 헤더만 보므로 순서 영향 없음.
 app.add_middleware(OriginCheckMiddleware)
 

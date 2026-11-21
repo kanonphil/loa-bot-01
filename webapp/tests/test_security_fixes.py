@@ -318,3 +318,49 @@ def test_comment_time_renders_kst_with_relative_label():
     )
     assert "13분 전" in html
     assert f'title="{kst_time(stamp)}"' in html
+
+
+# ── 보안 헤더(CSP nonce) · 요청 횟수 제한 ──
+
+def test_security_headers_and_csp_nonce_matches_inline_scripts(client):
+    import re
+    with respx.mock:
+        log_in(client)
+        page = client.get("/tools/auction-calculator")
+    csp = page.headers["content-security-policy"]
+    nonce = re.search(r"'nonce-([^']+)'", csp).group(1)
+    assert "frame-ancestors 'none'" in csp and "object-src 'none'" in csp
+    assert page.headers["x-frame-options"] == "DENY" and page.headers["x-content-type-options"] == "nosniff"
+    # 실행되는 인라인 스크립트는 전부 이 요청의 nonce를 달고 있어야 한다(JSON 데이터 블록은 실행되지 않으므로 제외)
+    inline = re.findall(r"<script(?![^>]*\bsrc=)(?![^>]*application/json)([^>]*)>", page.text)
+    assert inline and all(f'nonce="{nonce}"' in attrs for attrs in inline)
+    assert f'"inlineScriptNonce": "{nonce}"' in page.text
+    # 요청마다 nonce가 바뀐다
+    with respx.mock:
+        again = client.get("/tools/auction-calculator")
+    assert nonce not in again.headers["content-security-policy"]
+
+
+def test_no_inline_event_handlers_in_templates():
+    """CSP가 인라인 이벤트 속성·javascript: 링크·hx-on을 막으므로 템플릿에 다시 들어오면 안 된다."""
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parents[1] / "templates"
+    bad = []
+    for p in root.rglob("*.html"):
+        t = p.read_text(encoding="utf-8")
+        if re.search(r"\son[a-z]+\s*=\s*[\"']", t) or "javascript:" in t or "hx-on" in t:
+            bad.append(p.name)
+    assert bad == []
+
+
+def test_rate_limit_blocks_burst_of_writes_per_ip(client):
+    from webapp import rate_limit
+    ip = {"CF-Connecting-IP": "203.0.113.9"}
+    codes = [client.post("/logout", headers=ip, follow_redirects=False).status_code for _ in range(61)]
+    assert 429 not in codes[:60] and codes[60] == 429
+    blocked = client.post("/logout", headers=ip, follow_redirects=False)
+    assert blocked.status_code == 429 and int(blocked.headers["retry-after"]) >= 1
+    # 다른 IP는 영향 없음
+    assert client.post("/logout", headers={"CF-Connecting-IP": "203.0.113.10"}, follow_redirects=False).status_code != 429
+    rate_limit.reset()

@@ -96,6 +96,10 @@
   // 서버 부하를 줄이려던 의도가 클라이언트에서 무효화되고 있었다. 대신 같은
   // URL을 한 번만 다시 받아서 .page-content만 교체한다 — 요청은 1개로 그대로고
   // 나머지 페이지(사이드바·알림 연결 등)는 안 건드린다.
+  // CSP nonce(webapp/security_headers.py) — 브라우저는 nonce 속성을 숨기므로 .nonce 속성으로 읽는다
+  var nonceHolder = document.querySelector("script[nonce]");
+  var pageNonce = nonceHolder ? (nonceHolder.nonce || nonceHolder.getAttribute("nonce")) : "";
+
   function refresh() {
     var drafts = collectDrafts();
     fetch(window.location.href, { headers: { "X-Requested-With": "XMLHttpRequest" } })
@@ -125,6 +129,8 @@
             newScript.setAttribute(attr.name, attr.value);
           });
           newScript.textContent = oldScript.textContent;
+          // 새로 받은 HTML의 nonce는 이 페이지 CSP와 다르다 — 지금 페이지의 nonce로 바꿔야 실행된다
+          if (pageNonce) newScript.nonce = pageNonce;
           oldScript.replaceWith(newScript);
         });
         restoreDrafts(newContent, drafts);
