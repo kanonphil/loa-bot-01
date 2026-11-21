@@ -3197,6 +3197,47 @@ select.settings-select {
 }
 .guide-cmd { font-size: var(--fs-label); color: var(--text-muted); }
 .guide-cmd code { margin-right: 4px; }
+.guide-lead { color: var(--text-muted) !important; }
+/* 단계별 화면 사진 + 빨간 번호 박스(위치는 static/guide/boxes.json, scripts/ui_shots/guide_shots.py가 만든다).
+   사진은 PC/휴대폰(640px 이하) × 다크/라이트 4장 중 지금 맞는 1장만 보인다 — 나머지는 loading=lazy + display:none이라 받지 않는다. */
+.guide-page { --guide-mark: #ef4444; }
+.guide-shot {
+  position: relative; margin: var(--sp-3) 0;
+  border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  max-width: 100%; background: var(--bg);
+}
+.guide-shot img { display: none; width: 100%; height: 100%; }
+[data-theme="dark"] .guide-shot .is-dark, [data-theme="light"] .guide-shot .is-light { display: block; }
+.guide-shot.is-m { display: none; max-width: 420px; margin-inline: auto; }
+.guide-mark {
+  position: absolute;
+  border: 2.5px solid var(--guide-mark); border-radius: 6px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .22);
+  pointer-events: none;
+}
+.guide-mark i, .guide-keys i {
+  flex: none; width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 50%; background: var(--guide-mark); color: #fff;
+  font-style: normal; font-weight: 700; font-size: 12px; line-height: 1;
+}
+.guide-mark i { position: absolute; left: -11px; top: -11px; box-shadow: 0 0 0 2px var(--panel); }
+.guide-keys { list-style: none; margin: 0 0 var(--sp-2) !important; padding: 0 !important; display: grid; gap: var(--sp-2); }
+.guide-keys li { display: flex; gap: var(--sp-3); align-items: flex-start; }
+.guide-keys li > span { min-width: 0; }
+.guide-keys i { margin-top: 3px; }
+.guide-jump { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--sp-4) 0 0; }
+.guide-jump a {
+  font-size: var(--fs-label); color: var(--text); text-decoration: none;
+  border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 4px 12px;
+}
+@media (hover: hover) { .guide-jump a:hover { border-color: var(--accent); } }
+.guide-step { scroll-margin-top: calc(var(--head-h, 64px) + 12px); }
+@media (max-width: 640px) {
+  .guide-shot.is-pc { display: none; }
+  .guide-shot.is-m { display: block; }
+  .guide-mark i { width: 20px; height: 20px; font-size: 11px; left: -9px; top: -9px; }
+}
 
 
 /* ── 골드 칩 (익스트림 '원정대 주 1회' 등 보조 신호) ──────────── */

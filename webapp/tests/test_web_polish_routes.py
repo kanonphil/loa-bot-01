@@ -66,7 +66,24 @@ def test_guide_for_logged_in_user_hides_login_button(client):
         resp = client.get("/guide")
     assert resp.status_code == 200
     assert "이용 가이드" in resp.text
-    assert "지난 주 기록" in resp.text and "공대 열기" in resp.text
+    assert "<b>지난 주</b>" in resp.text and "공대 열기" in resp.text
+
+
+def test_guide_shows_screenshots_with_numbered_marks(client):
+    """단계마다 PC·휴대폰 × 다크·라이트 사진과 빨간 번호 박스 — 사진 파일이 실제로 있어야 한다."""
+    from pathlib import Path
+
+    resp = client.get("/guide")
+    body = resp.text
+    static = Path(__file__).resolve().parents[1] / "static"
+    for key in ("layout", "expedition", "homework", "create", "join", "settings", "auction"):
+        for device in ("pc", "m"):
+            for theme in ("dark", "light"):
+                name = f"{key}-{device}-{theme}.webp"
+                assert f"/static/guide/{name}" in body
+                assert (static / "guide" / name).is_file()
+    assert body.count('class="guide-mark"') >= 2 * 7
+    assert 'class="guide-shot is-m"' in body
 
 
 def test_landing_page_links_guide(client):
