@@ -88,8 +88,10 @@ def extract_state(location: str) -> str:
     return parse_qs(urlparse(location).query)["state"][0]
 
 
-def log_in(client: TestClient, discord_id: str = "111", username: str = "tester"):
-    """respx.mock 컨텍스트 안에서 호출 — Discord/봇서버를 모킹해 로그인 상태로 만든다."""
+def log_in(client: TestClient, discord_id: str = "111", username: str = "tester", admin_mode: bool = True):
+    """respx.mock 컨텍스트 안에서 호출 — Discord/봇서버를 모킹해 로그인 상태로 만든다.
+    관리자 목록에 있는 유저면 관리자 모드도 켠다(꺼져 있으면 관리 화면·액션이 막힌다) — 꺼진 상태를
+    보는 테스트는 admin_mode=False."""
     login_resp = client.get("/login")
     state = extract_state(login_resp.headers["location"])
 
@@ -103,7 +105,10 @@ def log_in(client: TestClient, discord_id: str = "111", username: str = "tester"
         return_value=httpx.Response(200, json={"discord_id": discord_id, "registered": True})
     )
     respx.get(USER_CHARACTERS_URL).mock(return_value=httpx.Response(200, json=[]))
-    return client.get("/callback", params={"code": "abc", "state": state})
+    resp = client.get("/callback", params={"code": "abc", "state": state})
+    if admin_mode and discord_id in config.ADMIN_DISCORD_IDS:
+        client.post("/admin/toggle-mode")
+    return resp
 
 
 def without_toast(location: str) -> str:

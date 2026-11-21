@@ -44,7 +44,7 @@
          '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>') }}
 </nav>
 
-{% if user.is_admin %}
+{% if user.is_admin and user.admin_mode %}
 <h2 class="more-section">관리</h2>
 <nav class="more-list" aria-label="관리">
   {{ row("/admin/raids", "관리", "레이드 · 직업 · 공대 · 유저 · 통계 · 알림 · 클리어",

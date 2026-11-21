@@ -22,7 +22,8 @@ from webapp.body_limit import BodySizeLimitMiddleware
 from webapp.rate_limit import RateLimitMiddleware
 from webapp.security_headers import SecurityHeadersMiddleware
 from webapp.clients import bot_client
-from webapp.auth.dependencies import NotAuthenticated
+from webapp.auth.dependencies import AdminModeOff, NotAuthenticated
+from webapp.flash import redirect_with_toast
 from webapp.routes import (
     admin,
     auth_routes,
@@ -196,6 +197,15 @@ def _login_required_response(request):
 @app.exception_handler(NotAuthenticated)
 async def not_authenticated_handler(request, exc):
     return _login_required_response(request)
+
+
+@app.exception_handler(AdminModeOff)
+async def admin_mode_off_handler(request, exc):
+    """관리자 모드가 꺼진 채 관리 주소·관리자 액션에 들어오면 화면은 홈 + 안내, fetch/htmx는 403 문구."""
+    accept = request.headers.get("accept", "")
+    if request.headers.get("HX-Request") or (request.method != "GET" and "text/html" not in accept) or "application/json" in accept:
+        return PlainTextResponse(exc.detail, status_code=403)
+    return redirect_with_toast("/main", exc.detail, "error")
 
 
 def _error_page(request, status: int, title: str, desc: str):

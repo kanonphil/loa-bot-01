@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from webapp import config, notification_store, party_events
-from webapp.auth.dependencies import require_admin
+from webapp.auth.dependencies import require_admin, require_admin_account
 from webapp.clients import bot_admin, bot_client
 from webapp.flash import redirect_result, redirect_with_toast
 from webapp.format import is_overdue_party, party_view, status_view
@@ -100,10 +100,10 @@ def _raids_path(raid: str | None = None) -> str:
     return f"/admin/raids?raid={quote(raid)}" if raid else "/admin/raids"
 
 
-# ── 관리자 모드 토글 (사이드바 스위치 — 화면 노출만 제어, 실행 권한은 항상 유효) ──
+# ── 관리자 모드 토글 (사이드바 스위치 — 꺼져 있으면 관리 화면·관리자 액션 전부 막힘) ──
 
 @router.post("/admin/toggle-mode")
-async def toggle_admin_mode(request: Request, user: dict = Depends(require_admin)):
+async def toggle_admin_mode(request: Request, user: dict = Depends(require_admin_account)):
     session_user = request.session["user"]
     session_user["admin_mode"] = not session_user.get("admin_mode", False)
     request.session["user"] = session_user
@@ -113,6 +113,8 @@ async def toggle_admin_mode(request: Request, user: dict = Depends(require_admin
     path = referer.path or "/main"
     if referer.query:
         path = f"{path}?{referer.query}"
+    if not session_user["admin_mode"] and referer.path.startswith("/admin"):
+        path = "/main"  # 관리 화면에서 끄면 그 화면은 더 못 여니 홈으로
     return RedirectResponse(safe_local_path(path, "/main"), status_code=303)
 
 

@@ -24,6 +24,13 @@ class NotAdmin(HTTPException):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail="관리자만 접근할 수 있습니다.")
 
 
+class AdminModeOff(HTTPException):
+    """관리자지만 관리자 모드(사이드바 스위치)가 꺼져 있을 때 — main.py에서 홈 + 안내 토스트로 바꾼다."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail="관리자 모드를 켜야 사용할 수 있습니다.")
+
+
 # 세션 쿠키는 서명만 된 채 30일 유지되고 서버가 무효화할 수 없다 — 그래서 로그인 시점의 "등록됨"·
 # "관리자" 판정이 그대로 남아, 유저가 삭제되거나 관리자에서 빠져도 계속 접근할 수 있었다.
 # 요청마다 (1) 관리자 여부는 설정에서 다시 계산하고 (2) 등록 여부는 봇에 물어보되 유저별로
@@ -72,7 +79,16 @@ async def get_current_user(request: Request) -> dict:
     return user
 
 
-def require_admin(user: dict = Depends(get_current_user)) -> dict:
+def require_admin_account(user: dict = Depends(get_current_user)) -> dict:
+    """관리자 목록에 있는지만 본다 — 관리자 모드 스위치 자체(켜기/끄기)에만 쓴다."""
     if not user.get("is_admin"):
         raise NotAdmin()
+    return user
+
+
+def require_admin(user: dict = Depends(require_admin_account)) -> dict:
+    """관리 화면·관리자 전용 액션 — 관리자이면서 관리자 모드가 켜져 있어야 한다.
+    예전엔 스위치가 화면 노출만 바꾸고 꺼짐이어도 /admin 주소로 들어가 쓸 수 있었다."""
+    if not user.get("admin_mode"):
+        raise AdminModeOff()
     return user

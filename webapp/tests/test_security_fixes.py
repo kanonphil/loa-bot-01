@@ -394,3 +394,41 @@ def test_unknown_raid_filter_is_not_stored(client, monkeypatch):
         ok = client.post("/notifications/raid-filters/add", data={"raid_name": "종막", "difficulty": "노말"}, follow_redirects=False)
     assert "error" in bad.headers["location"] and "error" in bad_diff.headers["location"]
     assert ok.status_code == 303 and stored == [("111", "종막", "노말")]
+
+
+# ── 관리자 모드 꺼짐이면 관리 화면·관리자 액션 전부 막힘(2026-11-21) ─────────
+
+def test_admin_mode_off_blocks_admin_pages_and_actions(client, monkeypatch):
+    from webapp.tests.conftest import toast_of
+
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    with respx.mock:
+        log_in(client, discord_id="111", admin_mode=False)
+        bot_delete = respx.post("http://bot-server.internal/api/internal/admin/raids/delete").mock(
+            return_value=httpx.Response(200, json={"success": True})
+        )
+        page = client.get("/admin/raids")
+        action = client.post("/admin/raids/delete", data={"name": "세르카"}, headers={"Accept": "text/html"})
+        fetch = client.post("/admin/raids/delete", data={"name": "세르카"}, headers={"Accept": "application/json"})
+        home = client.get("/main", follow_redirects=False)
+    assert page.status_code == 303 and page.headers["location"].startswith("/main")
+    assert toast_of(page.headers["location"]) == ("관리자 모드를 켜야 사용할 수 있습니다.", "error")
+    assert action.status_code == 303 and action.headers["location"].startswith("/main")
+    assert fetch.status_code == 403
+    assert not bot_delete.called
+    assert 'href="/admin/raids"' not in home.text  # 사이드바 "관리" 메뉴도 숨김
+
+
+def test_turning_admin_mode_off_on_admin_page_goes_home(client, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_DISCORD_IDS", {"111"})
+    with respx.mock:
+        log_in(client, discord_id="111")  # 켜짐
+        resp = client.post("/admin/toggle-mode", headers={"Referer": "http://testserver/admin/raids"})
+    assert resp.status_code == 303 and resp.headers["location"] == "/main"
+
+
+def test_non_admin_still_gets_403_not_redirect(client):
+    with respx.mock:
+        log_in(client, discord_id="555")
+        resp = client.get("/admin/raids")
+    assert resp.status_code == 403

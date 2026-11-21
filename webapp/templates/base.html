@@ -102,7 +102,7 @@
       <a href="/settings" class="side-link{% if act == 'settings' %} on{% endif %}" data-tip="알림 설정"{% if act == 'settings' %} aria-current="page"{% endif %}>{{ icon("gear") }}<span class="side-lbl">알림 설정</span></a>
       <a href="/tools/auction-calculator" class="side-link{% if act == 'auction_calculator' %} on{% endif %}" data-tip="분배금 계산기"{% if act == 'auction_calculator' %} aria-current="page"{% endif %}>{{ icon("calc") }}<span class="side-lbl">분배금 계산기</span></a>
       <a href="/guide" class="side-link{% if act == 'guide' %} on{% endif %}" data-tip="이용 가이드"{% if act == 'guide' %} aria-current="page"{% endif %}>{{ icon("guide") }}<span class="side-lbl">이용 가이드</span></a>
-      {% if user.is_admin %}
+      {% if user.is_admin and user.admin_mode %}
       <p class="side-grp">관리</p>
       <a href="/admin/raids" class="side-link{% if grp == 'admin' %} on{% endif %}" data-tip="관리"{% if grp == 'admin' %} aria-current="page"{% endif %}>{{ icon("admin") }}<span class="side-lbl">관리</span></a>
       {% endif %}

@@ -254,9 +254,7 @@ def _detail(client, p, discord_id="111", invitable=None, eligibility=None, admin
     with respx.mock:
         if admin:
             config.ADMIN_DISCORD_IDS = {discord_id}
-        log_in(client, discord_id=discord_id)
-        if admin:
-            client.post("/admin/toggle-mode")
+        log_in(client, discord_id=discord_id)  # 관리자면 관리자 모드도 켜진다
         mid = p["message_id"]
         respx.get(f"{B}/parties/{mid}").mock(return_value=httpx.Response(200, json=p))
         respx.get(f"{B}/parties/{mid}/comments").mock(return_value=httpx.Response(200, json=[]))
