@@ -17,7 +17,7 @@
 set -euo pipefail
 
 REPO="$HOME/loa-bot-01"
-WEB_IP="${WEB_IP:?웹 서버 공인 IP를 환경변수로 넘겨주세요: WEB_IP=x.x.x.x bash setup-bot-server.sh}"  # 공개 리포라 주소를 적어 두지 않는다
+WEB_IP="${WEB_IP:-}"  # 웹 서버 공인 IP — 공개 리포라 적어 두지 않고 RESTRICT_8000=1일 때 환경변수로 받는다
 UNIT=/etc/systemd/system/loabot.service
 RESTART=0
 
@@ -74,6 +74,7 @@ chmod 600 "$REPO/.env"
 
 # ── 3. (선택) 8000 포트를 웹 서버에서만 ───────────────────────────────────
 if [ "${RESTRICT_8000:-0}" = 1 ]; then
+  [ -n "$WEB_IP" ] || { say "RESTRICT_8000=1에는 WEB_IP=x.x.x.x 가 필요합니다"; exit 1; }
   if ! sudo iptables -C INPUT -s "$WEB_IP/32" -p tcp -m tcp --dport 8000 -j ACCEPT 2>/dev/null; then
     sudo iptables -I INPUT -s "$WEB_IP/32" -p tcp -m tcp --dport 8000 -j ACCEPT
   fi

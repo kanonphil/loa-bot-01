@@ -115,6 +115,10 @@ restart_and_check() {
   for i in $(seq 1 20); do
     sleep 2
     code=$(curl -s -o /dev/null -m 3 -w '%{http_code}' "$health_url" || true)
+    # 봇 API는 HTTPS(자체 서명, BOT_API_TLS_CERT)일 수 있다 — http가 안 되면 https로 한 번 더(로컬이라 -k)
+    if [[ "$code" == 000 && "$health_url" == http://* ]]; then
+      code=$(curl -sk -o /dev/null -m 3 -w '%{http_code}' "https://${health_url#http://}" || true)
+    fi
     if [[ " ${ok_codes[*]} " == *" $code "* ]]; then
       pid=$(systemctl show -p MainPID --value "$service")
       sleep 8

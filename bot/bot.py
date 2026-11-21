@@ -15,6 +15,7 @@ from bot.ui.embeds import party_embed
 from bot.data import raids as raids_module
 
 import asyncio
+import os
 import traceback
 import uvicorn
 
@@ -84,11 +85,17 @@ class LoABot(commands.Bot):
         from bot.api.server import app
         from bot.api import bot_ref
         bot_ref.set_bot(self)
+        # BOT_API_TLS_CERT/KEY가 있으면 HTTPS로 연다 — 웹 서버(다른 클라우드)와의 구간이 인터넷이라
+        # 평문이면 API 키·로아 API 키가 그대로 보인다. 웹앱은 BOT_API_CA_CERT로 이 인증서만 믿는다.
+        tls_cert = os.environ.get("BOT_API_TLS_CERT") or None
+        tls_key = os.environ.get("BOT_API_TLS_KEY") or None
         config = uvicorn.Config(
             app,
             host="0.0.0.0",
             port=8000,
             log_level="warning",
+            ssl_certfile=tls_cert if tls_cert and tls_key else None,
+            ssl_keyfile=tls_key if tls_cert and tls_key else None,
         )
         server = uvicorn.Server(config)
         # 태스크 참조를 인스턴스에 보관 — asyncio는 태스크를 약한 참조로만 들고 있어서,

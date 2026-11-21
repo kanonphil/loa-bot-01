@@ -14,6 +14,9 @@ DISCORD_REDIRECT_URI: str = os.environ.get(
 # ── 봇 서버(다른 머신) 내부 API ─────────────────────────────
 BOT_API_BASE_URL: str = os.environ.get("BOT_API_BASE_URL", "http://localhost:8000")
 BOT_API_WEBAPP_KEY: str = os.environ["BOT_API_WEBAPP_KEY"]
+# 봇 API가 HTTPS(자체 서명 인증서)일 때 그 인증서 파일 경로 — 이 인증서만 믿는다(고정). 비우면 시스템 기본 검증.
+# 두 서버가 다른 클라우드라 http://면 API 키·로아 API 키가 인터넷을 평문으로 지나간다.
+BOT_API_CA_CERT: str | None = os.environ.get("BOT_API_CA_CERT") or None
 # 공대 모집 목록 조회용 — 이 웹앱은 길드 하나만 서비스한다고 가정
 DISCORD_GUILD_ID: str = os.environ["DISCORD_GUILD_ID"]
 # 사이드바에 표시할 길드명 — 실제 아이콘은 봇 서버에서 조회해 오되(webapp/guild_info.py),

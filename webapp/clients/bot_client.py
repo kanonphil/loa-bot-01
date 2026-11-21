@@ -2,6 +2,8 @@
 import time
 from urllib.parse import quote
 
+import ssl
+
 import httpx
 
 from webapp import config
@@ -26,7 +28,8 @@ _client: httpx.AsyncClient | None = None
 def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None:
-        _client = httpx.AsyncClient()
+        verify = ssl.create_default_context(cafile=config.BOT_API_CA_CERT) if config.BOT_API_CA_CERT else True
+        _client = httpx.AsyncClient(verify=verify)
     return _client
 
 
