@@ -104,7 +104,12 @@ try:
         check("다시 열기: 레이드·난이도가 채워진다", raid != "" and diff != "", f"{raid} {diff} / {label}")
         check("다시 열기: 일정이 채워진다", page.locator("#scheduled-datetime-input").input_value() != "")
         check("다시 열기 후 제출 가능", page.locator("#party-create-submit").is_enabled())
-        rows = page.locator("#char-list .pt-copt").all_inner_texts()
+        # 다시 열기 칩의 요일 시간(예: 금 21:00)은 실행하는 요일에 따라 수요일 리셋 뒤(다음 주)가 될 수 있다 —
+        # 그러면 이번 주 완료·다른 공대 충돌이 없는 게 맞으므로, 사유 검사는 이번 주 안의 일정으로 본다.
+        # 지금+3시간은 발키리가 있는 p1과 시간이 겹쳐 추천 검사가 깨지므로 지금+6시간.
+        page.evaluate("document.querySelector('#scheduled-datetime-input')._flatpickr.setDate(new Date(Date.now() + 6 * 3600e3), true)")
+        page.wait_for_timeout(800)
+        rows =page.locator("#char-list .pt-copt").all_inner_texts()
         check("이번 주 완료한 캐릭터는 사유와 함께 비활성", any("발키리" in r and "이번 주 완료" in r for r in rows), " | ".join(x.replace(chr(10), " ") for x in rows)[:160])
         check("같은 레이드의 같은 주 다른 공대에 있는 캐릭터도 사유와 함께 비활성", any("워로드부캐" in r and "다른 공대" in r for r in rows))
         check("레벨 부족 캐릭터는 비활성", page.locator("#char-list input:disabled").count() >= 1)
