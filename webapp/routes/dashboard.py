@@ -7,7 +7,7 @@
 봇 쪽 엔드포인트가 없거나 느려도 홈이 깨지지 않도록 비워 둔다.
 """
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 import httpx
@@ -377,7 +377,7 @@ def _today_key(label: str, api_index: int) -> tuple:
 
 def build_today(overview: dict, now: datetime | None = None) -> dict | None:
     """오늘의 콘텐츠(작은 카드) — 종류마다 한 줄: 다음에 시작하는 항목 이름(같은 시각에 여럿이면 "외 N")과 그 시각.
-    같은 시각 항목 중 골드 섬이 있으면 그 이름을 앞에 두고 골드 표시. 오늘 일정이 다 지났으면 "오늘 끝남"."""
+    같은 시각 항목 중 골드 섬이 있으면 그 이름을 앞에 두고 골드 표시. 오늘 일정이 다 지났으면 "오늘 끝남", 오늘 열리지 않는 날이면 "-"."""
     now = now or datetime.now(KST)
     items = overview.get("today") or []
     if not isinstance(items, list):
@@ -395,13 +395,19 @@ def build_today(overview: dict, now: datetime | None = None) -> dict | None:
     if not groups:
         return None
 
+    local_now = now.astimezone(KST)
+    game_day_start = local_now.replace(hour=6, minute=0, second=0, microsecond=0)
+    if local_now < game_day_start:
+        game_day_start -= timedelta(days=1)
     rows = []
     for g in groups:
         had_times = False
         nexts = []
         for it in g["items"]:
             times = sorted(t for t in (_parse(x) for x in it.get("times") or []) if t)
-            had_times = had_times or bool(times)
+            # 로아의 하루는 오전 6시에 바뀐다 — 0~6시 회차는 전날 콘텐츠의 연장이다(금요일 필드보스의 토요일 0시 회차 등).
+            # 오늘(6시 이후) 열린 회차가 있었을 때만 "오늘 끝남", 아니면 오늘은 열리지 않는 날("-").
+            had_times = had_times or any(t >= game_day_start for t in times)
             upcoming = next((t for t in times if t >= now), None)
             if upcoming:
                 nexts.append((upcoming, it))
@@ -416,7 +422,7 @@ def build_today(overview: dict, now: datetime | None = None) -> dict | None:
             })
         else:
             rows.append({
-                "label": g["label"], "name": "오늘 끝남" if had_times else "오늘 일정 없음", "more": 0,
+                "label": g["label"], "name": "오늘 끝남" if had_times else "-", "more": 0,
                 "time": "", "rel": "", "gold": False, "ended": True,
             })
     rows = [r for _, r in sorted(enumerate(rows), key=lambda p: _today_key(p[1]["label"], p[0]))]

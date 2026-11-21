@@ -316,7 +316,7 @@ def test_home_loa_cards_render_when_available(client):
     body = get_home(client, overview=httpx.Response(200, json=OVERVIEW), prices=httpx.Response(200, json=PRICES)).text
     assert "정기 점검 안내" in body and "공지 보기" in body
     assert "오늘의 콘텐츠" in body and "섬 A" in body and "골드" in body and 'title="2시간 ' in body
-    assert "필드보스" in body and "오늘 일정 없음" in body
+    assert "필드보스" in body and "오늘 끝남" not in body  # 오늘 회차가 없으면 "-"
     assert 'aria-checked="true"' in body and "data-gold-switch" in body
     assert "진행 중 이벤트" in body and "이벤트 A" in body and "끝난 이벤트" not in body
     assert "시세" in body and "+13.6%" in body and "/tools/auction-calculator" in body
@@ -588,3 +588,20 @@ def test_difficulty_pref_validates_body_and_bot_down(client):
 
 def test_difficulty_pref_requires_login(client):
     assert client.post("/raid-check/difficulty-pref", json={}).status_code in (302, 303, 307, 401)
+
+
+def test_today_day_based_content_after_midnight_tail_shows_dash():
+    """금요일 필드보스의 토요일 0시 회차처럼 오전 6시 전 회차만 있으면 오늘은 열리지 않는 날 — "-"."""
+    from webapp.routes.dashboard import build_today
+
+    now = datetime(2026, 11, 21, 13, 0, tzinfo=KST)  # 토요일 낮
+    items = [{"category": "필드보스", "name": "세베크", "times": [datetime(2026, 11, 21, 0, 0, tzinfo=KST).isoformat()]},
+             {"category": "카오스게이트", "name": "카게", "times": [datetime(2026, 11, 21, 11, 0, tzinfo=KST).isoformat()]}]
+    rows = {r["label"]: r for r in build_today({"today": items}, now)["rows"]}
+    assert rows["필드보스"]["name"] == "-" and rows["필드보스"]["ended"] is True
+    assert rows["카오스게이트"]["name"] == "오늘 끝남"
+    # 새벽(6시 전)에는 0시 회차가 아직 "어제" 콘텐츠의 남은 회차로 보인다
+    dawn = build_today({"today": [{"category": "필드보스", "name": "세베크",
+                                   "times": [datetime(2026, 11, 21, 5, 0, tzinfo=KST).isoformat()]}]},
+                       datetime(2026, 11, 21, 4, 0, tzinfo=KST))
+    assert dawn["rows"][0]["name"] == "세베크" and dawn["rows"][0]["time"] == "05:00"
