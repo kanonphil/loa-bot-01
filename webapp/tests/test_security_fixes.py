@@ -54,6 +54,19 @@ def test_admin_flag_is_recomputed_each_request(client, monkeypatch):
     assert resp.status_code == 403
 
 
+def test_html_pages_are_not_stored_but_static_is(client):
+    """HTML은 no-store — 로그아웃·권한 해제 뒤 뒤로가기로 예전 관리 화면이 보이면 안 된다."""
+    with respx.mock:
+        log_in(client)
+        page = client.get("/tools/auction-calculator")
+    assert page.status_code == 200
+    assert page.headers["cache-control"] == "no-store, private"
+    forbidden = client.get("/admin/raids")
+    assert forbidden.status_code == 403 and "no-store" in forbidden.headers["cache-control"]
+    static = client.get("/static/style.css?v=1")
+    assert "immutable" in static.headers["cache-control"]
+
+
 # ── 3. 비내비게이션 요청은 401 (login 리다이렉트로 state를 덮어쓰지 않는다) ──
 
 def test_unauthenticated_htmx_gets_401_with_hx_redirect(client):
