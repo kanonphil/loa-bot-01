@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from bot.api.body_limit import BodySizeLimitMiddleware
 from bot.api.routes import raids, parties, users, stats, status, completions, subscriptions, internal
 
 app = FastAPI(
@@ -22,6 +23,9 @@ app.add_middleware(
   allow_methods=["*"],
   allow_headers=["*"],
 )
+
+# 요청 본문 64KB 상한 — bot/api/body_limit.py
+app.add_middleware(BodySizeLimitMiddleware)
 
 app.include_router(raids.router,         prefix="/api/raids",         tags=["raids"])
 app.include_router(parties.router,       prefix="/api/parties",       tags=["parties"])

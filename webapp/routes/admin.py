@@ -798,7 +798,7 @@ def _wants_json(request: Request) -> bool:
 
 
 @router.post("/admin/notifications/broadcast")
-async def admin_broadcast(request: Request, content: str = Form(...), user: dict = Depends(require_admin)):
+async def admin_broadcast(request: Request, content: str = Form(..., max_length=2000), user: dict = Depends(require_admin)):
     """JSON을 받겠다고(Accept) 하면 {success, reason, queued, sent, total}을 그대로 돌려준다 — 화면은 이걸로
     진행률을 띄운다. 일반 폼 제출은 토스트와 함께 되돌아간다(발송은 봇이 뒤에서 계속)."""
     result = await bot_client.admin_notify_all(user["discord_id"], content.strip())

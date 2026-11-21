@@ -8,7 +8,7 @@
 #   2. systemd 유닛에 --timeout-graceful-shutdown 5 추가 — 열린 실시간 연결(SSE) 때문에 재시작이 오래 걸리지 않게.
 #      다음 재시작(배포)부터 적용.
 #   3. 8080 포트를 Cloudflare IP와 이 서버 자신에서만 받도록 방화벽 설정 — 지금은 누구나 Cloudflare를 우회해
-#      3.34.20.145:8080으로 직접 접속할 수 있다. Cloudflare 공식 IP 목록을 받아서 적용하고 재부팅 후에도 유지.
+#      원본 IP:8080으로 직접 접속할 수 있다. Cloudflare 공식 IP 목록을 받아서 적용하고 재부팅 후에도 유지.
 #   4. 봇 DB 원격 백업: 매일 05:10 KST에 봇 서버의 최신 백업을 이 서버로 가져와 14개 보관(다른 클라우드라 서버 하나가
 #      통째로 사라져도 남는다). 알림 DB(webapp_notifications.db)도 같이 백업.
 #      처음 실행하면 공개키를 출력한다 → setup-bot-server.sh 에 BACKUP_PULL_KEY 로 넘겨야 동작.
@@ -17,7 +17,7 @@ set -euo pipefail
 REPO="$HOME/loa-bot-01"
 ENVF="$REPO/webapp/.env"
 UNIT=/etc/systemd/system/loa-webapp.service
-BOT_IP="158.180.68.196"
+BOT_IP="${BOT_IP:?봇 서버 공인 IP를 환경변수로 넘겨주세요: BOT_IP=x.x.x.x bash setup-web-server.sh}"  # 공개 리포라 주소를 적어 두지 않는다
 say() { printf '[web-setup] %s\n' "$*"; }
 
 # ── 1. .env 정리 ─────────────────────────────────────────────────────────

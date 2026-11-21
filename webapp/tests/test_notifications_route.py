@@ -226,7 +226,12 @@ def test_save_type_preferences_filters_panel(client):
     assert "모집 알림" not in resp.text
 
 
-def test_raid_filter_add_and_remove_roundtrip(client):
+def test_raid_filter_add_and_remove_roundtrip(client, monkeypatch):
+    from webapp.clients import bot_client
+
+    async def fake_raids():
+        return {"카멘": {"difficulties": {"하드": {}}}, "종막": {"difficulties": {"하드": {}}}}
+    monkeypatch.setattr(bot_client, "get_raids", fake_raids)  # 필터는 실제 있는 레이드만 저장된다
     _login(client, discord_id="111")
     client.post("/notifications/subscribe")
     asyncio.run(notification_store.add_notification("created", "m1", "카멘 하드 모집", raid_name="카멘", difficulty="하드"))

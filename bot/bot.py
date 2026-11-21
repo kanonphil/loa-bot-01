@@ -50,7 +50,12 @@ class LoABot(commands.Bot):
         # 실제로 켜진다(코드만 True로 바꿔도 포털에서 안 켜져 있으면 계속 빈 문자열이 옴).
         intents.message_content = True
         intents.members = True
-        super().__init__(command_prefix="!", intents=intents, help_command=None)
+        # 봇 메시지에 사용자 글(공대 메모·제목 등)이 섞여도 @everyone·@here·역할 멘션은 알림이 가지 않게 —
+        # 봇이 의도적으로 부르는 건 유저 멘션(파티원 호출)뿐이다.
+        super().__init__(
+            command_prefix="!", intents=intents, help_command=None,
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True, replied_user=True),
+        )
         self._thread_purge_failures: dict[str, int] = {}  # channel_id → 실패 횟수
         self._api_server_task: asyncio.Task | None = None
 

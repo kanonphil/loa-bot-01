@@ -48,6 +48,8 @@ async def relay_comment_to_discord(
         msg = await webhook.send(
             content=content, username=display_name, avatar_url=avatar_url,
             thread=discord.Object(id=int(party["channel_id"])), wait=True,
+            # 웹 댓글은 길드원 누구나 쓸 수 있다 — @everyone·역할·유저 멘션이 실제 알림이 되면 핑 스팸이 된다
+            allowed_mentions=discord.AllowedMentions.none(),
         )
         return True, None, str(msg.id)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:

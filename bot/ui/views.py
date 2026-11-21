@@ -299,6 +299,10 @@ async def _create_invite_core(
     leader_display_name: 디스코드 경로는 interaction.user.display_name(서버 닉네임)을
     그대로 넘겨준다 — bot.fetch_user()는 길드 멤버가 아닌 User를 반환해 닉네임이 아닌
     전역 사용자명이 나오므로, 넘겨받지 못했을 때만(웹 경로) fetch_user로 대체한다."""
+    # 디스코드 ID는 숫자 문자열 — 아니면 초대 행이 저장된 뒤 int()에서 터져 슬롯이 예약 상태로 남았다
+    target_discord_id = str(target_discord_id).strip()
+    if not (target_discord_id.isascii() and target_discord_id.isdigit()):
+        return {"success": False, "reason": "초대할 유저를 다시 골라주세요."}
     party = await db.get_party(message_id)
     err = _require_leader_or_admin(party, leader_discord_id)
     if err:

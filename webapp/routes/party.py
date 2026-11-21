@@ -327,7 +327,7 @@ async def create_party_submit(
 ):
     result = await bot_client.create_party(
         user["discord_id"], config.DISCORD_GUILD_ID, raid_name, difficulty,
-        proficiency, scheduled_datetime, memo.strip() or None,
+        proficiency, scheduled_datetime, memo.strip()[:150] or None,
     )
     if not result["success"]:
         # 실패 화면을 직접 렌더하면 뒤로가기/F5가 개설(디스코드 스레드 생성)을 재시도한다 —
@@ -691,7 +691,7 @@ async def cancel_party(
     reason: str = Form(""),
     user: dict = Depends(get_current_user),
 ):
-    result = await bot_client.cancel_party(message_id, user["discord_id"], reason.strip() or None)
+    result = await bot_client.cancel_party(message_id, user["discord_id"], reason.strip()[:200] or None)
     if not result.get("success"):
         error = quote(result.get("reason") or "취소하지 못했습니다.")
         return RedirectResponse(f"/parties/{message_id}?join_error={error}", status_code=303)
@@ -725,7 +725,7 @@ async def reschedule_party(
         result = await bot_client.reschedule_party(message_id, user["discord_id"], scheduled_datetime)
     else:
         result = await bot_client.reschedule_party(
-            message_id, user["discord_id"], scheduled_datetime, memo.strip() or None
+            message_id, user["discord_id"], scheduled_datetime, memo.strip()[:150] or None
         )
     return _redirect_with_result(message_id, result, "일정을 변경하지 못했습니다.", "일정을 변경했습니다. 파티원에게 안내가 갑니다.")
 
@@ -802,7 +802,7 @@ async def admin_unlock(request: Request, message_id: str, user: dict = Depends(r
 
 @router.post("/parties/{message_id}/admin-notify")
 async def admin_notify(
-    request: Request, message_id: str, content: str = Form(...), user: dict = Depends(require_admin),
+    request: Request, message_id: str, content: str = Form(..., max_length=2000), user: dict = Depends(require_admin),
 ):
     result = await bot_client.admin_notify_party(message_id, user["discord_id"], content.strip())
     if result.get("success"):

@@ -17,7 +17,7 @@
 set -euo pipefail
 
 REPO="$HOME/loa-bot-01"
-WEB_IP="3.34.20.145"
+WEB_IP="${WEB_IP:?웹 서버 공인 IP를 환경변수로 넘겨주세요: WEB_IP=x.x.x.x bash setup-bot-server.sh}"  # 공개 리포라 주소를 적어 두지 않는다
 UNIT=/etc/systemd/system/loabot.service
 RESTART=0
 

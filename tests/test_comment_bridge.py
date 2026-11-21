@@ -50,6 +50,9 @@ def test_relay_comment_to_discord_captures_sent_message_id():
     assert discord_message_id == "123456789"
     _, kwargs = webhook.send.call_args
     assert kwargs["wait"] is True
+    # 웹 댓글의 @everyone·역할·유저 멘션은 알림이 가지 않는다
+    am = kwargs["allowed_mentions"]
+    assert am.everyone is False and am.roles is False and am.users is False
 
 
 def test_relay_comment_to_discord_returns_none_id_on_failure():

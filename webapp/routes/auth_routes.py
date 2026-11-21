@@ -89,9 +89,15 @@ async def callback(
     return RedirectResponse("/main")
 
 
-@router.api_route("/logout", methods=["GET", "POST"])
+@router.post("/logout")
 async def logout(request: Request):
-    """POST가 정식(로그아웃 버튼은 폼). GET도 기존 북마크/링크 호환으로 유지한다.
-    POST는 CSRF 미들웨어(webapp/csrf.py)가 같은 사이트 출처인지 확인한다."""
+    """로그아웃은 POST만(로그아웃 버튼은 폼) — CSRF 미들웨어(webapp/csrf.py)가 같은 사이트 출처인지 확인한다."""
     request.session.clear()
     return RedirectResponse("/", status_code=303)
+
+
+@router.get("/logout")
+async def logout_get():
+    """예전 북마크·링크 호환 — 로그아웃하지 않고 메인으로 보낸다. GET으로 세션을 지우면 다른 사이트의
+    링크 한 번으로 강제 로그아웃시킬 수 있었다."""
+    return RedirectResponse("/main", status_code=303)

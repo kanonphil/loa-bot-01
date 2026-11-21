@@ -162,7 +162,12 @@ async def add_raid_filter(request: Request, user: dict = Depends(get_current_use
     form = await request.form()
     raid_name = (form.get("raid_name") or "").strip()
     difficulty = (form.get("difficulty") or "").strip() or None  # 빈 값 = 모든 난이도
+    # 실제 있는 레이드·난이도만 저장한다 — 예전엔 임의 문자열을 길이 제한 없이 저장했다
     if raid_name:
+        raids = await bot_client.get_raids()
+        known = raids.get(raid_name)
+        if known is None or (difficulty and difficulty not in (known.get("difficulties") or {})):
+            return redirect_with_toast("/settings", "없는 레이드입니다.", "error")
         await notification_store.add_raid_filter(user["discord_id"], raid_name, difficulty)
     return redirect_with_toast("/settings", f"{raid_name} 필터를 추가했습니다." if raid_name else None)
 

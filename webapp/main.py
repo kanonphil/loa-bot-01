@@ -18,6 +18,7 @@ from starlette.staticfiles import StaticFiles
 
 from webapp import config, guild_info, notification_store, party_events
 from webapp.csrf import OriginCheckMiddleware
+from webapp.body_limit import BodySizeLimitMiddleware
 from webapp.rate_limit import RateLimitMiddleware
 from webapp.security_headers import SecurityHeadersMiddleware
 from webapp.clients import bot_client
@@ -132,6 +133,8 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
+# 요청 본문 64KB 상한 — webapp/body_limit.py
+app.add_middleware(BodySizeLimitMiddleware)
 # IP별 요청 횟수 제한 — webapp/rate_limit.py
 app.add_middleware(RateLimitMiddleware)
 # 보안 헤더(CSP nonce·no-store·nosniff 등) — webapp/security_headers.py. 429 응답에도 붙도록 바깥에 둔다.

@@ -182,14 +182,15 @@ def test_get_requests_are_not_origin_checked(client):
     assert client.get("/health", headers={"Origin": "https://evil.example"}).status_code == 200
 
 
-def test_logout_post_and_get_both_clear_session(client):
+def test_logout_only_by_post_get_keeps_session(client):
     with respx.mock:
         log_in(client)
         assert client.post("/logout").status_code == 303
         assert client.get("/expedition").headers["location"] == "/login"
         log_in(client)
-        assert client.get("/logout").status_code in (302, 303, 307)
-        assert client.get("/expedition").headers["location"] == "/login"
+        resp = client.get("/logout")  # 다른 사이트 링크로 강제 로그아웃되면 안 된다
+        assert resp.status_code == 303 and resp.headers["location"] == "/main"
+        assert client.get("/tools/auction-calculator").status_code == 200
 
 
 # ── 13. 경로 식별자 검증 ───────────────────────────────────────
@@ -364,3 +365,32 @@ def test_rate_limit_blocks_burst_of_writes_per_ip(client):
     # 다른 IP는 영향 없음
     assert client.post("/logout", headers={"CF-Connecting-IP": "203.0.113.10"}, follow_redirects=False).status_code != 429
     rate_limit.reset()
+
+
+def test_oversized_body_is_rejected_before_handlers(client):
+    with respx.mock:
+        log_in(client)
+        resp = client.post("/parties/create", data={"memo": "x" * 70000, "raid_name": "a", "difficulty": "b",
+                                                    "proficiency": "c", "scheduled_datetime": "d"})
+    assert resp.status_code == 413
+
+
+def test_unknown_raid_filter_is_not_stored(client, monkeypatch):
+    from webapp import notification_store
+    from webapp.clients import bot_client
+    stored = []
+
+    async def fake_raids():
+        return {"종막": {"difficulties": {"노말": {}}}}
+
+    async def fake_add(*a):
+        stored.append(a)
+    monkeypatch.setattr(bot_client, "get_raids", fake_raids)
+    monkeypatch.setattr(notification_store, "add_raid_filter", fake_add)
+    with respx.mock:
+        log_in(client)
+        bad = client.post("/notifications/raid-filters/add", data={"raid_name": "x" * 300}, follow_redirects=False)
+        bad_diff = client.post("/notifications/raid-filters/add", data={"raid_name": "종막", "difficulty": "zzz"}, follow_redirects=False)
+        ok = client.post("/notifications/raid-filters/add", data={"raid_name": "종막", "difficulty": "노말"}, follow_redirects=False)
+    assert "error" in bad.headers["location"] and "error" in bad_diff.headers["location"]
+    assert ok.status_code == 303 and stored == [("111", "종막", "노말")]

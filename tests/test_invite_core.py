@@ -74,6 +74,13 @@ def test_create_invite_allows_admin_who_is_not_leader(party):
     assert result["success"] is True
 
 
+def test_create_invite_rejects_non_numeric_target_without_reserving(party):
+    bot = _make_bot()
+    result = asyncio.run(_create_invite_core(bot, party, LEADER_ID, "abc", 1))
+    assert result["success"] is False
+    assert asyncio.run(db.get_reserved_slots(party)) == {}
+
+
 def test_create_invite_rejects_non_leader_non_admin(party):
     bot = _make_bot()
     result = asyncio.run(_create_invite_core(bot, party, "555", TARGET_ID, 1))

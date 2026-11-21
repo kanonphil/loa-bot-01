@@ -3,7 +3,9 @@
 X-Webapp-Key로만 인증하며, 관리자 API(X-API-Key)와는 분리되어 있다.
 """
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field
 import config
 from bot.api.auth import verify_webapp_key
 import bot.api.lostark as loa
@@ -393,12 +395,15 @@ def _character_gold(by_raid: dict[str, dict], visible: list[str], done_keys: set
 class SetRaidSelectionBody(BaseModel):
   discord_id: str
   character_name: str
-  raid_names: list[str]
+  raid_names: list[Annotated[str, Field(max_length=60)]] = Field(max_length=80)
 
 
 @router.post("/raid-selection")
 async def set_raid_selection(body: SetRaidSelectionBody):
-  await db.set_selected_raids(body.discord_id, body.character_name, body.raid_names)
+  # 실제 있는 레이드 이름만 저장한다(중복 제거) — 예전엔 임의 문자열 목록을 그대로 저장했다
+  known = await db.get_raids_dict()
+  raid_names = list(dict.fromkeys(n for n in body.raid_names if n in known))
+  await db.set_selected_raids(body.discord_id, body.character_name, raid_names)
   return {"success": True}
 
 
@@ -417,7 +422,7 @@ class CreatePartyBody(BaseModel):
   difficulty: str
   proficiency: str
   scheduled_datetime: str  # KST 기준 "YYYY-MM-DDTHH:MM" (datetime-local 입력값)
-  memo: str | None = None
+  memo: str | None = Field(default=None, max_length=150)
 
 
 @router.post("/parties/create")
@@ -672,9 +677,9 @@ async def get_party_comments(message_id: str):
 
 class PostCommentBody(BaseModel):
   discord_id: str
-  display_name: str
-  avatar_url: str
-  content: str
+  display_name: str = Field(max_length=100)
+  avatar_url: str = Field(max_length=500)
+  content: str = Field(max_length=500)
 
 
 @router.post("/parties/{message_id}/comments")
@@ -774,7 +779,7 @@ async def clear_party(message_id: str, body: LeaderActionBody):
 
 class CancelPartyBody(BaseModel):
   discord_id: str
-  reason: str | None = None
+  reason: str | None = Field(default=None, max_length=200)
 
 
 @router.post("/parties/{message_id}/cancel")
@@ -803,7 +808,7 @@ async def kick_member(message_id: str, body: KickMemberBody):
 class ReschedulePartyBody(BaseModel):
   discord_id: str
   scheduled_datetime: str
-  memo: str | None = None
+  memo: str | None = Field(default=None, max_length=150)
 
 
 @router.post("/parties/{message_id}/reschedule")
@@ -827,7 +832,7 @@ async def reschedule_party(message_id: str, body: ReschedulePartyBody):
 
 class PartyMemoBody(BaseModel):
   discord_id: str
-  memo: str | None = None
+  memo: str | None = Field(default=None, max_length=150)
 
 
 @router.post("/parties/{message_id}/memo")
@@ -1392,7 +1397,7 @@ async def admin_unlock_party(message_id: str, body: AdminPartyActionBody):
 
 class AdminNotifyPartyBody(BaseModel):
   discord_id: str
-  content: str
+  content: str = Field(max_length=2000)
 
 
 @router.post("/admin/parties/{message_id}/notify")
@@ -1556,7 +1561,7 @@ async def admin_notification_logs(discord_id: str, limit: int = 200):
 
 class AdminBroadcastBody(BaseModel):
   discord_id: str
-  content: str
+  content: str = Field(max_length=2000)
 
 
 @router.post("/admin/notify-all")
