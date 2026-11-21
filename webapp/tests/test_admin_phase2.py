@@ -425,7 +425,7 @@ def test_users_page_tolerates_missing_fields(client, monkeypatch):
         respx.get(f"{A}/status").mock(return_value=httpx.Response(200, json=STATUS))
         resp = client.get("/admin/users")
     assert resp.status_code == 200
-    assert '<td class="num" data-label="캐릭터"><span class="ad-muted">-</span></td>' in resp.text
+    assert '<td class="num" data-label="캐릭터"><span class="mg-muted">-</span></td>' in resp.text
     assert 'title="2026-05-02 13:00"' in resp.text  # last_active_at이 없으면 동기화 시각
 
 
@@ -562,7 +562,7 @@ def test_broadcast_tab_resumes_progress_when_a_broadcast_is_running(client, monk
         respx.get(f"{A}/notify-all/status").mock(return_value=httpx.Response(200, json={"sent": 8, "total": 22, "done": False}))
         resp = client.get("/admin/notifications?tab=broadcast")
     import re
-    tag = re.search(r'<div class="ad-progress"[^>]*>', resp.text).group(0)
+    tag = re.search(r'<div class="mg-progress"[^>]*>', resp.text).group(0)
     assert 'data-running="1"' in tag and "hidden" not in tag
     assert "36%" in resp.text  # 8/22
 
@@ -660,5 +660,5 @@ def test_classes_page_has_role_chips_table_and_add_dialog(client, monkeypatch):
         respx.get(f"{A}/status").mock(return_value=httpx.Response(200, json=STATUS))
         resp = client.get("/admin/classes")
     body = resp.text
-    assert 'data-ad-role="support"' in body and 'data-role="support"' in body and 'data-role="dps"' in body
+    assert 'data-mg-role="support"' in body and 'data-role="support"' in body and 'data-role="dps"' in body
     assert 'id="class-table"' in body and 'id="dlg-class-add"' in body and 'action="/admin/classes/add"' in body

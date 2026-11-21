@@ -8,11 +8,11 @@
 <link rel="stylesheet" href="/static/pages/admin.css?v={{ static_version }}">
 {% endblock %}
 {% block page_top %}
-<div class="ad-top">
+<div class="mg-top">
   <h1>관리</h1>
   {% if bot_status %}
   <span class="ui-chip {{ 'is-ok' if bot_status.is_online else 'is-danger' }}">봇 {{ "온라인" if bot_status.is_online else "오프라인" }}</span>
-  <span class="ad-meta ad-top-meta">
+  <span class="mg-meta mg-top-meta">
     {%- if bot_status.uptime_str %}업타임 {{ bot_status.uptime_str }}{% endif %}
     {%- if bot_status.latency_ms is defined and bot_status.latency_ms is not none %} · 지연 <span class="num">{{ bot_status.latency_ms | round | int }}ms</span>{% endif %}
     {%- if bot_status.user_count is defined %} · 유저 <span class="num">{{ bot_status.user_count }}</span>{% endif %}

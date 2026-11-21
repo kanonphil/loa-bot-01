@@ -250,7 +250,7 @@ def test_admin_parties_page_shows_status_cards_and_flags_overdue(client, monkeyp
     body = resp.text
     assert body.count('data-problem="1"') == 1  # 일정이 지난 공대만
     assert "<b>1</b>일정 지남" in body  # KPI 숫자
-    assert 'data-ad-kpi="#open-table"' in body
+    assert 'data-mg-kpi="#open-table"' in body
 
 
 def test_admin_parties_closed_tab_offers_unlock_for_live_party(client, monkeypatch):

@@ -105,7 +105,7 @@
 
   // 순서를 바꿔 놓고 다른 레이드를 누르면 바뀐 순서가 사라진다 — 한 번 묻는다
   document.addEventListener("click", function (e) {
-    var link = e.target.closest && e.target.closest("a.ad-ri-link");
+    var link = e.target.closest && e.target.closest("a.mg-ri-link");
     if (!link || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
     var dirty = false;
     barState.forEach(function (_, bar) { if (!bar.hidden) dirty = true; });

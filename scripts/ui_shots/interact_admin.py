@@ -52,7 +52,7 @@ try:
         # 1) 레이드: 목록에서 고르면 편집기가 바뀐다
         page.goto(BASE + "/admin/raids", wait_until="networkidle")
         check("처음엔 첫 레이드가 선택됨", "아르모체(4막)" in page.inner_text("#raid-editor h2"))
-        page.click("a.ad-ri-link:has-text('종막')")
+        page.click("a.mg-ri-link:has-text('종막')")
         page.wait_for_load_state("networkidle")
         check("종막을 고르면 주소에 ?raid= 가 붙음", "raid=" in page.url, page.url)
         check("편집기 제목이 종막으로 바뀜", "종막" in page.inner_text("#raid-editor h2"))
@@ -62,7 +62,7 @@ try:
 
         # 2) 순서: 처음엔 저장 바 없음 → ↓ 키로 바꾸면 나타남 → 되돌리기로 사라짐
         check("순서 저장 바는 처음엔 숨김", page.is_hidden("#raid-order-bar"))
-        grip = page.locator(".ad-ri[data-key='아르모체(4막)'] .ad-grip")
+        grip = page.locator(".mg-ri[data-key='아르모체(4막)'] .mg-grip")
         grip.focus(); page.keyboard.press("ArrowDown")
         page.wait_for_timeout(100)
         check("↓ 키로 순서를 바꾸면 저장 바가 나타남", page.is_visible("#raid-order-bar"))
@@ -72,12 +72,12 @@ try:
         page.click("#raid-order-bar [data-reorder-reset]")
         check("되돌리기를 누르면 저장 바가 사라짐", page.is_hidden("#raid-order-bar"))
         # 끌어서 바꾸기도(드래그 이벤트)
-        src = page.locator(".ad-ri[data-key='세르카'] .ad-grip"); dst = page.locator(".ad-ri[data-key='아르모체(4막)']")
+        src = page.locator(".mg-ri[data-key='세르카'] .mg-grip"); dst = page.locator(".mg-ri[data-key='아르모체(4막)']")
         src.drag_to(dst, target_position={"x": 40, "y": 4})
         page.wait_for_timeout(150)
         check("끌어서 바꿔도 저장 바가 나타남", page.is_visible("#raid-order-bar"))
         # 저장하지 않고 다른 레이드를 누르면 확인
-        page.click("a.ad-ri-link:has-text('카멘')")
+        page.click("a.mg-ri-link:has-text('카멘')")
         page.wait_for_timeout(200)
         check("순서가 바뀐 채 이동하면 확인 대화상자", page.locator(".dlg-back:not([hidden]) .dlg").count() == 1 and "저장하지 않았습니다" in page.inner_text(".dlg-back:not([hidden]) h2"))
         page.keyboard.press("Escape"); page.wait_for_timeout(100)
@@ -102,7 +102,7 @@ try:
         # 4) 유저: 내보내기 영향 범위
         page.goto(BASE + "/admin/users", wait_until="networkidle")
         btn = page.locator("[data-user-kick='333']")
-        btn.click(); page.wait_for_selector("#kick-impact .ad-end", timeout=3000)
+        btn.click(); page.wait_for_selector("#kick-impact .mg-end", timeout=3000)
         txt = page.inner_text(".dlg-back:not([hidden])")
         check("내보내기 대화상자에 영향 범위(캐릭터 3개·공대 2개·새 파티장)", "캐릭터 3개" in txt and "2개" in txt and "바드님" in txt, txt.replace("\n", " | ")[:200])
         check("대화상자 제목에 이름", "버서커" in page.inner_text("#dlg-kick-t"))
@@ -110,21 +110,21 @@ try:
         page.screenshot(path=str(OUT / "kick-dialog.png"))
         page.keyboard.press("Escape"); page.wait_for_timeout(100)
         check("Esc로 닫히고 내보내기 버튼으로 포커스 복귀", page.is_hidden("#dlg-kick-t") and page.evaluate("document.activeElement.getAttribute('data-user-kick')") == "333")
-        page.click("[data-user-details='333']"); page.wait_for_selector("#ud-333 .ad-details", timeout=3000)
+        page.click("[data-user-details='333']"); page.wait_for_selector("#ud-333 .mg-details", timeout=3000)
         check("상세가 행 아래에 펼쳐짐", "버서커부캐" in page.inner_text("#ud-333"))
-        page.fill(".ad-search", "리퍼")
+        page.fill(".mg-search", "리퍼")
         check("검색하면 해당 유저만 보임", page.locator("#users-table tr[data-row]:visible").count() == 1)
 
         # 5) 공대: KPI 필터 + ⋯ 메뉴 + 클리어 되돌리기는 can_revert일 때만
         page.goto(BASE + "/admin/parties", wait_until="networkidle")
         check("처음엔 진행 중 5줄 모두 보임", page.locator("#open-table tr[data-row]:visible").count() == 5)
-        page.click(".ad-kpi button[data-key='problem']")
+        page.click(".mg-kpi button[data-key='problem']")
         check("일정 지남 KPI를 누르면 1줄만", page.locator("#open-table tr[data-row]:visible").count() == 1)
-        page.click(".ad-kpi button[data-key='problem']")
+        page.click(".mg-kpi button[data-key='problem']")
         check("다시 누르면 필터 해제", page.locator("#open-table tr[data-row]:visible").count() == 5)
-        page.click(".ad-kpi button[data-key='closed']")
+        page.click(".mg-kpi button[data-key='closed']")
         check("마감 KPI는 마감 1줄 + 재개 버튼", page.locator("#open-table tr[data-row]:visible").count() == 1 and "재개" in page.inner_text("#open-table tr[data-row]:visible"))
-        page.click(".ad-kpi button[data-key='closed']")
+        page.click(".mg-kpi button[data-key='closed']")
         page.locator("#open-table tr[data-row]").first.locator("[data-menu-trigger]").click(); page.wait_for_timeout(100)
         check("⋯ 메뉴가 열림", page.locator(".menu:not([hidden])").count() == 1)
         page.screenshot(path=str(OUT / "parties-menu.png"))
@@ -166,11 +166,11 @@ try:
 
         # 7) 시세 아이템
         page.goto(BASE + "/admin/notifications?tab=items", wait_until="networkidle")
-        n0 = page.locator(".ad-tchip").count()
+        n0 = page.locator(".mg-tchip").count()
         page.fill("#tracked-input", "명예의 파편 주머니"); page.keyboard.press("Enter")
-        check("Enter로 아이템 추가", page.locator(".ad-tchip").count() == n0 + 1)
-        page.locator(".ad-tchip button[data-remove]").first.click()
-        check("× 로 빼기", page.locator(".ad-tchip").count() == n0)
+        check("Enter로 아이템 추가", page.locator(".mg-tchip").count() == n0 + 1)
+        page.locator(".mg-tchip button[data-remove]").first.click()
+        check("× 로 빼기", page.locator(".mg-tchip").count() == n0)
         check("개수 표시가 갱신", page.inner_text("#tracked-count").strip().startswith(str(n0)))
 
         # 8) 작업 기록: 되돌리기 확인

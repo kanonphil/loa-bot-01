@@ -4,17 +4,17 @@
 {% block admin_body %}
 <div class="toolbar">
   {{ m.search("직업명 검색", "#class-table", id="class-search", item="tr[data-row]") }}
-  <button type="button" class="chip-btn on" data-ad-role="" aria-pressed="true">전체 {{ job_classes | length }}</button>
-  <button type="button" class="chip-btn" data-ad-role="dps" aria-pressed="false">딜러 {{ job_classes | rejectattr("is_support") | list | length }}</button>
-  <button type="button" class="chip-btn" data-ad-role="support" aria-pressed="false">서포터 {{ job_classes | selectattr("is_support") | list | length }}</button>
-  <span class="ad-spacer"><button type="button" class="btn sm pri" data-dlg-open="#dlg-class-add">+ 직업 추가</button></span>
+  <button type="button" class="chip-btn on" data-mg-role="" aria-pressed="true">전체 {{ job_classes | length }}</button>
+  <button type="button" class="chip-btn" data-mg-role="dps" aria-pressed="false">딜러 {{ job_classes | rejectattr("is_support") | list | length }}</button>
+  <button type="button" class="chip-btn" data-mg-role="support" aria-pressed="false">서포터 {{ job_classes | selectattr("is_support") | list | length }}</button>
+  <span class="mg-spacer"><button type="button" class="btn sm pri" data-dlg-open="#dlg-class-add">+ 직업 추가</button></span>
 </div>
 
 {% if not job_classes %}
-<div class="ad-card">{{ ui.empty("등록된 직업이 없습니다", "딜러·서포터 구분은 공대 참여와 레이드 체크에 쓰입니다.", "직업 추가", icon="user", action_id="class-add-empty") }}</div>
+<div class="mg-card">{{ ui.empty("등록된 직업이 없습니다", "딜러·서포터 구분은 공대 참여와 레이드 체크에 쓰입니다.", "직업 추가", icon="user", action_id="class-add-empty") }}</div>
 {% else %}
-<div class="ui-card table-card ad-tcard">
-  <table class="table is-stack ad-t" id="class-table">
+<div class="ui-card table-card mg-tcard">
+  <table class="table is-stack mg-t" id="class-table">
     <thead><tr><th>직업</th><th>역할</th><th></th></tr></thead>
     <tbody>
       {% for jc in job_classes %}
@@ -22,7 +22,7 @@
         <td data-label="직업"><b>{{ jc.name }}</b></td>
         <td data-label="역할">{{ ui.chip("서포터", "accent") if jc.is_support else ui.chip("딜러") }}</td>
         <td class="r">
-          <form method="post" action="/admin/classes/delete" class="ad-inline"
+          <form method="post" action="/admin/classes/delete" class="mg-inline"
                 data-confirm-title="{{ jc.name }} 직업을 삭제할까요?" data-confirm="이 직업으로 등록된 캐릭터 정보는 그대로 남습니다." data-confirm-ok="삭제" data-confirm-danger>
             <input type="hidden" name="name" value="{{ jc.name }}">
             <button type="submit" class="btn sm ghost">삭제</button>
@@ -32,18 +32,18 @@
       {% endfor %}
     </tbody>
   </table>
-  <p class="ad-noresult" id="class-noresult" hidden>검색 결과가 없습니다.</p>
+  <p class="mg-noresult" id="class-noresult" hidden>검색 결과가 없습니다.</p>
 </div>
 {% endif %}
 
 {% call m.modal("dlg-class-add", "직업 추가", "400px") %}
-<form method="post" action="/admin/classes/add" class="ad-dlg-form">
-  <div class="ad-form ad-form-2">
+<form method="post" action="/admin/classes/add" class="mg-dlg-form">
+  <div class="mg-form mg-form-2">
     <label for="c-name">직업명</label>
     <input class="field" id="c-name" name="name" required maxlength="20" autocomplete="off" placeholder="예: 발키리">
   </div>
   <label class="checkbox"><input type="checkbox" name="is_support"><span class="ui-checkbox" aria-hidden="true"></span> 서포터</label>
-  <p class="ad-meta">서포터로 표시한 직업은 공대 모집에서 서포터 자리에 배정됩니다.</p>
+  <p class="mg-meta">서포터로 표시한 직업은 공대 모집에서 서포터 자리에 배정됩니다.</p>
   <div class="acts">
     <button type="button" class="btn" data-dlg-close>취소</button>
     <button type="submit" class="btn pri">추가</button>

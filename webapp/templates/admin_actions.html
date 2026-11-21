@@ -6,35 +6,35 @@
   {% for key, label in kinds %}
   <a class="chip-btn{% if key == kind %} on{% endif %}" href="/admin/actions{% if key != 'all' %}?kind={{ key }}{% endif %}"{% if key == kind %} aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
-  <span class="ad-meta ad-spacer">최근 100건 · 웹과 디스코드 모두</span>
+  <span class="mg-meta mg-spacer">최근 100건 · 웹과 디스코드 모두</span>
 </div>
 
 {% if not available %}
-<p class="ad-note" role="status">작업 기록을 불러오지 못했습니다. 봇 서버가 이 기능을 아직 지원하지 않거나 연결이 불안정합니다. 다른 관리 기능은 그대로 쓸 수 있습니다.</p>
+<p class="mg-note" role="status">작업 기록을 불러오지 못했습니다. 봇 서버가 이 기능을 아직 지원하지 않거나 연결이 불안정합니다. 다른 관리 기능은 그대로 쓸 수 있습니다.</p>
 {% elif not items %}
-<div class="ad-card">{{ ui.empty("아직 기록이 없습니다", "강제 마감, 레이드 이름 변경, 유저 내보내기 같은 관리 작업이 여기에 남습니다.", icon="box") }}</div>
+<div class="mg-card">{{ ui.empty("아직 기록이 없습니다", "강제 마감, 레이드 이름 변경, 유저 내보내기 같은 관리 작업이 여기에 남습니다.", icon="box") }}</div>
 {% else %}
-<div class="ui-card table-card ad-tcard">
-  <table class="table is-stack ad-t">
+<div class="ui-card table-card mg-tcard">
+  <table class="table is-stack mg-t">
     <thead><tr><th>언제</th><th>누가</th><th>무엇을</th><th>어디서</th><th></th></tr></thead>
     <tbody>
       {% for a in items %}
       <tr>
-        <td class="ad-when" data-label="언제"><time title="{{ a.when_title }}">{{ a.when }}</time></td>
+        <td class="mg-when" data-label="언제"><time title="{{ a.when_title }}">{{ a.when }}</time></td>
         <td data-label="누가">{{ a.actor_name or "-" }}</td>
-        <td class="ad-what" data-label="무엇을">{{ a.summary }}</td>
+        <td class="mg-what" data-label="무엇을">{{ a.summary }}</td>
         <td data-label="어디서">{{ ui.chip(a.source_label) }}</td>
         <td class="r">
           {% if a.undone_at %}
-          <span class="ad-muted ad-small">{{ a.undone_when }} 되돌림</span>
+          <span class="mg-muted mg-small">{{ a.undone_when }} 되돌림</span>
           {% elif a.can_undo %}
-          <form method="post" action="/admin/actions/{{ a.id }}/undo" class="ad-inline"
+          <form method="post" action="/admin/actions/{{ a.id }}/undo" class="mg-inline"
                 data-confirm-title="이 작업을 되돌릴까요?" data-confirm="{{ a.summary }}" data-confirm-ok="되돌리기">
             <input type="hidden" name="kind" value="{{ kind }}">
             <button type="submit" class="btn sm ghost">되돌리기</button>
           </form>
           {% else %}
-          <span class="ad-muted ad-small">되돌릴 수 없음</span>
+          <span class="mg-muted mg-small">되돌릴 수 없음</span>
           {% endif %}
         </td>
       </tr>

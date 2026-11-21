@@ -9,7 +9,7 @@
 </div>
 
 {% if not users %}
-<div class="ad-card">
+<div class="mg-card">
 {% if filter == "stale" %}
 {{ ui.empty("동기화가 " ~ stale_days ~ "일 이상 멈춘 유저가 없습니다", "모든 유저의 캐릭터 동기화가 정상입니다.", "전체 보기", "/admin/users", "user") }}
 {% else %}
@@ -17,38 +17,38 @@
 {% endif %}
 </div>
 {% else %}
-<div class="ui-card table-card ad-tcard">
-  <table class="table is-stack ad-t" id="users-table">
+<div class="ui-card table-card mg-tcard">
+  <table class="table is-stack mg-t" id="users-table">
     <thead><tr><th>유저</th><th>캐릭터</th><th>마지막 활동</th><th>참여 중 공대</th><th></th></tr></thead>
     <tbody>
       {% for u in users %}
       <tr data-row data-text="{{ u.display_name }} {{ u.discord_nick or '' }} {{ u.discord_id }}">
         <td data-label="유저">
           <b>{{ u.display_name }}</b>
-          {% if u.discord_nick %}<span class="ad-meta">@{{ u.discord_nick }}</span>{% elif u.display_name != u.discord_id %}<span class="ad-meta">{{ u.discord_id }}</span>{% endif %}
+          {% if u.discord_nick %}<span class="mg-meta">@{{ u.discord_nick }}</span>{% elif u.display_name != u.discord_id %}<span class="mg-meta">{{ u.discord_id }}</span>{% endif %}
           {% if u.sync_age_days is none %}{{ ui.chip("동기화 기록 없음", "danger") }}
           {% elif u.is_stale %}{{ ui.chip(u.sync_age_days ~ "일 동기화 안 됨", "warn") }}{% endif %}
         </td>
-        <td class="num" data-label="캐릭터">{% if u.char_count is not none %}{{ u.char_count }}{% else %}<span class="ad-muted">-</span>{% endif %}</td>
-        <td data-label="마지막 활동">{% if u.last_seen %}<time title="{{ u.last_seen_title }}">{{ u.last_seen }}</time>{% else %}<span class="ad-muted">기록 없음</span>{% endif %}</td>
-        <td class="num" data-label="참여 중 공대">{{ u.party_count }}{% if u.is_leader %} <span class="ad-muted ad-small">(파티장)</span>{% endif %}</td>
+        <td class="num" data-label="캐릭터">{% if u.char_count is not none %}{{ u.char_count }}{% else %}<span class="mg-muted">-</span>{% endif %}</td>
+        <td data-label="마지막 활동">{% if u.last_seen %}<time title="{{ u.last_seen_title }}">{{ u.last_seen }}</time>{% else %}<span class="mg-muted">기록 없음</span>{% endif %}</td>
+        <td class="num" data-label="참여 중 공대">{{ u.party_count }}{% if u.is_leader %} <span class="mg-muted mg-small">(파티장)</span>{% endif %}</td>
         <td class="r">
           <button type="button" class="btn sm ghost" data-user-details="{{ u.discord_id }}" aria-expanded="false">상세</button>
           <button type="button" class="btn sm danger" data-user-kick="{{ u.discord_id }}" data-name="{{ u.display_name }}">내보내기</button>
         </td>
       </tr>
-      <tr class="ad-details-row" id="ud-{{ u.discord_id }}" hidden><td colspan="5"></td></tr>
+      <tr class="mg-details-row" id="ud-{{ u.discord_id }}" hidden><td colspan="5"></td></tr>
       {% endfor %}
     </tbody>
   </table>
-  <p class="ad-noresult" id="users-noresult" hidden>검색 결과가 없습니다.</p>
+  <p class="mg-noresult" id="users-noresult" hidden>검색 결과가 없습니다.</p>
 </div>
 {% endif %}
 
 {# 내보내기 — 영향 범위를 먼저 보여주고, 확인하면 기존 삭제 경로로 보낸다 #}
 {% call m.modal("dlg-kick", "유저를 내보낼까요?", "460px") %}
-<div class="ad-impact" id="kick-impact" aria-live="polite"><span class="ad-meta">영향 범위를 불러오는 중…</span></div>
-<p class="ad-meta">로그인 중인 브라우저도 바로 로그아웃됩니다.</p>
+<div class="mg-impact" id="kick-impact" aria-live="polite"><span class="mg-meta">영향 범위를 불러오는 중…</span></div>
+<p class="mg-meta">로그인 중인 브라우저도 바로 로그아웃됩니다.</p>
 <form method="post" action="" id="kick-form" class="acts">
   <button type="button" class="btn" data-dlg-close>취소</button>
   <button type="submit" class="btn danger">내보내기</button>

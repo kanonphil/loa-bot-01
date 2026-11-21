@@ -2,22 +2,22 @@
 {% import "_ui.html" as ui %}
 {% import "_admin_macros.html" as m %}
 {% block admin_body %}
-<div class="ad-md">
+<div class="mg-md">
   {# ── 왼쪽: 카테고리별 레이드 목록 ── #}
-  <div class="ad-card ad-lst" id="raid-list">
-    <input type="search" class="field search-field ad-search" placeholder="레이드 검색" aria-label="레이드 검색" autocomplete="off"
-           data-ad-filter="#raid-list" data-ad-item=".ad-ri" data-ad-group=".ad-ri-group" data-ad-noresult="#raid-list-noresult">
+  <div class="mg-card mg-lst" id="raid-list">
+    <input type="search" class="field search-field mg-search" placeholder="레이드 검색" aria-label="레이드 검색" autocomplete="off"
+           data-mg-filter="#raid-list" data-mg-item=".mg-ri" data-mg-group=".mg-ri-group" data-mg-noresult="#raid-list-noresult">
     {% for group in grouped %}
     {% if group.raids %}
-    <section class="ad-ri-group" data-reorder-group data-category="{{ group.category.name }}" aria-label="{{ group.category.name }}">
-      <span class="ad-grp">{{ group.category.name }}</span>
+    <section class="mg-ri-group" data-reorder-group data-category="{{ group.category.name }}" aria-label="{{ group.category.name }}">
+      <span class="mg-grp">{{ group.category.name }}</span>
       {% for r in group.raids %}
-      <div class="ad-ri{% if selected and r.name == selected.name %} on{% endif %}" data-key="{{ r.name }}" data-text="{{ r.name }} {{ r.short_name }}">
-        <button type="button" class="ad-grip" data-drag-handle draggable="true" aria-label="{{ r.name }} 순서 이동 — 끌거나 위아래 방향키" data-tip="끌어서 순서 변경 (↑↓ 키)">⋮⋮</button>
-        <a class="ad-ri-link" href="/admin/raids?raid={{ r.name | urlencode }}"{% if selected and r.name == selected.name %} aria-current="true"{% endif %}>
-          <b class="ad-trunc">{{ r.icon }} {{ r.name }}</b>
+      <div class="mg-ri{% if selected and r.name == selected.name %} on{% endif %}" data-key="{{ r.name }}" data-text="{{ r.name }} {{ r.short_name }}">
+        <button type="button" class="mg-grip" data-drag-handle draggable="true" aria-label="{{ r.name }} 순서 이동 — 끌거나 위아래 방향키" data-tip="끌어서 순서 변경 (↑↓ 키)">⋮⋮</button>
+        <a class="mg-ri-link" href="/admin/raids?raid={{ r.name | urlencode }}"{% if selected and r.name == selected.name %} aria-current="true"{% endif %}>
+          <b class="mg-trunc">{{ r.icon }} {{ r.name }}</b>
           {{ ui.chip(r.short_name) }}
-          <span class="ad-ri-end">
+          <span class="mg-ri-end">
             {% if not r.is_active %}{{ ui.chip("비활성", "danger") }}{% endif %}
             {% if r.is_pinned %}{{ ui.chip("고정", "accent") }}{% endif %}
             {% if r.available_until %}{{ ui.chip("~" ~ r.available_until[5:10], "warn", "운영 종료 " ~ r.available_until[:10]) }}{% endif %}
@@ -28,15 +28,15 @@
     </section>
     {% endif %}
     {% endfor %}
-    <p class="ad-noresult" id="raid-list-noresult" hidden>검색 결과가 없습니다.</p>
-    <form method="post" action="/admin/raids/order-all" class="ad-savebar" id="raid-order-bar" hidden data-reorder-bar data-reorder-map>
+    <p class="mg-noresult" id="raid-list-noresult" hidden>검색 결과가 없습니다.</p>
+    <form method="post" action="/admin/raids/order-all" class="mg-savebar" id="raid-order-bar" hidden data-reorder-bar data-reorder-map>
       <input type="hidden" name="orders">
       <input type="hidden" name="return_raid" value="{{ selected.name if selected else '' }}">
-      <span class="ad-savebar-hint">순서가 바뀌었습니다</span>
+      <span class="mg-savebar-hint">순서가 바뀌었습니다</span>
       <button type="button" class="btn sm ghost" data-reorder-reset>되돌리기</button>
       <button type="submit" class="btn sm pri">순서 저장</button>
     </form>
-    <div class="ad-row ad-lst-foot">
+    <div class="mg-row mg-lst-foot">
       <button type="button" class="btn sm pri" data-dlg-open="#dlg-raid-add">+ 레이드 추가</button>
       <button type="button" class="btn sm ghost" data-dlg-open="#dlg-categories">카테고리 편집</button>
     </div>
@@ -45,29 +45,29 @@
   {# ── 오른쪽: 선택한 레이드 편집 ── #}
   {% if selected %}
   {% set live = (refs.parties_live if refs else 0) or 0 %}
-  <div class="ad-card ad-editor" id="raid-editor" data-raid="{{ selected.name }}">
-    <div class="ad-row">
-      <h2 class="ad-h">{{ selected.icon }} {{ selected.name }}</h2>
+  <div class="mg-card mg-editor" id="raid-editor" data-raid="{{ selected.name }}">
+    <div class="mg-row">
+      <h2 class="mg-h">{{ selected.icon }} {{ selected.name }}</h2>
       {{ ui.chip(selected.short_name) }}
       {% if not selected.is_active %}{{ ui.chip("비활성", "danger") }}{% endif %}
       {% if selected.is_pinned %}{{ ui.chip("고정", "accent") }}{% endif %}
-      <span class="ad-row ad-spacer">
-        <form method="post" action="/admin/raids/pin" class="ad-inline">
+      <span class="mg-row mg-spacer">
+        <form method="post" action="/admin/raids/pin" class="mg-inline">
           <input type="hidden" name="name" value="{{ selected.name }}">
           <input type="hidden" name="is_pinned" value="{{ 'false' if selected.is_pinned else 'true' }}">
           <button type="submit" class="btn sm">{{ "상단 고정 해제" if selected.is_pinned else "상단 고정" }}</button>
         </form>
-        <form method="post" action="/admin/raids/active" class="ad-inline"
+        <form method="post" action="/admin/raids/active" class="mg-inline"
               {% if selected.is_active %}data-confirm-title="{{ selected.name }} 레이드를 비활성화할까요?" data-confirm="공대 개설과 레이드 체크 목록에서 숨겨집니다. 기존 기록은 그대로 남고, 언제든 다시 활성화할 수 있습니다." data-confirm-ok="비활성화"{% endif %}>
           <input type="hidden" name="name" value="{{ selected.name }}">
           <input type="hidden" name="is_active" value="{{ 'false' if selected.is_active else 'true' }}">
           <button type="submit" class="btn sm">{{ "비활성화" if selected.is_active else "활성화" }}</button>
         </form>
-        <form method="post" action="/admin/raids/delete" class="ad-inline"
+        <form method="post" action="/admin/raids/delete" class="mg-inline"
               data-confirm-title="{{ selected.name }} 레이드를 삭제할까요?" data-confirm="난이도와 설정이 함께 삭제되며 되돌릴 수 없습니다. 지우지 않고 숨기려면 비활성화를 쓰세요." data-confirm-ok="삭제" data-confirm-danger>
           <input type="hidden" name="name" value="{{ selected.name }}">
           {% if live %}
-          <span class="ad-disabled-wrap" data-tip="진행 중인 공대가 {{ live }}개 있어 삭제할 수 없습니다.&#10;새 공대만 막으려면 비활성화하세요.">
+          <span class="mg-disabled-wrap" data-tip="진행 중인 공대가 {{ live }}개 있어 삭제할 수 없습니다.&#10;새 공대만 막으려면 비활성화하세요.">
             <button type="button" class="btn sm danger" disabled aria-disabled="true">삭제</button>
           </span>
           {% else %}
@@ -77,22 +77,22 @@
       </span>
     </div>
     {% if refs %}
-    <div class="ad-meta">진행 중 공대 {{ refs.parties_live }} · 이력 {{ refs.party_history }} · 클리어 기록 {{ refs.raid_completions }} · DM 구독 {{ refs.raid_subscriptions }} · 레이드 선택 {{ refs.character_raid_selection }}</div>
+    <div class="mg-meta">진행 중 공대 {{ refs.parties_live }} · 이력 {{ refs.party_history }} · 클리어 기록 {{ refs.raid_completions }} · DM 구독 {{ refs.raid_subscriptions }} · 레이드 선택 {{ refs.character_raid_selection }}</div>
     {% endif %}
 
-    <div class="ad-sec">
-      <h3 class="ad-h4">기본 정보</h3>
+    <div class="mg-sec">
+      <h3 class="mg-h4">기본 정보</h3>
       {% if refs %}
       {% set cascade = "공대 " ~ refs.parties_all ~ "개, 이력 " ~ refs.party_history ~ "건, 클리어 기록 " ~ refs.raid_completions ~ "건, DM 구독 " ~ refs.raid_subscriptions ~ "건이 새 이름으로 바뀝니다. 이미 올라간 디스코드 게시글 제목은 그대로 남습니다." %}
       {% else %}
       {% set cascade = "관련 기록이 모두 새 이름으로 바뀝니다. 이미 올라간 디스코드 게시글 제목은 그대로 남습니다." %}
       {% endif %}
-      <form method="post" action="/admin/raids/save" class="ad-formwrap"
+      <form method="post" action="/admin/raids/save" class="mg-formwrap"
             data-confirm-skip-same="name" data-confirm-original="{{ selected.name }}"
             data-confirm-title="레이드 이름을 바꿀까요?" data-confirm-ok="이름 변경"
             data-confirm="{{ selected.name }} → {name}&#10;{{ cascade }}">
         <input type="hidden" name="old_name" value="{{ selected.name }}">
-        <div class="ad-form">
+        <div class="mg-form">
           <label for="f-name">이름</label>
           <input class="field" id="f-name" name="name" value="{{ selected.name }}" required maxlength="40" autocomplete="off">
           <label for="f-short">약칭</label>
@@ -104,33 +104,33 @@
           <label for="f-icon">아이콘</label>
           <input class="field" id="f-icon" name="icon" value="{{ selected.icon }}" maxlength="8" autocomplete="off">
         </div>
-        <div class="ad-row">
+        <div class="mg-row">
           <button type="submit" class="btn pri">저장</button>
-          <span class="ad-meta">이름을 바꾸면 {% if refs %}공대 {{ refs.parties_all }}개 · 기록 {{ refs.raid_completions }}건{% else %}관련 기록{% endif %}에 함께 반영됩니다</span>
+          <span class="mg-meta">이름을 바꾸면 {% if refs %}공대 {{ refs.parties_all }}개 · 기록 {{ refs.raid_completions }}건{% else %}관련 기록{% endif %}에 함께 반영됩니다</span>
         </div>
       </form>
     </div>
 
-    <div class="ad-sec">
-      <h3 class="ad-h4">운영 기간</h3>
-      <form method="post" action="/admin/raids/period" class="ad-row">
+    <div class="mg-sec">
+      <h3 class="mg-h4">운영 기간</h3>
+      <form method="post" action="/admin/raids/period" class="mg-row">
         <input type="hidden" name="name" value="{{ selected.name }}">
-        <input type="datetime-local" class="field ad-dt" name="available_from" value="{{ (selected.available_from or '')[:16] }}" aria-label="운영 시작">
-        <span class="ad-muted">~</span>
-        <input type="datetime-local" class="field ad-dt" name="available_until" value="{{ (selected.available_until or '')[:16] }}" aria-label="운영 종료">
+        <input type="datetime-local" class="field mg-dt" name="available_from" value="{{ (selected.available_from or '')[:16] }}" aria-label="운영 시작">
+        <span class="mg-muted">~</span>
+        <input type="datetime-local" class="field mg-dt" name="available_until" value="{{ (selected.available_until or '')[:16] }}" aria-label="운영 종료">
         <button type="submit" class="btn">기간 저장</button>
-        <span class="ad-meta">{% if selected.available_from or selected.available_until %}비우고 저장하면 상시 운영으로 돌아갑니다{% else %}비워 두면 상시 운영{% endif %}</span>
+        <span class="mg-meta">{% if selected.available_from or selected.available_until %}비우고 저장하면 상시 운영으로 돌아갑니다{% else %}비워 두면 상시 운영{% endif %}</span>
       </form>
     </div>
 
-    <div class="ad-sec">
-      <div class="ad-row">
-        <h3 class="ad-h4">난이도</h3>
-        <span class="ad-spacer"><button type="button" class="btn sm" data-diff-add>+ 난이도 추가</button></span>
+    <div class="mg-sec">
+      <div class="mg-row">
+        <h3 class="mg-h4">난이도</h3>
+        <span class="mg-spacer"><button type="button" class="btn sm" data-diff-add>+ 난이도 추가</button></span>
       </div>
       {% if selected.difficulty_rows %}
-      <div class="ad-scroll">
-      <table class="table is-stack ad-t" id="diff-table">
+      <div class="mg-scroll">
+      <table class="table is-stack mg-t" id="diff-table">
         <thead><tr><th>난이도</th><th>입장 레벨</th><th>인원</th><th>파티 구성</th><th>클리어 골드</th><th></th></tr></thead>
         <tbody data-reorder-group>
           {% for d in selected.difficulty_rows %}
@@ -138,15 +138,15 @@
               data-name="{{ d.name }}" data-min-level="{{ d.min_level }}" data-total-slots="{{ d.total_slots }}"
               data-party-split="{{ d.party_split or '' }}" data-gates="{{ d.gates }}" data-clear-gold="{{ d.clear_gold if d.clear_gold is not none else '' }}">
             <td data-label="난이도">
-              <span class="ad-cellrow"><button type="button" class="ad-grip" data-drag-handle draggable="true" aria-label="{{ d.name }} 순서 이동 — 끌거나 위아래 방향키" data-tip="끌어서 순서 변경 (↑↓ 키)">⋮⋮</button><b>{{ d.name }}</b></span>
+              <span class="mg-cellrow"><button type="button" class="mg-grip" data-drag-handle draggable="true" aria-label="{{ d.name }} 순서 이동 — 끌거나 위아래 방향키" data-tip="끌어서 순서 변경 (↑↓ 키)">⋮⋮</button><b>{{ d.name }}</b></span>
             </td>
             <td class="num" data-label="입장 레벨">{{ d.min_level }}</td>
             <td class="num" data-label="인원">{{ d.total_slots }}</td>
-            <td data-label="파티 구성">{{ d.layout }}<span class="ad-muted"> · {{ d.gates }}관문</span></td>
-            <td class="num" data-label="클리어 골드">{% if d.clear_gold is not none %}{{ "{:,}".format(d.clear_gold) }}{% else %}<span class="ad-muted">미입력</span>{% endif %}</td>
+            <td data-label="파티 구성">{{ d.layout }}<span class="mg-muted"> · {{ d.gates }}관문</span></td>
+            <td class="num" data-label="클리어 골드">{% if d.clear_gold is not none %}{{ "{:,}".format(d.clear_gold) }}{% else %}<span class="mg-muted">미입력</span>{% endif %}</td>
             <td class="r">
               <button type="button" class="btn sm ghost" data-diff-edit>수정</button>
-              <form method="post" action="/admin/raids/difficulties/delete" class="ad-inline"
+              <form method="post" action="/admin/raids/difficulties/delete" class="mg-inline"
                     data-confirm-title="{{ selected.name }} {{ d.name }} 난이도를 삭제할까요?" data-confirm="이미 개설된 공대는 그대로 남지만 새로 개설할 수 없게 됩니다." data-confirm-ok="삭제" data-confirm-danger>
                 <input type="hidden" name="raid_name" value="{{ selected.name }}">
                 <input type="hidden" name="difficulty" value="{{ d.name }}">
@@ -158,10 +158,10 @@
         </tbody>
       </table>
       </div>
-      <form method="post" action="/admin/raids/difficulties/order" class="ad-savebar" id="diff-order-bar" hidden data-reorder-bar data-reorder-array>
+      <form method="post" action="/admin/raids/difficulties/order" class="mg-savebar" id="diff-order-bar" hidden data-reorder-bar data-reorder-array>
         <input type="hidden" name="raid_name" value="{{ selected.name }}">
         <input type="hidden" name="order">
-        <span class="ad-savebar-hint">난이도 순서가 바뀌었습니다</span>
+        <span class="mg-savebar-hint">난이도 순서가 바뀌었습니다</span>
         <button type="button" class="btn sm ghost" data-reorder-reset>되돌리기</button>
         <button type="submit" class="btn sm pri">순서 저장</button>
       </form>
@@ -171,7 +171,7 @@
     </div>
   </div>
   {% else %}
-  <div class="ad-card">
+  <div class="mg-card">
     {{ ui.empty("레이드를 추가해 보세요", "왼쪽 아래 버튼으로 첫 레이드를 만들 수 있습니다.", icon="box") }}
   </div>
   {% endif %}
@@ -180,12 +180,12 @@
 {# ── 난이도 추가/수정 ── #}
 {% if selected %}
 {% call m.modal("dlg-diff", "난이도 수정", "460px") %}
-<form method="post" action="/admin/raids/difficulties/save" id="diff-form" class="ad-dlg-form"
+<form method="post" action="/admin/raids/difficulties/save" id="diff-form" class="mg-dlg-form"
       data-confirm-skip-same="difficulty" data-confirm-original="" data-confirm-title="난이도 이름을 바꿀까요?" data-confirm-ok="이름 변경"
       data-confirm="{old_difficulty} → {difficulty}&#10;관련 기록이 모두 새 이름으로 바뀝니다.">
   <input type="hidden" name="raid_name" value="{{ selected.name }}">
   <input type="hidden" name="old_difficulty" value="">
-  <div class="ad-form ad-form-2">
+  <div class="mg-form mg-form-2">
     <label for="d-name">난이도명</label>
     <input class="field" id="d-name" name="difficulty" required maxlength="20" autocomplete="off" placeholder="예: 노말">
     <label for="d-lv">입장 레벨</label>
@@ -199,7 +199,7 @@
     <label for="d-gold">클리어 골드</label>
     <input class="field" id="d-gold" name="clear_gold" type="number" min="0" step="1" placeholder="미입력">
   </div>
-  <p class="ad-meta">이미 개설된 공대에는 적용되지 않습니다. 클리어 골드는 레이드 체크의 주간 골드 합계에 쓰입니다.</p>
+  <p class="mg-meta">이미 개설된 공대에는 적용되지 않습니다. 클리어 골드는 레이드 체크의 주간 골드 합계에 쓰입니다.</p>
   <div class="acts">
     <button type="button" class="btn" data-dlg-close>취소</button>
     <button type="submit" class="btn pri">저장</button>
@@ -210,8 +210,8 @@
 
 {# ── 레이드 추가 ── #}
 {% call m.modal("dlg-raid-add", "레이드 추가", "460px") %}
-<form method="post" action="/admin/raids/add" class="ad-dlg-form">
-  <div class="ad-form ad-form-2">
+<form method="post" action="/admin/raids/add" class="mg-dlg-form">
+  <div class="mg-form mg-form-2">
     <label for="a-name">이름</label>
     <input class="field" id="a-name" name="name" required maxlength="40" autocomplete="off" placeholder="예: 카양겔">
     <label for="a-short">약칭</label>
@@ -223,7 +223,7 @@
     <label for="a-icon">아이콘</label>
     <input class="field" id="a-icon" name="icon" value="⚔️" maxlength="8" autocomplete="off">
   </div>
-  <p class="ad-meta">추가한 뒤 난이도를 등록해야 공대를 개설할 수 있습니다.</p>
+  <p class="mg-meta">추가한 뒤 난이도를 등록해야 공대를 개설할 수 있습니다.</p>
   <div class="acts">
     <button type="button" class="btn" data-dlg-close>취소</button>
     <button type="submit" class="btn pri">추가</button>
@@ -233,12 +233,12 @@
 
 {# ── 카테고리 편집 ── #}
 {% call m.modal("dlg-categories", "카테고리 편집", "560px") %}
-<div class="ad-cats" data-reorder-group>
+<div class="mg-cats" data-reorder-group>
   {% for c in categories %}
   {% set n = category_raid_counts.get(c.name, 0) %}
-  <div class="ad-cat" data-key="{{ c.name }}">
-    <button type="button" class="ad-grip" data-drag-handle draggable="true" aria-label="{{ c.name }} 순서 이동 — 끌거나 위아래 방향키">⋮⋮</button>
-    <form method="post" action="/admin/raids/categories/rename" class="ad-cat-name"
+  <div class="mg-cat" data-key="{{ c.name }}">
+    <button type="button" class="mg-grip" data-drag-handle draggable="true" aria-label="{{ c.name }} 순서 이동 — 끌거나 위아래 방향키">⋮⋮</button>
+    <form method="post" action="/admin/raids/categories/rename" class="mg-cat-name"
           data-confirm-skip-same="new_name" data-confirm-original="{{ c.name }}" data-confirm-title="카테고리 이름을 바꿀까요?" data-confirm-ok="이름 변경"
           data-confirm="{{ c.name }} → {new_name}&#10;소속 레이드 {{ n }}개의 카테고리도 함께 바뀝니다.">
       <input type="hidden" name="old_name" value="{{ c.name }}">
@@ -246,18 +246,18 @@
       <input class="field" name="new_name" value="{{ c.name }}" required maxlength="30" aria-label="{{ c.name }} 이름">
       <button type="submit" class="btn sm ghost">이름 변경</button>
     </form>
-    <form method="post" action="/admin/raids/categories/extreme" class="ad-inline">
+    <form method="post" action="/admin/raids/categories/extreme" class="mg-inline">
       <input type="hidden" name="name" value="{{ c.name }}">
       <input type="hidden" name="is_extreme" value="{{ 'false' if c.is_extreme else 'true' }}">
       <input type="hidden" name="return_raid" value="{{ selected.name if selected else '' }}">
       <button type="submit" class="btn sm {{ 'pri' if c.is_extreme else 'ghost' }}" data-tip="익스트림 카테고리는 원정대 단위 주 1회 규칙을 씁니다">{{ "익스트림" if c.is_extreme else "일반" }}</button>
     </form>
-    <form method="post" action="/admin/raids/categories/delete" class="ad-inline"
+    <form method="post" action="/admin/raids/categories/delete" class="mg-inline"
           data-confirm-title="{{ c.name }} 카테고리를 삭제할까요?" data-confirm="되돌릴 수 없습니다." data-confirm-ok="삭제" data-confirm-danger>
       <input type="hidden" name="name" value="{{ c.name }}">
       <input type="hidden" name="return_raid" value="{{ selected.name if selected else '' }}">
       {% if n %}
-      <span class="ad-disabled-wrap" data-tip="소속 레이드 {{ n }}개가 있어 삭제할 수 없습니다.&#10;레이드를 다른 카테고리로 옮긴 뒤 삭제하세요."><button type="button" class="btn sm ghost" disabled aria-disabled="true">삭제</button></span>
+      <span class="mg-disabled-wrap" data-tip="소속 레이드 {{ n }}개가 있어 삭제할 수 없습니다.&#10;레이드를 다른 카테고리로 옮긴 뒤 삭제하세요."><button type="button" class="btn sm ghost" disabled aria-disabled="true">삭제</button></span>
       {% else %}
       <button type="submit" class="btn sm ghost">삭제</button>
       {% endif %}
@@ -265,14 +265,14 @@
   </div>
   {% endfor %}
 </div>
-<form method="post" action="/admin/raids/categories/order" class="ad-savebar" id="cat-order-bar" hidden data-reorder-bar data-reorder-array>
+<form method="post" action="/admin/raids/categories/order" class="mg-savebar" id="cat-order-bar" hidden data-reorder-bar data-reorder-array>
   <input type="hidden" name="order">
   <input type="hidden" name="return_raid" value="{{ selected.name if selected else '' }}">
-  <span class="ad-savebar-hint">카테고리 순서가 바뀌었습니다</span>
+  <span class="mg-savebar-hint">카테고리 순서가 바뀌었습니다</span>
   <button type="button" class="btn sm ghost" data-reorder-reset>되돌리기</button>
   <button type="submit" class="btn sm pri">순서 저장</button>
 </form>
-<form method="post" action="/admin/raids/categories/add" class="ad-sec ad-cat-add">
+<form method="post" action="/admin/raids/categories/add" class="mg-sec mg-cat-add">
   <input type="hidden" name="return_raid" value="{{ selected.name if selected else '' }}">
   <input type="hidden" name="sort_order" value="{{ categories | length }}">
   <input class="field" name="name" required maxlength="30" placeholder="새 카테고리 이름" aria-label="새 카테고리 이름" autocomplete="off">

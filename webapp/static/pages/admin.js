@@ -9,12 +9,12 @@
   function text(el, v) { if (el) el.textContent = v; }
 
   // ── 모달: data-dlg-open="#id" / [data-dlg-close] / Esc / 바깥 클릭 ──
-  var openDlg = null;    // 열려 있는 .dlg-back.ad-modal
+  var openDlg = null;    // 열려 있는 .dlg-back.mg-modal
   var openerEl = null;
   var FOCUSABLE = 'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])';
 
   // 모달은 페이지 어디에 그려져 있든 body 끝으로 — fixed 배경이 조상의 배치·쌓임 순서에 묶이지 않게
-  $$(".ad-modal").forEach(function (m) { document.body.appendChild(m); });
+  $$(".mg-modal").forEach(function (m) { document.body.appendChild(m); });
 
   function visibleFocusables(root) {
     return $$(FOCUSABLE, root).filter(function (el) {
@@ -74,7 +74,7 @@
   }
   function applyFilter(root) {
     var st = stateFor(root);
-    var itemSel = root.getAttribute("data-ad-item-sel") || "[data-row]";
+    var itemSel = root.getAttribute("data-mg-item-sel") || "[data-row]";
     var q = st.q.trim().toLowerCase();
     var visible = 0;
     $$(itemSel, root).forEach(function (item) {
@@ -86,24 +86,24 @@
       if (show && st.role) show = item.getAttribute("data-role") === st.role;
       item.hidden = !show;
       var next = item.nextElementSibling;
-      if (next && next.classList.contains("ad-details-row") && !show) next.hidden = true;
+      if (next && next.classList.contains("mg-details-row") && !show) next.hidden = true;
       if (show) visible++;
     });
-    var groupSel = root.getAttribute("data-ad-group-sel");
+    var groupSel = root.getAttribute("data-mg-group-sel");
     if (groupSel) $$(groupSel, root).forEach(function (g) { g.hidden = !$$(itemSel, g).some(function (i) { return !i.hidden; }); });
-    var card = root.closest(".ad-card") || root;
-    var none = $(".ad-noresult", card);
+    var card = root.closest(".mg-card") || root;
+    var none = $(".mg-noresult", card);
     if (none) none.hidden = visible > 0;
   }
-  $$("[data-ad-filter]").forEach(function (input) {
-    var root = $(input.getAttribute("data-ad-filter"));
+  $$("[data-mg-filter]").forEach(function (input) {
+    var root = $(input.getAttribute("data-mg-filter"));
     if (!root) return;
-    root.setAttribute("data-ad-item-sel", input.getAttribute("data-ad-item") || "[data-row]");
-    if (input.hasAttribute("data-ad-group")) root.setAttribute("data-ad-group-sel", input.getAttribute("data-ad-group"));
+    root.setAttribute("data-mg-item-sel", input.getAttribute("data-mg-item") || "[data-row]");
+    if (input.hasAttribute("data-mg-group")) root.setAttribute("data-mg-group-sel", input.getAttribute("data-mg-group"));
     input.addEventListener("input", function () { stateFor(root).q = input.value; applyFilter(root); });
   });
-  $$("[data-ad-kpi]").forEach(function (box) {
-    var root = $(box.getAttribute("data-ad-kpi"));
+  $$("[data-mg-kpi]").forEach(function (box) {
+    var root = $(box.getAttribute("data-mg-kpi"));
     if (!root) return;
     box.addEventListener("click", function (e) {
       var btn = e.target.closest("button[data-key]");
@@ -116,16 +116,16 @@
       applyFilter(root);
     });
   });
-  $$("[data-ad-role]").forEach(function (btn) {
+  $$("[data-mg-role]").forEach(function (btn) {
     var root = $("#class-table");
     if (!root) return;
     btn.addEventListener("click", function () {
-      $$("[data-ad-role]").forEach(function (b) {
+      $$("[data-mg-role]").forEach(function (b) {
         var on = b === btn;
         b.classList.toggle("on", on);
         b.setAttribute("aria-pressed", on ? "true" : "false");
       });
-      stateFor(root).role = btn.getAttribute("data-ad-role");
+      stateFor(root).role = btn.getAttribute("data-mg-role");
       applyFilter(root);
     });
   });
@@ -192,7 +192,7 @@
     var box = $("#kick-impact");
     text($("#dlg-kick-t"), name + " 님을 길드 도구에서 내보낼까요?");
     $("#kick-form").action = "/admin/users/" + encodeURIComponent(id) + "/delete";
-    box.innerHTML = '<span class="ad-meta">영향 범위를 불러오는 중…</span>';
+    box.innerHTML = '<span class="mg-meta">영향 범위를 불러오는 중…</span>';
     openModal($("#dlg-kick"), btn);
     var mine = ++kickSeq;
     fetch("/admin/users/" + encodeURIComponent(id) + "/impact", { credentials: "same-origin" })
@@ -289,7 +289,7 @@
   if (tracked) {
     var chips = $("#tracked-chips"), input = $("#tracked-input"), empty = $("#tracked-empty");
     var max = parseInt($("#tracked").getAttribute("data-max") || "8", 10);
-    var names = function () { return $$(".ad-tchip", chips).map(function (c) { return c.getAttribute("data-name"); }); };
+    var names = function () { return $$(".mg-tchip", chips).map(function (c) { return c.getAttribute("data-name"); }); };
     var refresh = function () {
       var n = names().length;
       text($("#tracked-count .num"), String(n));
@@ -302,7 +302,7 @@
       if (names().indexOf(v) >= 0) { toast("info", "이미 추가한 아이템입니다."); input.select(); return; }
       if (names().length >= max) { toast("err", "시세로 볼 아이템은 최대 " + max + "개입니다."); return; }
       var chip = document.createElement("span");
-      chip.className = "ad-tchip";
+      chip.className = "mg-tchip";
       chip.setAttribute("data-name", v);
       var hidden = document.createElement("input");
       hidden.type = "hidden"; hidden.name = "names"; hidden.value = v;
@@ -321,7 +321,7 @@
     chips.addEventListener("click", function (e) {
       var rm = e.target.closest("[data-remove]");
       if (!rm) return;
-      rm.closest(".ad-tchip").remove();
+      rm.closest(".mg-tchip").remove();
       refresh();
       input.focus();
     });

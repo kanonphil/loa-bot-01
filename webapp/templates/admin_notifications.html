@@ -6,32 +6,32 @@
   {% for key, label in tabs %}
   <a class="chip-btn{% if key == tab %} on{% endif %}" href="/admin/notifications?tab={{ key }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
-  {% if tab == "subscriptions" and groups %}<span class="ad-spacer">{{ m.search("레이드 · 유저 검색", "#sub-list", item=".ad-sub") }}</span>
-  {% elif tab == "logs" and logs %}<span class="ad-spacer">{{ m.search("레이드 · 디스코드 ID 검색", "#log-table", item="tr[data-row]") }}</span>{% endif %}
+  {% if tab == "subscriptions" and groups %}<span class="mg-spacer">{{ m.search("레이드 · 유저 검색", "#sub-list", item=".mg-sub") }}</span>
+  {% elif tab == "logs" and logs %}<span class="mg-spacer">{{ m.search("레이드 · 디스코드 ID 검색", "#log-table", item="tr[data-row]") }}</span>{% endif %}
 </div>
 
 {% if tab == "subscriptions" %}
   {% if not groups %}
-  <div class="ad-card">{{ ui.empty("등록된 구독이 없습니다", "디스코드 /레이드구독 또는 설정 화면에서 유저가 구독하면 여기에 모입니다.", icon="bell") }}</div>
+  <div class="mg-card">{{ ui.empty("등록된 구독이 없습니다", "디스코드 /레이드구독 또는 설정 화면에서 유저가 구독하면 여기에 모입니다.", icon="bell") }}</div>
   {% else %}
-  <div class="ad-card" id="sub-list">
-    <div class="ad-meta">총 {{ total_subscriptions }}건 · 레이드별로 묶었습니다. "전체"는 난이도와 관계없는 구독입니다.</div>
+  <div class="mg-card" id="sub-list">
+    <div class="mg-meta">총 {{ total_subscriptions }}건 · 레이드별로 묶었습니다. "전체"는 난이도와 관계없는 구독입니다.</div>
     {% for g in groups %}
-    <div class="ad-sub" data-text="{{ g.raid_name }} {{ g.difficulty }}{% for s in g.subscribers %} {{ s.name }}{% endfor %}">
-      <div class="ad-row"><b>{{ g.raid_name }} {{ g.difficulty }}</b><span class="ad-meta">{{ g.subscribers | length }}명</span></div>
-      <div class="ad-chips">{% for s in g.subscribers %}{{ ui.chip(s.name, "", s.discord_id) }}{% endfor %}</div>
+    <div class="mg-sub" data-text="{{ g.raid_name }} {{ g.difficulty }}{% for s in g.subscribers %} {{ s.name }}{% endfor %}">
+      <div class="mg-row"><b>{{ g.raid_name }} {{ g.difficulty }}</b><span class="mg-meta">{{ g.subscribers | length }}명</span></div>
+      <div class="mg-chips">{% for s in g.subscribers %}{{ ui.chip(s.name, "", s.discord_id) }}{% endfor %}</div>
     </div>
     {% endfor %}
-    <p class="ad-noresult" id="sub-noresult" hidden>검색 결과가 없습니다.</p>
+    <p class="mg-noresult" id="sub-noresult" hidden>검색 결과가 없습니다.</p>
   </div>
   {% endif %}
 
 {% elif tab == "logs" %}
   {% if not logs %}
-  <div class="ad-card">{{ ui.empty("발송 로그가 없습니다", "새 공대 알림 DM을 보내면 여기에 기록됩니다.", icon="bell") }}</div>
+  <div class="mg-card">{{ ui.empty("발송 로그가 없습니다", "새 공대 알림 DM을 보내면 여기에 기록됩니다.", icon="bell") }}</div>
   {% else %}
-  <div class="ui-card table-card ad-tcard">
-    <table class="table is-stack ad-t" id="log-table">
+  <div class="ui-card table-card mg-tcard">
+    <table class="table is-stack mg-t" id="log-table">
       <thead><tr><th>발송 시각</th><th>받은 사람</th><th>레이드</th><th>난이도</th><th></th></tr></thead>
       <tbody>
         {% for l in logs %}
@@ -45,70 +45,70 @@
         {% endfor %}
       </tbody>
     </table>
-    <p class="ad-noresult" id="log-noresult" hidden>검색 결과가 없습니다.</p>
+    <p class="mg-noresult" id="log-noresult" hidden>검색 결과가 없습니다.</p>
   </div>
   {% endif %}
 
 {% elif tab == "broadcast" %}
   {% set recipients = bot_status.user_count if bot_status and bot_status.user_count is defined else none %}
-  <div class="ad-card ad-bc" id="broadcast" data-recipients="{{ recipients if recipients is not none else '' }}">
-    <div class="ad-row">
-      <h2 class="ad-h">전체 공지</h2>
-      <span class="ad-meta ad-spacer">수신 대상 <b class="ad-strong num" data-bc-count>{{ recipients if recipients is not none else "-" }}</b>명 · API 등록 유저 전원에게 디스코드 DM</span>
+  <div class="mg-card mg-bc" id="broadcast" data-recipients="{{ recipients if recipients is not none else '' }}">
+    <div class="mg-row">
+      <h2 class="mg-h">전체 공지</h2>
+      <span class="mg-meta mg-spacer">수신 대상 <b class="mg-strong num" data-bc-count>{{ recipients if recipients is not none else "-" }}</b>명 · API 등록 유저 전원에게 디스코드 DM</span>
     </div>
-    <div class="ad-bc-grid">
-      <form method="post" action="/admin/notifications/broadcast" id="bc-form" class="ad-bc-form">
+    <div class="mg-bc-grid">
+      <form method="post" action="/admin/notifications/broadcast" id="bc-form" class="mg-bc-form">
         <label class="field-label" for="bc-content">공지 내용</label>
         <textarea class="field" id="bc-content" name="content" rows="6" maxlength="1500" required placeholder="예: 이번 주 수요일 점검 이후 공대 일정이 조정됩니다."></textarea>
-        <div class="ad-row">
-          <span class="ad-meta"><span class="num" data-bc-len>0</span>/1500자 · 보낸 DM은 되돌릴 수 없습니다</span>
-          <span class="ad-spacer"><button type="submit" class="btn pri" id="bc-send" disabled>전원에게 보내기</button></span>
+        <div class="mg-row">
+          <span class="mg-meta"><span class="num" data-bc-len>0</span>/1500자 · 보낸 DM은 되돌릴 수 없습니다</span>
+          <span class="mg-spacer"><button type="submit" class="btn pri" id="bc-send" disabled>전원에게 보내기</button></span>
         </div>
       </form>
-      <div class="ad-bc-preview">
+      <div class="mg-bc-preview">
         <span class="field-label">미리보기</span>
-        <div class="ad-dm" aria-live="polite">
-          <b class="ad-dm-from">{{ get_guild_name() or "로아봇" }}</b>
-          <p class="ad-dm-body" id="bc-preview" data-empty="내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.">내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.</p>
+        <div class="mg-dm" aria-live="polite">
+          <b class="mg-dm-from">{{ get_guild_name() or "로아봇" }}</b>
+          <p class="mg-dm-body" id="bc-preview" data-empty="내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.">내용을 입력하면 받는 사람에게 보이는 모습이 여기에 나타납니다.</p>
         </div>
-        <span class="ad-meta">DM을 막아둔 유저에게는 전달되지 않고, 같은 내용은 10분 안에 다시 보낼 수 없습니다.</span>
+        <span class="mg-meta">DM을 막아둔 유저에게는 전달되지 않고, 같은 내용은 10분 안에 다시 보낼 수 없습니다.</span>
       </div>
     </div>
-    <div class="ad-progress" id="bc-progress" aria-live="polite"{% if not broadcast_running %} hidden{% endif %}
+    <div class="mg-progress" id="bc-progress" aria-live="polite"{% if not broadcast_running %} hidden{% endif %}
          data-running="{{ 1 if broadcast_running else 0 }}">
-      <div class="ad-row"><b>발송 중</b><span class="ad-meta ad-spacer"><span class="num" data-bc-sent>{{ broadcast.sent or 0 }}</span> / <span class="num" data-bc-total>{{ broadcast.total or 0 }}</span>명</span></div>
+      <div class="mg-row"><b>발송 중</b><span class="mg-meta mg-spacer"><span class="num" data-bc-sent>{{ broadcast.sent or 0 }}</span> / <span class="num" data-bc-total>{{ broadcast.total or 0 }}</span>명</span></div>
       <div class="ui-gauge" role="presentation"><i style="width: {{ ((broadcast.sent or 0) / broadcast.total * 100) | round | int if broadcast and broadcast.total else 0 }}%"></i></div>
-      <span class="ad-meta">창을 닫아도 발송은 계속됩니다. 끝나면 작업 기록에 남습니다.</span>
+      <span class="mg-meta">창을 닫아도 발송은 계속됩니다. 끝나면 작업 기록에 남습니다.</span>
     </div>
   </div>
 
 {% else %}
-  <div class="ad-card" id="tracked" data-max="8">
-    <div class="ad-row">
-      <h2 class="ad-h">시세로 볼 아이템</h2>
-      <span class="ad-meta ad-spacer">최대 8개 · 시세 화면에 표시됩니다</span>
+  <div class="mg-card" id="tracked" data-max="8">
+    <div class="mg-row">
+      <h2 class="mg-h">시세로 볼 아이템</h2>
+      <span class="mg-meta mg-spacer">최대 8개 · 시세 화면에 표시됩니다</span>
     </div>
     {% if not tracked_available %}
-    <p class="ad-note" role="status">봇 서버가 아직 시세 아이템 설정을 지원하지 않아 불러오지 못했습니다.</p>
+    <p class="mg-note" role="status">봇 서버가 아직 시세 아이템 설정을 지원하지 않아 불러오지 못했습니다.</p>
     {% else %}
-    <form method="post" action="/admin/notifications/items" id="tracked-form" class="ad-tracked">
-      <div class="ad-chips" id="tracked-chips" aria-live="polite">
+    <form method="post" action="/admin/notifications/items" id="tracked-form" class="mg-tracked">
+      <div class="mg-chips" id="tracked-chips" aria-live="polite">
         {% for n in tracked_names %}
-        <span class="ad-tchip{% if n in unresolved %} is-warn{% endif %}" data-name="{{ n }}">
+        <span class="mg-tchip{% if n in unresolved %} is-warn{% endif %}" data-name="{{ n }}">
           <input type="hidden" name="names" value="{{ n }}">
           <span>{{ n }}</span>{% if n in unresolved %}<em>시세에서 못 찾음</em>{% endif %}
           <button type="button" aria-label="{{ n }} 빼기" data-remove>&times;</button>
         </span>
         {% endfor %}
       </div>
-      <p class="ad-meta" id="tracked-empty"{% if tracked_names %} hidden{% endif %}>아직 고른 아이템이 없습니다. 아래에 거래소·경매장에서 쓰는 정확한 이름을 입력하세요.</p>
-      <div class="ad-row">
-        <input class="field ad-tracked-input" id="tracked-input" placeholder="아이템 이름 (예: 운명의 파괴석 결정)" aria-label="아이템 이름" autocomplete="off" maxlength="40">
+      <p class="mg-meta" id="tracked-empty"{% if tracked_names %} hidden{% endif %}>아직 고른 아이템이 없습니다. 아래에 거래소·경매장에서 쓰는 정확한 이름을 입력하세요.</p>
+      <div class="mg-row">
+        <input class="field mg-tracked-input" id="tracked-input" placeholder="아이템 이름 (예: 운명의 파괴석 결정)" aria-label="아이템 이름" autocomplete="off" maxlength="40">
         <button type="button" class="btn" id="tracked-add">추가</button>
-        <span class="ad-meta" id="tracked-count"><span class="num">{{ tracked_names | length }}</span>/8</span>
-        <span class="ad-spacer"><button type="submit" class="btn pri">저장</button></span>
+        <span class="mg-meta" id="tracked-count"><span class="num">{{ tracked_names | length }}</span>/8</span>
+        <span class="mg-spacer"><button type="submit" class="btn pri">저장</button></span>
       </div>
-      {% if unresolved %}<p class="ad-meta ad-warn">시세에서 찾지 못한 이름이 있습니다. 철자와 띄어쓰기가 거래소 표기와 같은지 확인하세요.</p>{% endif %}
+      {% if unresolved %}<p class="mg-meta mg-warn">시세에서 찾지 못한 이름이 있습니다. 철자와 띄어쓰기가 거래소 표기와 같은지 확인하세요.</p>{% endif %}
     </form>
     {% endif %}
   </div>
